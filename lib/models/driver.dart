@@ -7,7 +7,7 @@ class DriverModel extends UserModel {
   final String vehicleId;
   final String routeId;
 
-  /// `offline` | `available` | `onTrip` — see [DriverStatus].
+  /// `offline` | `available` | `assigned` | `onTrip` — see [DriverStatus].
   final String status;
  
   final bool isApproved;

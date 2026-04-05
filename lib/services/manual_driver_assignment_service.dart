@@ -1,33 +1,35 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../models/driver_status.dart';
+import 'route_driver_queue_service.dart';
+import 'schedule_slot_repository.dart';
 
-/// Manually assign an [available] driver to a trip (replaces prior driver if any).
+/// Manually assign an [available] driver to a schedule slot (replaces prior driver if any).
 class ManualDriverAssignmentService {
   ManualDriverAssignmentService({FirebaseFirestore? firestore})
       : _db = firestore ?? FirebaseFirestore.instance;
 
   final FirebaseFirestore _db;
 
-  Future<void> assignDriverToTrip({
+  Future<void> assignDriverToSlot({
     required String routeId,
-    required String tripId,
+    required String slotId,
     required String newDriverId,
   }) async {
-    final trips = _db.collection('trips');
     final drivers = _db.collection('drivers');
-    final queueRef =
-        _db.collection('route').doc(routeId).collection('driverQueue').doc(newDriverId);
+    final routeRef = _db.collection('route').doc(routeId);
 
     await _db.runTransaction((txn) async {
-      final tripRef = trips.doc(tripId);
-      final tSnap = await txn.get(tripRef);
-      if (!tSnap.exists) {
-        throw StateError('Trip not found');
+      final rSnap = await txn.get(routeRef);
+      if (!rSnap.exists) {
+        throw StateError('Route not found');
       }
-      final tripData = tSnap.data()!;
-      if (tripData['routeId'] != routeId) {
-        throw StateError('Trip does not belong to this route');
+      final rData = rSnap.data()!;
+
+      final list = ScheduleSlotRepository.parseSlotList(rData['scheduleSlots']);
+      final idx = list.indexWhere((e) => e['slotId'] == slotId);
+      if (idx < 0) {
+        throw StateError('Slot not found');
       }
 
       final newRef = drivers.doc(newDriverId);
@@ -43,18 +45,23 @@ class ManualDriverAssignmentService {
         throw StateError('Driver is not assigned to this route');
       }
 
-      final oldId = tripData['driverId'] as String?;
-      if (oldId != null && oldId.isNotEmpty && oldId != newDriverId) {
+      final slotMap = Map<String, dynamic>.from(list[idx]);
+      final oldId = slotMap['driverId'] as String? ?? '';
+      if (oldId.isNotEmpty && oldId != newDriverId) {
         txn.update(drivers.doc(oldId), {'status': DriverStatus.available});
       }
 
-      txn.update(tripRef, {'driverId': newDriverId});
-      txn.update(newRef, {'status': DriverStatus.onTrip});
+      slotMap['driverId'] = newDriverId;
+      list[idx] = slotMap;
 
-      final qSnap = await txn.get(queueRef);
-      if (qSnap.exists) {
-        txn.delete(queueRef);
-      }
+      final q = RouteDriverQueueService.parseIds(rData['driverQueueIds']);
+      q.removeWhere((id) => id == newDriverId);
+
+      txn.update(routeRef, {
+        'scheduleSlots': list,
+        'driverQueueIds': q,
+      });
+      txn.update(newRef, {'status': DriverStatus.assigned});
     });
   }
 }

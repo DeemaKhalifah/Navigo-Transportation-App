@@ -18,7 +18,7 @@ class ScheduleSlotRepository {
 
   String _newSlotId() => _db.collection('_').doc().id;
 
-  static List<Map<String, dynamic>> _parseSlotList(dynamic raw) {
+  static List<Map<String, dynamic>> parseSlotList(dynamic raw) {
     if (raw is! List) return [];
     final list = <Map<String, dynamic>>[];
     for (final e in raw) {
@@ -34,7 +34,7 @@ class ScheduleSlotRepository {
   Stream<List<ScheduleSlot>> watchSlots(String routeId) {
     return _routeRef(routeId).snapshots().map((snap) {
       final raw = snap.data()?['scheduleSlots'];
-      final maps = _parseSlotList(raw);
+      final maps = parseSlotList(raw);
       final out = <ScheduleSlot>[];
       for (final m in maps) {
         final sid = m['slotId'] as String? ?? '';
@@ -57,7 +57,7 @@ class ScheduleSlotRepository {
       if (!snap.exists) {
         throw StateError('Route document not found: route/$routeId');
       }
-      final list = _parseSlotList(snap.data()?['scheduleSlots']);
+      final list = parseSlotList(snap.data()?['scheduleSlots']);
       final m = slot.toMap();
       m['slotId'] = slotId;
       m['routeId'] = routeId;
@@ -76,7 +76,7 @@ class ScheduleSlotRepository {
       if (!snap.exists) {
         throw StateError('Route document not found: route/${slot.routeId}');
       }
-      final list = _parseSlotList(snap.data()?['scheduleSlots']);
+      final list = parseSlotList(snap.data()?['scheduleSlots']);
       final m = slot.toMap();
       m['slotId'] = slot.slotId;
       m['routeId'] = slot.routeId;
@@ -99,7 +99,7 @@ class ScheduleSlotRepository {
     await _db.runTransaction((txn) async {
       final snap = await txn.get(routeRef);
       if (!snap.exists) return;
-      final list = _parseSlotList(snap.data()?['scheduleSlots']);
+      final list = parseSlotList(snap.data()?['scheduleSlots']);
       list.removeWhere((e) => e['slotId'] == slotId);
       txn.update(routeRef, {'scheduleSlots': list});
     });

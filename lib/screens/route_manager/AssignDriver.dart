@@ -3,7 +3,8 @@ import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:navigo/models/driver_status.dart';
-import 'package:navigo/models/trip.dart';
+import 'package:navigo/models/schedule_slot.dart';
+import 'package:navigo/services/schedule_slot_repository.dart';
 import 'package:navigo/screens/route_manager/RouteSchedule.dart';
 import 'package:navigo/services/manual_driver_assignment_service.dart';
 import 'package:navigo/services/route_manager_route_id.dart';
@@ -27,13 +28,15 @@ class _DriverRow {
   final String vehicleLabel;
   final String routeLine;
 
-  /// Canonical: [DriverStatus.offline] | [DriverStatus.available] | [DriverStatus.onTrip]
+  /// Canonical driver statuses — see [DriverStatus].
   final String rawStatus;
 
   String get statusLabel {
     switch (rawStatus) {
       case DriverStatus.available:
         return 'Available';
+      case DriverStatus.assigned:
+        return 'Assigned';
       case DriverStatus.onTrip:
         return 'On Trip';
       case DriverStatus.offline:
@@ -260,6 +263,8 @@ class _AssignDriverState extends State<AssignDriver> {
       switch (selectedFilter) {
         case 'Available':
           return d.rawStatus == DriverStatus.available;
+        case 'Assigned':
+          return d.rawStatus == DriverStatus.assigned;
         case 'On Trip':
           return d.rawStatus == DriverStatus.onTrip;
         case 'Offline':
@@ -270,22 +275,27 @@ class _AssignDriverState extends State<AssignDriver> {
     }).toList();
   }
 
-  Future<List<Trip>> _upcomingTripsForRoute() async {
+  Future<List<ScheduleSlot>> _upcomingSlotsForRoute() async {
     final routeId = _routeId;
     if (routeId == null) return [];
 
-    final snap = await FirebaseFirestore.instance
-        .collection('trips')
-        .where('routeId', isEqualTo: routeId)
-        .get();
+    final snap =
+        await FirebaseFirestore.instance.collection('route').doc(routeId).get();
+    final raw = snap.data()?['scheduleSlots'];
+    final maps = ScheduleSlotRepository.parseSlotList(raw);
 
     final now = DateTime.now();
-    final trips = snap.docs
-        .map((d) => Trip.fromMap(d.id, d.data()))
-        .where((t) => t.departureAt.isAfter(now.subtract(const Duration(minutes: 1))))
-        .toList()
-      ..sort((a, b) => a.departureAt.compareTo(b.departureAt));
-    return trips;
+    final slots = <ScheduleSlot>[];
+    for (final m in maps) {
+      final sid = m['slotId'] as String? ?? '';
+      if (sid.isEmpty) continue;
+      final s = ScheduleSlot.fromMap(sid, m);
+      if (s.departureAt.isAfter(now.subtract(const Duration(minutes: 1)))) {
+        slots.add(s);
+      }
+    }
+    slots.sort((a, b) => a.departureAt.compareTo(b.departureAt));
+    return slots;
   }
 
   Future<void> _onAssign(_DriverRow driver) async {
@@ -298,25 +308,25 @@ class _AssignDriverState extends State<AssignDriver> {
       builder: (ctx) => const Center(child: CircularProgressIndicator()),
     );
 
-    List<Trip> trips;
+    List<ScheduleSlot> slots;
     try {
-      trips = await _upcomingTripsForRoute();
+      slots = await _upcomingSlotsForRoute();
     } finally {
       if (mounted) Navigator.of(context).pop();
     }
 
     if (!mounted) return;
 
-    if (trips.isEmpty) {
+    if (slots.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('No upcoming trips on this route to assign.'),
+          content: Text('No upcoming scheduled trips on this route.'),
         ),
       );
       return;
     }
 
-    final chosen = await showDialog<Trip>(
+    final chosen = await showDialog<ScheduleSlot>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Assign to trip'),
@@ -324,18 +334,21 @@ class _AssignDriverState extends State<AssignDriver> {
           width: double.maxFinite,
           child: ListView.builder(
             shrinkWrap: true,
-            itemCount: trips.length,
+            itemCount: slots.length,
             itemBuilder: (_, i) {
-              final t = trips[i];
-              final start = t.departureAt;
+              final s = slots[i];
+              final start = s.departureAt;
+              final sub = s.driverId.isEmpty
+                  ? 'Unassigned'
+                  : 'Driver already set — will replace';
               return ListTile(
                 title: Text(
                   '${start.day}/${start.month}/${start.year} '
                   '${start.hour.toString().padLeft(2, '0')}:'
                   '${start.minute.toString().padLeft(2, '0')}',
                 ),
-                subtitle: Text('Trip ${t.tripId.substring(0, 8)}… · slot ${t.slotId}'),
-                onTap: () => Navigator.pop(ctx, t),
+                subtitle: Text('$sub · slot ${s.slotId.substring(0, 8)}…'),
+                onTap: () => Navigator.pop(ctx, s),
               );
             },
           ),
@@ -352,14 +365,14 @@ class _AssignDriverState extends State<AssignDriver> {
     if (chosen == null || !mounted) return;
 
     try {
-      await _assignment.assignDriverToTrip(
+      await _assignment.assignDriverToSlot(
         routeId: routeId,
-        tripId: chosen.tripId,
+        slotId: chosen.slotId,
         newDriverId: driver.driverId,
       );
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Driver assigned to trip.')),
+        const SnackBar(content: Text('Driver assigned to scheduled trip.')),
       );
     } catch (e) {
       if (!mounted) return;
@@ -407,7 +420,13 @@ class _AssignDriverState extends State<AssignDriver> {
               child: SingleChildScrollView(
                 scrollDirection: Axis.horizontal,
                 child: Row(
-                  children: ['All', 'Available', 'On Trip', 'Offline']
+                  children: [
+                    'All',
+                    'Available',
+                    'Assigned',
+                    'On Trip',
+                    'Offline',
+                  ]
                       .map(
                         (label) => Padding(
                           padding: const EdgeInsets.only(right: 8),
@@ -551,6 +570,9 @@ class _AssignDriverState extends State<AssignDriver> {
     switch (status) {
       case 'Available':
         color = NavigoColors.accentGreen;
+        break;
+      case 'Assigned':
+        color = NavigoColors.primaryOrange;
         break;
       case 'On Trip':
         color = NavigoColors.accentBlue;

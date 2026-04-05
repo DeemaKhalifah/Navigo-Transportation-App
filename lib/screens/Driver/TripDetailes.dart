@@ -1,5 +1,7 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
+import '../../services/trip_completion_service.dart';
 import '../../theme/app_theme.dart';
 import 'DriverBottomNavBar.dart';
 import 'DriverHomeScreen.dart';
@@ -141,7 +143,13 @@ class TripDetailes extends StatelessWidget {
                       height: NavigoSizes.buttonHeight,
                       child: ElevatedButton(
                         style: NavigoDecorations.kPrimaryButtonLargeStyle,
-                        onPressed: () {
+                        onPressed: () async {
+                          final uid = FirebaseAuth.instance.currentUser?.uid;
+                          if (uid != null) {
+                            await TripCompletionService()
+                                .markDriverLiveTripStarted(driverId: uid);
+                          }
+                          if (!context.mounted) return;
                           Navigator.push(
                             context,
                             MaterialPageRoute(

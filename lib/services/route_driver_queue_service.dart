@@ -1,0 +1,121 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
+
+import '../models/driver_status.dart';
+
+/// Ordered driver queue on `route/{routeId}` field `driverQueueIds` (array of uids).
+class RouteDriverQueueService {
+  RouteDriverQueueService({FirebaseFirestore? firestore})
+      : _db = firestore ?? FirebaseFirestore.instance;
+
+  final FirebaseFirestore _db;
+
+  DocumentReference<Map<String, dynamic>> _routeRef(String routeId) =>
+      _db.collection('route').doc(routeId);
+
+  static List<String> parseIds(dynamic raw) {
+    if (raw is! List) return [];
+    return raw
+        .map((e) => e.toString().trim())
+        .where((s) => s.isNotEmpty)
+        .toList();
+  }
+
+  Stream<List<String>> watchQueueIds(String routeId) {
+    return _routeRef(routeId).snapshots().map((s) => parseIds(s.data()?['driverQueueIds']));
+  }
+
+  Future<void> clearQueue(String routeId) async {
+    await _routeRef(routeId).update({'driverQueueIds': <String>[]});
+  }
+
+  /// Replaces the entire queue (e.g. “queue all available” sorted).
+  Future<void> setQueue(String routeId, List<String> driverIds) async {
+    await _routeRef(routeId).update({
+      'driverQueueIds': driverIds,
+    });
+  }
+
+  /// Appends [driverId] if not already present (custom RM order).
+  Future<void> appendDriver(String routeId, String driverId) async {
+    if (driverId.isEmpty) return;
+    await _db.runTransaction((txn) async {
+      final ref = _routeRef(routeId);
+      final snap = await txn.get(ref);
+      if (!snap.exists) return;
+      final q = parseIds(snap.data()?['driverQueueIds']);
+      if (q.contains(driverId)) return;
+      q.add(driverId);
+      txn.update(ref, {'driverQueueIds': q});
+    });
+  }
+
+  /// Removes one id from the queue (optional UI).
+  Future<void> removeDriver(String routeId, String driverId) async {
+    await _db.runTransaction((txn) async {
+      final ref = _routeRef(routeId);
+      final snap = await txn.get(ref);
+      if (!snap.exists) return;
+      final q = parseIds(snap.data()?['driverQueueIds']);
+      q.removeWhere((id) => id == driverId);
+      txn.update(ref, {'driverQueueIds': q});
+    });
+  }
+
+  /// After a trip, driver goes to **end** of queue and status available.
+  /// Replaces the queue with all **available** drivers on this route, A→Z by display name.
+  Future<void> queueAllAvailableDriversSorted(String routeId) async {
+    final snap = await _db
+        .collection('drivers')
+        .where('routeId', isEqualTo: routeId)
+        .get();
+
+    final candidates = <({String driverDocId, String userKey})>[];
+    for (final d in snap.docs) {
+      final st = DriverStatus.normalize(d.data()['status'] as String?);
+      if (st != DriverStatus.available) continue;
+      final uid = d.data()['userId'] as String? ?? d.id;
+      candidates.add((driverDocId: d.id, userKey: uid));
+    }
+
+    final names = <String, String>{};
+    for (final c in candidates) {
+      if (names.containsKey(c.userKey)) continue;
+      final u = await _db.collection('users').doc(c.userKey).get();
+      final m = u.data();
+      final first = m?['firstName'] ?? '';
+      final last = m?['lastName'] ?? '';
+      final n = '$first $last'.trim();
+      names[c.userKey] = n.isEmpty ? c.userKey : n;
+    }
+
+    candidates.sort((a, b) {
+      final na = names[a.userKey] ?? a.driverDocId;
+      final nb = names[b.userKey] ?? b.driverDocId;
+      return na.toLowerCase().compareTo(nb.toLowerCase());
+    });
+
+    await setQueue(
+      routeId,
+      candidates.map((c) => c.driverDocId).toList(),
+    );
+  }
+
+  Future<void> completeTripAndRequeueEnd({
+    required String routeId,
+    required String driverId,
+  }) async {
+    if (driverId.isEmpty) return;
+    await _db.runTransaction((txn) async {
+      final ref = _routeRef(routeId);
+      final snap = await txn.get(ref);
+      if (!snap.exists) return;
+      final q = parseIds(snap.data()?['driverQueueIds']);
+      q.removeWhere((id) => id == driverId);
+      q.add(driverId);
+      txn.update(ref, {'driverQueueIds': q});
+      txn.update(_db.collection('drivers').doc(driverId), {
+        'status': 'available',
+      });
+    });
+  }
+}

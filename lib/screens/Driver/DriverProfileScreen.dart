@@ -223,12 +223,19 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
     }
   }
 
-  bool get _onTrip => _driverStatus == DriverStatus.onTrip;
+  bool get _onLiveTrip => _driverStatus == DriverStatus.onTrip;
+
+  bool get _assignedTrip => _driverStatus == DriverStatus.assigned;
+
+  bool get _blocksAvailabilityToggle =>
+      _onLiveTrip || _assignedTrip;
 
   String get _statusLabel {
     switch (_driverStatus) {
       case DriverStatus.available:
         return 'Available';
+      case DriverStatus.assigned:
+        return 'Assigned (start trip when ready)';
       case DriverStatus.onTrip:
         return 'On trip';
       default:
@@ -237,7 +244,7 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
   }
 
   Future<void> _goOnline() async {
-    if (currentUser == null || _onTrip) return;
+    if (currentUser == null || _blocksAvailabilityToggle) return;
     final routeId = _assignedRouteId?.trim();
     if (routeId == null || routeId.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -250,22 +257,12 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
 
     setState(() => _statusBusy = true);
     try {
-      final batch = FirebaseFirestore.instance.batch();
       final dRef = FirebaseFirestore.instance
           .collection('drivers')
           .doc(currentUser!.uid);
-      final qRef = FirebaseFirestore.instance
-          .collection('route')
-          .doc(routeId)
-          .collection('driverQueue')
-          .doc(currentUser!.uid);
 
-      batch.update(dRef, {'status': DriverStatus.available});
-      batch.set(qRef, {
-        'driverId': currentUser!.uid,
-        'joinedAt': FieldValue.serverTimestamp(),
-      });
-      await batch.commit();
+      await dRef.update({'status': DriverStatus.available});
+      await _queueRepo.joinQueue(routeId, currentUser!.uid);
 
       if (mounted) {
         setState(() => _driverStatus = DriverStatus.available);
@@ -285,7 +282,7 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
   }
 
   Future<void> _goOffline() async {
-    if (currentUser == null || _onTrip) return;
+    if (currentUser == null || _blocksAvailabilityToggle) return;
     final routeId = _assignedRouteId?.trim();
     if (routeId == null || routeId.isEmpty) {
       await FirebaseFirestore.instance
@@ -298,19 +295,12 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
 
     setState(() => _statusBusy = true);
     try {
-      final batch = FirebaseFirestore.instance.batch();
       final dRef = FirebaseFirestore.instance
           .collection('drivers')
           .doc(currentUser!.uid);
-      final qRef = FirebaseFirestore.instance
-          .collection('route')
-          .doc(routeId)
-          .collection('driverQueue')
-          .doc(currentUser!.uid);
 
-      batch.update(dRef, {'status': DriverStatus.offline});
-      batch.delete(qRef);
-      await batch.commit();
+      await dRef.update({'status': DriverStatus.offline});
+      await _queueRepo.leaveQueue(routeId, currentUser!.uid);
 
       if (mounted) {
         setState(() => _driverStatus = DriverStatus.offline);
@@ -494,11 +484,21 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
                                 ),
                               ),
                             ),
-                            if (_onTrip)
+                            if (_onLiveTrip)
                               Padding(
                                 padding: const EdgeInsets.only(top: 8),
                                 child: Text(
                                   'Finish your current trip before changing availability.',
+                                  style: NavigoTextStyles.bodySmall.copyWith(
+                                    color: NavigoColors.textMuted,
+                                  ),
+                                ),
+                              )
+                            else if (_assignedTrip)
+                              Padding(
+                                padding: const EdgeInsets.only(top: 8),
+                                child: Text(
+                                  'You have an assigned trip. Start it from Trips or wait until the route manager updates the schedule.',
                                   style: NavigoTextStyles.bodySmall.copyWith(
                                     color: NavigoColors.textMuted,
                                   ),
@@ -510,7 +510,7 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
                                 Expanded(
                                   child: ElevatedButton(
                                     onPressed: (_statusBusy ||
-                                            _onTrip ||
+                                            _blocksAvailabilityToggle ||
                                             _driverStatus ==
                                                 DriverStatus.available)
                                         ? null
@@ -530,7 +530,7 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
                                 Expanded(
                                   child: ElevatedButton(
                                     onPressed: (_statusBusy ||
-                                            _onTrip ||
+                                            _blocksAvailabilityToggle ||
                                             _driverStatus ==
                                                 DriverStatus.offline)
                                         ? null

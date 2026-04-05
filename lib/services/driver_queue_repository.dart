@@ -1,26 +1,21 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
-/// FIFO queue: `route/{routeId}/driverQueue/{driverId}`
-///
-/// Order by `joinedAt` ascending when dequeuing (see [SlotDriverAssignmentService]).
+import 'route_driver_queue_service.dart';
+
+/// Driver queue is stored on `route/{routeId}` as `driverQueueIds` (ordered uids).
 class DriverQueueRepository {
   DriverQueueRepository({FirebaseFirestore? firestore})
-      : _db = firestore ?? FirebaseFirestore.instance;
+      : _queueSvc = RouteDriverQueueService(firestore: firestore);
 
-  final FirebaseFirestore _db;
+  final RouteDriverQueueService _queueSvc;
 
-  CollectionReference<Map<String, dynamic>> _queue(String routeId) {
-    return _db.collection('route').doc(routeId).collection('driverQueue');
-  }
-
+  /// Appends [driverId] at the end if not already in the queue.
   Future<void> joinQueue(String routeId, String driverId) async {
-    await _queue(routeId).doc(driverId).set({
-      'driverId': driverId,
-      'joinedAt': FieldValue.serverTimestamp(),
-    });
+    await _queueSvc.appendDriver(routeId, driverId);
   }
 
+  /// Removes [driverId] from the ordered queue.
   Future<void> leaveQueue(String routeId, String driverId) async {
-    await _queue(routeId).doc(driverId).delete();
+    await _queueSvc.removeDriver(routeId, driverId);
   }
 }

@@ -29,6 +29,9 @@ class _AddScheduleSlotScreenState extends State<AddScheduleSlotScreen> {
   String _selectedType = 'bus';
 
   final TextEditingController _priceController = TextEditingController();
+  final TextEditingController _frequencyController = TextEditingController();
+  final TextEditingController _tripLengthController =
+      TextEditingController(text: '60');
 
   String? _capacity;
 
@@ -47,7 +50,18 @@ class _AddScheduleSlotScreenState extends State<AddScheduleSlotScreen> {
       _selectedDate =
           DateTime(e.serviceDate.year, e.serviceDate.month, e.serviceDate.day);
       _fromTime = TimeOfDay.fromDateTime(e.departureAt);
-      _toTime = TimeOfDay.fromDateTime(e.arrivalAt);
+      if (e.vehicleType == 'micro') {
+        _toTime = null;
+      } else {
+        _toTime = TimeOfDay.fromDateTime(e.arrivalAt);
+        if (e.frequencyMinutes != null && e.frequencyMinutes! > 0) {
+          _frequencyController.text = e.frequencyMinutes!.toString();
+          final mins = e.arrivalAt.difference(e.departureAt).inMinutes;
+          if (mins > 0) {
+            _tripLengthController.text = mins.toString();
+          }
+        }
+      }
       _capacity = e.capacity.toString();
       if (_selectedType == 'micro' && _capacity == '14') {
         _capacity = '7';
@@ -63,10 +77,12 @@ class _AddScheduleSlotScreenState extends State<AddScheduleSlotScreen> {
   @override
   void dispose() {
     _priceController.dispose();
+    _frequencyController.dispose();
+    _tripLengthController.dispose();
     super.dispose();
   }
 
-  Future<void> _pickTime(bool isFrom) async {
+  Future<void> _pickTime({required bool isFrom}) async {
     final picked = await showTimePicker(
       context: context,
       initialTime: TimeOfDay.now(),
@@ -108,10 +124,108 @@ class _AddScheduleSlotScreenState extends State<AddScheduleSlotScreen> {
     return DateTime(date.year, date.month, date.day, time.hour, time.minute);
   }
 
+  List<ScheduleSlot> _buildSlotsToCreate({
+    required int capacity,
+    required double? price,
+    required int? frequencyMinutes,
+    required int tripLengthMinutes,
+  }) {
+    if (widget.isEditing && widget.existingSlot != null) {
+      final e = widget.existingSlot!;
+      final dep = _combine(_selectedDate!, _fromTime!);
+      final arr = _selectedType == 'micro'
+          ? dep.add(e.arrivalAt.difference(e.departureAt))
+          : _combine(_selectedDate!, _toTime!);
+      return [
+        ScheduleSlot(
+          slotId: e.slotId,
+          routeId: widget.routeId,
+          departureAt: dep,
+          arrivalAt: arr,
+          price: price,
+          capacity: capacity,
+          vehicleType: _selectedType,
+          driverId: e.driverId,
+          passengersIds: List<String>.from(e.passengersIds),
+          frequencyMinutes: _selectedType == 'bus' ? frequencyMinutes : null,
+        ),
+      ];
+    }
+
+    if (_selectedType == 'micro') {
+      final dep = _combine(_selectedDate!, _fromTime!);
+      final arr = dep.add(const Duration(minutes: 45));
+      return [
+        ScheduleSlot(
+          slotId: '',
+          routeId: widget.routeId,
+          departureAt: dep,
+          arrivalAt: arr,
+          price: price,
+          capacity: capacity,
+          vehicleType: _selectedType,
+          frequencyMinutes: null,
+        ),
+      ];
+    }
+
+    // Bus
+    final freq = frequencyMinutes ?? 0;
+    if (freq <= 0) {
+      final dep = _combine(_selectedDate!, _fromTime!);
+      final arr = _combine(_selectedDate!, _toTime!);
+      return [
+        ScheduleSlot(
+          slotId: '',
+          routeId: widget.routeId,
+          departureAt: dep,
+          arrivalAt: arr,
+          price: price,
+          capacity: capacity,
+          vehicleType: _selectedType,
+          frequencyMinutes: null,
+        ),
+      ];
+    }
+
+    final firstDep = _combine(_selectedDate!, _fromTime!);
+    final lastStart = _combine(_selectedDate!, _toTime!);
+    if (lastStart.isBefore(firstDep)) {
+      return [];
+    }
+
+    final tripLen = Duration(minutes: tripLengthMinutes);
+    final out = <ScheduleSlot>[];
+    var dep = firstDep;
+    while (!dep.isAfter(lastStart)) {
+      out.add(
+        ScheduleSlot(
+          slotId: '',
+          routeId: widget.routeId,
+          departureAt: dep,
+          arrivalAt: dep.add(tripLen),
+          price: price,
+          capacity: capacity,
+          vehicleType: _selectedType,
+          frequencyMinutes: freq,
+        ),
+      );
+      dep = dep.add(Duration(minutes: freq));
+    }
+    return out;
+  }
+
   Future<void> _save() async {
-    if (_selectedDate == null || _fromTime == null || _toTime == null) {
+    if (_selectedDate == null || _fromTime == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please choose date and both times')),
+        const SnackBar(content: Text('Please choose date and time')),
+      );
+      return;
+    }
+
+    if (_selectedType == 'bus' && _toTime == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please choose end time / last departure')),
       );
       return;
     }
@@ -124,13 +238,38 @@ class _AddScheduleSlotScreenState extends State<AddScheduleSlotScreen> {
       return;
     }
 
-    final departure = _combine(_selectedDate!, _fromTime!);
-    final arrival = _combine(_selectedDate!, _toTime!);
-    if (!arrival.isAfter(departure)) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('End time must be after start time')),
-      );
-      return;
+    int? frequencyMinutes;
+    if (_selectedType == 'bus' && _frequencyController.text.trim().isNotEmpty) {
+      frequencyMinutes = int.tryParse(_frequencyController.text.trim());
+      if (frequencyMinutes != null && frequencyMinutes <= 0) {
+        frequencyMinutes = null;
+      }
+    }
+
+    int tripLengthMinutes = 60;
+    if (_selectedType == 'bus' &&
+        frequencyMinutes != null &&
+        frequencyMinutes > 0) {
+      final t = int.tryParse(_tripLengthController.text.trim());
+      if (t == null || t <= 0) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Enter trip length in minutes (e.g. 60)'),
+          ),
+        );
+        return;
+      }
+      tripLengthMinutes = t;
+    } else if (_selectedType == 'bus' &&
+        (frequencyMinutes == null || frequencyMinutes <= 0)) {
+      final dep = _combine(_selectedDate!, _fromTime!);
+      final arr = _combine(_selectedDate!, _toTime!);
+      if (!arr.isAfter(dep)) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('End time must be after start time')),
+        );
+        return;
+      }
     }
 
     double? price;
@@ -145,34 +284,58 @@ class _AddScheduleSlotScreenState extends State<AddScheduleSlotScreen> {
       }
     }
 
-    final slot = ScheduleSlot(
-      slotId: widget.existingSlot?.slotId ?? '',
-      routeId: widget.routeId,
-      departureAt: departure,
-      arrivalAt: arrival,
-      price: price,
+    final slots = _buildSlotsToCreate(
       capacity: cap,
-      vehicleType: _selectedType,
+      price: price,
+      frequencyMinutes: frequencyMinutes,
+      tripLengthMinutes: tripLengthMinutes,
     );
+
+    if (slots.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Check departure times for repeating bus trips'),
+        ),
+      );
+      return;
+    }
 
     setState(() => _saving = true);
     try {
       if (widget.isEditing) {
-        await _repo.upsertSlot(slot);
+        await _repo.upsertSlot(slots.first);
       } else {
-        final slotId = await _repo.addSlot(slot);
-        final assign = await _assignment.tryAssignDriverForNewSlot(
-          routeId: widget.routeId,
-          slotId: slotId,
-          departureAt: departure,
-          arrivalAt: arrival,
-        );
+        var assigned = 0;
+        var noQueue = 0;
+        for (final slot in slots) {
+          final slotId = await _repo.addSlot(slot);
+          final assign = await _assignment.tryAssignDriverForNewSlot(
+            routeId: widget.routeId,
+            slotId: slotId,
+          );
+          if (assign.outcome == SlotAssignmentOutcome.assigned) {
+            assigned++;
+          } else {
+            noQueue++;
+          }
+        }
         if (!mounted) return;
-        if (assign.outcome == SlotAssignmentOutcome.noDriversInQueue) {
+        if (noQueue > 0 && assigned == 0) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
+            SnackBar(
               content: Text(
-                'Slot saved. No drivers in queue — assign manually later.',
+                slots.length > 1
+                    ? 'Saved ${slots.length} trips. No drivers in queue — assign manually.'
+                    : 'Trip saved. No drivers in queue — assign manually.',
+              ),
+            ),
+          );
+        } else if (noQueue > 0) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                'Saved ${slots.length} trips. $assigned auto-assigned; '
+                '$noQueue without queue driver.',
               ),
             ),
           );
@@ -180,7 +343,9 @@ class _AddScheduleSlotScreenState extends State<AddScheduleSlotScreen> {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text(
-                'Slot saved. Driver assigned. Trip: ${assign.tripId}',
+                slots.length > 1
+                    ? 'Saved ${slots.length} trips. Drivers assigned from queue.'
+                    : 'Trip saved. Driver assigned from queue.',
               ),
             ),
           );
@@ -200,6 +365,11 @@ class _AddScheduleSlotScreenState extends State<AddScheduleSlotScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final isMicro = _selectedType == 'micro';
+    final busRepeat = !isMicro &&
+        int.tryParse(_frequencyController.text.trim()) != null &&
+        (int.tryParse(_frequencyController.text.trim()) ?? 0) > 0;
+
     return Scaffold(
       backgroundColor: NavigoColors.backgroundLight,
       body: SafeArea(
@@ -216,12 +386,16 @@ class _AddScheduleSlotScreenState extends State<AddScheduleSlotScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    widget.isEditing ? 'Edit schedule slot' : 'Add schedule slot',
+                    widget.isEditing ? 'Edit trip' : 'Schedule a trip',
                     style: NavigoTextStyles.titleLarge,
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    'Departure window and capacity (slot ID is assigned by Firestore)',
+                    isMicro
+                        ? 'Start time, date, and capacity'
+                        : busRepeat
+                            ? 'First departure, last departure start, trip length, repeat interval'
+                            : 'Departure window, date, and capacity',
                     style: NavigoTextStyles.bodySmall,
                   ),
                 ],
@@ -262,27 +436,85 @@ class _AddScheduleSlotScreenState extends State<AddScheduleSlotScreen> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Row(
-                            children: [
-                              Expanded(
-                                child: _buildPickerBox(
-                                  label: 'From',
-                                  value: _formatTime(_fromTime),
-                                  icon: Icons.access_time,
-                                  onTap: () => _pickTime(true),
+                          if (isMicro) ...[
+                            _buildPickerBox(
+                              label: 'Start trip time',
+                              value: _formatTime(_fromTime),
+                              icon: Icons.access_time,
+                              onTap: () => _pickTime(isFrom: true),
+                            ),
+                          ] else if (!busRepeat &&
+                              (int.tryParse(_frequencyController.text.trim()) ??
+                                      0) <=
+                                  0) ...[
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: _buildPickerBox(
+                                    label: 'From',
+                                    value: _formatTime(_fromTime),
+                                    icon: Icons.access_time,
+                                    onTap: () => _pickTime(isFrom: true),
+                                  ),
                                 ),
-                              ),
-                              const SizedBox(width: 10),
-                              Expanded(
-                                child: _buildPickerBox(
-                                  label: 'To',
-                                  value: _formatTime(_toTime),
-                                  icon: Icons.access_time_filled,
-                                  onTap: () => _pickTime(false),
+                                const SizedBox(width: 10),
+                                Expanded(
+                                  child: _buildPickerBox(
+                                    label: 'To',
+                                    value: _formatTime(_toTime),
+                                    icon: Icons.access_time_filled,
+                                    onTap: () => _pickTime(isFrom: false),
+                                  ),
                                 ),
+                              ],
+                            ),
+                          ] else ...[
+                            _buildPickerBox(
+                              label: 'First departure',
+                              value: _formatTime(_fromTime),
+                              icon: Icons.access_time,
+                              onTap: () => _pickTime(isFrom: true),
+                            ),
+                            const SizedBox(height: NavigoSizes.itemGap),
+                            _buildPickerBox(
+                              label: 'Last departure (start time)',
+                              value: _formatTime(_toTime),
+                              icon: Icons.access_time_filled,
+                              onTap: () => _pickTime(isFrom: false),
+                            ),
+                            const SizedBox(height: NavigoSizes.itemGap),
+                            Text(
+                              'Trip length (minutes)',
+                              style: NavigoTextStyles.label,
+                            ),
+                            const SizedBox(height: 6),
+                            TextField(
+                              controller: _tripLengthController,
+                              keyboardType: TextInputType.number,
+                              style: NavigoTextStyles.fieldText,
+                              decoration: NavigoDecorations.kInputDecoration,
+                              onChanged: (_) => setState(() {}),
+                            ),
+                          ],
+
+                          if (!isMicro) ...[
+                            const SizedBox(height: NavigoSizes.itemGap),
+                            Text(
+                              'Repeat every (minutes, optional)',
+                              style: NavigoTextStyles.label,
+                            ),
+                            const SizedBox(height: 6),
+                            TextField(
+                              controller: _frequencyController,
+                              keyboardType: TextInputType.number,
+                              style: NavigoTextStyles.fieldText,
+                              decoration: NavigoDecorations.kInputDecoration
+                                  .copyWith(
+                                hintText: 'Leave empty for a single trip',
                               ),
-                            ],
-                          ),
+                              onChanged: (_) => setState(() {}),
+                            ),
+                          ],
 
                           const SizedBox(height: NavigoSizes.itemGap),
 
@@ -364,7 +596,7 @@ class _AddScheduleSlotScreenState extends State<AddScheduleSlotScreen> {
                                 ),
                               )
                             : Text(
-                                widget.isEditing ? 'Save changes' : 'Save slot',
+                                widget.isEditing ? 'Save changes' : 'Save trip',
                                 style: NavigoTextStyles.button,
                               ),
                       ),

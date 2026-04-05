@@ -57,6 +57,10 @@ class _DriverLiveTripScreenState extends State<DriverLiveTripScreen> {
   @override
   void initState() {
     super.initState();
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid != null) {
+      TripCompletionService().markDriverLiveTripStarted(driverId: uid);
+    }
     _loadDriverData();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _getUserLocation();
