@@ -1,5 +1,6 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
-import 'package:navigo/screens/authentication/SignupApproval.dart';
+import 'PhoneNumberScreen.dart';
 import '../../theme/app_theme.dart';
 
 class DriverSignupScreen extends StatefulWidget {
@@ -13,29 +14,96 @@ class _DriverSignupScreenState extends State<DriverSignupScreen> {
   final _formKey = GlobalKey<FormState>();
 
   final TextEditingController _nameController = TextEditingController();
-  final TextEditingController _phoneController = TextEditingController();
   final TextEditingController _carNumberController = TextEditingController();
+  final TextEditingController _licenseController = TextEditingController();
 
-  String? _selectedRoute;
+  String? _selectedRouteId;
   String? _selectedCarType;
 
-  static const List<String> _routes = ["Ramallah - Birzeit"];
-  static const List<String> _carTypes = ["Bus", "Mini Bus", "Van"];
+  static const List<String> _carTypes = ['Bus', 'Mini Bus', 'Van'];
+
+  bool _routesLoading = true;
+  String? _routesError;
+  List<DropdownMenuItem<String>> _routeItems = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _loadRoutes();
+  }
+
+  Future<void> _loadRoutes() async {
+    setState(() {
+      _routesLoading = true;
+      _routesError = null;
+    });
+    try {
+      final snap =
+          await FirebaseFirestore.instance.collection('route').limit(50).get();
+      final items = <DropdownMenuItem<String>>[];
+      for (final d in snap.docs) {
+        final m = d.data();
+        final a = m['startPoint']?.toString() ?? '';
+        final b = m['endPoint']?.toString() ?? '';
+        final label = a.isNotEmpty || b.isNotEmpty ? '$a → $b' : d.id;
+        items.add(
+          DropdownMenuItem<String>(
+            value: d.id,
+            child: Text(label, overflow: TextOverflow.ellipsis),
+          ),
+        );
+      }
+      if (!mounted) return;
+      setState(() {
+        _routeItems = items;
+        _routesLoading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _routesError = e.toString();
+        _routesLoading = false;
+      });
+    }
+  }
 
   @override
   void dispose() {
     _nameController.dispose();
-    _phoneController.dispose();
     _carNumberController.dispose();
+    _licenseController.dispose();
     super.dispose();
   }
 
   void _submit() {
     if (!_formKey.currentState!.validate()) return;
+    if (_selectedRouteId == null || _selectedRouteId!.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Select a route')),
+      );
+      return;
+    }
+    if (_selectedCarType == null || _selectedCarType!.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Select vehicle type')),
+      );
+      return;
+    }
 
     Navigator.push(
       context,
-      MaterialPageRoute(builder: (context) => const SignupApprovalScreen()),
+      MaterialPageRoute(
+        builder: (context) => PhoneNumberScreen(
+          role: 'driver',
+          fullName: _nameController.text.trim(),
+          driverData: {
+            'routeId': _selectedRouteId,
+            'plateNumber': _carNumberController.text.trim(),
+            'vehicleType': _selectedCarType,
+            'licenseNumber': _licenseController.text.trim(),
+          },
+        ),
+      ),
     );
   }
 
@@ -47,10 +115,7 @@ class _DriverSignupScreenState extends State<DriverSignupScreen> {
       body: SafeArea(
         child: Column(
           children: [
-            /// Top Bar
             NavigoDecorations.topBar(onBack: () => Navigator.pop(context)),
-
-            /// Centered Form Card
             Expanded(
               child: Center(
                 child: SingleChildScrollView(
@@ -67,74 +132,86 @@ class _DriverSignupScreenState extends State<DriverSignupScreen> {
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             const Text(
-                              "Driver details",
+                              'Driver details',
                               style: NavigoTextStyles.titleLarge,
                             ),
                             const SizedBox(height: 20),
-
-                            /// Full Name
-                            _label("Full name"),
+                            _label('Full name'),
                             _inputField(
                               controller: _nameController,
-                              hint: "e.g., Ahmad Saleh",
+                              hint: 'e.g., Ahmad Saleh',
                               prefixIcon: Icons.person_outline,
                             ),
                             const SizedBox(height: 16),
-
-                            /// Phone
-                            _label("Phone number"),
-                            _inputField(
-                              controller: _phoneController,
-                              hint: "+97059 000 0000",
-                              keyboard: TextInputType.phone,
-                              prefixIcon: Icons.phone_outlined,
-                            ),
+                            _label('Route (from Firestore)'),
+                            if (_routesLoading)
+                              const Padding(
+                                padding: EdgeInsets.all(12),
+                                child: Center(child: CircularProgressIndicator()),
+                              )
+                            else if (_routesError != null)
+                              Text(
+                                'Could not load routes: $_routesError',
+                                style: NavigoTextStyles.bodySmall,
+                              )
+                            else if (_routeItems.isEmpty)
+                              const Text(
+                                'No routes found. Add documents under collection `route` first.',
+                                style: NavigoTextStyles.bodySmall,
+                              )
+                            else
+                              _dropdownField(
+                                value: _selectedRouteId,
+                                hint: 'Select route',
+                                items: _routeItems,
+                                onChanged: (val) =>
+                                    setState(() => _selectedRouteId = val),
+                              ),
                             const SizedBox(height: 16),
-
-                            /// Route
-                            _label("Working line / route"),
-                            _dropdownField(
-                              value: _selectedRoute,
-                              hint: "Select line",
-                              items: _routes,
-                              onChanged: (val) =>
-                                  setState(() => _selectedRoute = val),
-                            ),
-                            const SizedBox(height: 16),
-
-                            /// Car Number
-                            _label("Car number (plate)"),
+                            _label('Car number (plate)'),
                             _inputField(
                               controller: _carNumberController,
-                              hint: "e.g., 7-1234",
+                              hint: 'e.g., 7-1234',
                               prefixIcon: Icons.confirmation_number_outlined,
                             ),
                             const SizedBox(height: 16),
-
-                            /// Car Type
-                            _label("Car type"),
+                            _label('Driving license number (optional)'),
+                            _inputField(
+                              controller: _licenseController,
+                              hint: 'License #',
+                              prefixIcon: Icons.badge_outlined,
+                              validator: (_) => null,
+                            ),
+                            const SizedBox(height: 16),
+                            _label('Car type'),
                             _dropdownField(
                               value: _selectedCarType,
-                              hint: "Select car type",
-                              items: _carTypes,
+                              hint: 'Select car type',
+                              items: _carTypes
+                                  .map(
+                                    (e) => DropdownMenuItem(
+                                      value: e,
+                                      child: Text(e),
+                                    ),
+                                  )
+                                  .toList(),
                               onChanged: (val) =>
                                   setState(() => _selectedCarType = val),
                             ),
                             const SizedBox(height: 25),
-
-                            /// Submit Button
                             SizedBox(
                               width: double.infinity,
                               height: 55,
                               child: ElevatedButton(
-                                onPressed: _submit,
-                                style:
-                                    NavigoDecorations.kPrimaryButtonLargeStyle,
-                                child: Row(
+                                onPressed: _routesLoading || _routeItems.isEmpty
+                                    ? null
+                                    : _submit,
+                                style: NavigoDecorations.kPrimaryButtonLargeStyle,
+                                child: const Row(
                                   mainAxisAlignment: MainAxisAlignment.center,
-                                  children: const [
+                                  children: [
                                     Text(
-                                      "Submit",
+                                      'Continue to verify phone',
                                       style: NavigoTextStyles.button,
                                     ),
                                     SizedBox(width: 10),
@@ -144,10 +221,9 @@ class _DriverSignupScreenState extends State<DriverSignupScreen> {
                               ),
                             ),
                             const SizedBox(height: 10),
-
                             const Center(
                               child: Text(
-                                "Your account may require approval.",
+                                'Your account may require approval.',
                                 style: NavigoTextStyles.bodySmall,
                               ),
                             ),
@@ -165,7 +241,6 @@ class _DriverSignupScreenState extends State<DriverSignupScreen> {
     );
   }
 
-  /// Label Widget
   Widget _label(String text) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 6),
@@ -173,19 +248,19 @@ class _DriverSignupScreenState extends State<DriverSignupScreen> {
     );
   }
 
-  /// Input Field Widget
   Widget _inputField({
     required TextEditingController controller,
     required String hint,
     TextInputType keyboard = TextInputType.text,
     IconData? prefixIcon,
+    String? Function(String?)? validator,
   }) {
     return TextFormField(
       controller: controller,
       keyboardType: keyboard,
-      // ← Forces black text in the text field
       style: const TextStyle(color: Colors.black, fontSize: 16),
-      validator: (value) => value == null || value.isEmpty ? "Required" : null,
+      validator: validator ??
+          (value) => value == null || value.isEmpty ? 'Required' : null,
       decoration: NavigoDecorations.kInputDecoration.copyWith(
         hintText: hint,
         prefixIcon: prefixIcon != null
@@ -201,29 +276,19 @@ class _DriverSignupScreenState extends State<DriverSignupScreen> {
     );
   }
 
-  /// Dropdown Widget
   Widget _dropdownField({
     required String? value,
     required String hint,
-    required List<String> items,
-    required Function(String?) onChanged,
+    required List<DropdownMenuItem<String>> items,
+    required void Function(String?) onChanged,
   }) {
     return DropdownButtonFormField<String>(
       initialValue: value,
-      // ← Forces black text for the selected value in the dropdown
       style: const TextStyle(color: Colors.black, fontSize: 16),
-      hint: Text(hint, style: TextStyle(color: Colors.grey)),
-      items: items
-          .map(
-            (e) => DropdownMenuItem(
-              value: e,
-              // ← Forces black text for each item in the dropdown list
-              child: Text(e, style: const TextStyle(color: Colors.black)),
-            ),
-          )
-          .toList(),
+      hint: Text(hint, style: const TextStyle(color: Colors.grey)),
+      items: items,
       onChanged: onChanged,
-      validator: (value) => value == null ? "Required" : null,
+      validator: (v) => v == null ? 'Required' : null,
       decoration: NavigoDecorations.kInputDecoration,
       icon: const Icon(Icons.keyboard_arrow_down),
     );

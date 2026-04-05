@@ -3,12 +3,14 @@ class Vehicle {
   final String type;
   final String plateNumber;
   final num seatCount;
+  final String licenseNumber;
 
   Vehicle({
     required this.vehicleId,
     required this.type,
     required this.plateNumber,
     required this.seatCount,
+    required this.licenseNumber,
   });
 
   Map<String, dynamic> toMap() {
@@ -17,6 +19,7 @@ class Vehicle {
       "type": type,
       "plateNumber": plateNumber,
       "seatCount": seatCount,
+      "licenseNumber": licenseNumber,
     };
   }
 
@@ -26,6 +29,7 @@ class Vehicle {
       type: map["type"] ?? "",
       plateNumber: map["plateNumber"] ?? "",
       seatCount: map["seatCount"] ?? 0,
+      licenseNumber: map["licenseNumber"] ?? "",
     );
   }
 }

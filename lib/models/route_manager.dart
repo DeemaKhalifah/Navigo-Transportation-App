@@ -1,8 +1,9 @@
 import 'user.dart';
 
+/// Role `route_manager` — base fields in `users/{uid}`, extra fields in `route_manager/{uid}`.
 class RouteManagerModel extends UserModel {
+  final String email;
   final String routeId;
-  final String email; // Optional: for easier access
 
   RouteManagerModel({
     required super.userId,
@@ -12,29 +13,45 @@ class RouteManagerModel extends UserModel {
     super.image,
     required super.role,
     required super.isVerified,
-    required this.routeId,
+    super.isOnline,
     required this.email,
+    required this.routeId,
   });
 
-  // same as others → ONLY base fields
   @override
   Map<String, dynamic> toMap() {
     return {
-      "userId": userId,
-      "firstName": firstName,
-      "lastName": lastName,
-      "phone": phone,
-      "image": image,
-      "role": role,
-      "isVerified": isVerified,
+      'userId': userId,
+      'firstName': firstName,
+      'lastName': lastName,
+      'phone': phone,
+      'image': image,
+      'role': role,
+      'isVerified': isVerified,
+      'isOnline': isOnline,
     };
   }
 
-  // only route manager fields
+  /// Stored only under `route_manager/{uid}`.
   Map<String, dynamic> toRouteManagerMap() {
     return {
-      "routeId": routeId,
-      "email": email,
+      'email': email,
+      'routeId': routeId,
     };
+  }
+
+  factory RouteManagerModel.fromMap(Map<String, dynamic> map) {
+    return RouteManagerModel(
+      userId: map['userId'] ?? '',
+      firstName: map['firstName'] ?? '',
+      lastName: map['lastName'] ?? '',
+      phone: map['phone'] ?? '',
+      image: map['image'],
+      role: map['role'] ?? 'route_manager',
+      isVerified: map['isVerified'] ?? false,
+      isOnline: map['isOnline'] ?? false,
+      email: map['email'] as String? ?? '',
+      routeId: map['routeId'] as String? ?? '',
+    );
   }
 }

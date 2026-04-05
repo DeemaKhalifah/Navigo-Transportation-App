@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
@@ -9,6 +10,8 @@ import '../../theme/app_theme.dart';
 import 'DriverBottomNavBar.dart';
 import 'DriverHomeScreen.dart';
 import '../../screens/passenger/support_screen.dart';
+import '../../models/driver_status.dart';
+import '../../services/driver_queue_repository.dart';
 
 class DriverProfileScreen extends StatefulWidget {
   const DriverProfileScreen({super.key});
@@ -27,12 +30,18 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
   String? _imageUrl;
 
   bool _isEditing = false;
-  bool _isOnline = true;
   bool _isLoading = true;
   bool _isSaving = false;
+  bool _statusBusy = false;
+
+  /// From `drivers/{uid}.status` — [DriverStatus] values.
+  String _driverStatus = DriverStatus.offline;
+  String? _assignedRouteId;
 
   User? currentUser;
   DocumentReference<Map<String, dynamic>>? userDocRef;
+  final DriverQueueRepository _queueRepo = DriverQueueRepository();
+  StreamSubscription<DocumentSnapshot<Map<String, dynamic>>>? _driverDocSub;
 
   @override
   void initState() {
@@ -43,6 +52,21 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
       userDocRef = FirebaseFirestore.instance
           .collection('users')
           .doc(currentUser!.uid);
+      _driverDocSub = FirebaseFirestore.instance
+          .collection('drivers')
+          .doc(currentUser!.uid)
+          .snapshots()
+          .listen((snap) {
+        if (!mounted || !snap.exists) return;
+        final st = snap.data()?['status'] as String?;
+        final rid = snap.data()?['routeId'] as String?;
+        if (st != null) {
+          setState(() {
+            _driverStatus = st;
+            if (rid != null) _assignedRouteId = rid;
+          });
+        }
+      });
       _loadUserData();
     } else {
       _isLoading = false;
@@ -62,8 +86,19 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
             "${data['firstName'] ?? ''} ${data['lastName'] ?? ''}".trim();
 
         _phoneController.text = data['phone'] ?? '';
-        _isOnline = data['isOnline'] ?? true;
         _imageUrl = data['image'];
+      }
+
+      if (currentUser != null) {
+        final d = await FirebaseFirestore.instance
+            .collection('drivers')
+            .doc(currentUser!.uid)
+            .get();
+        if (d.exists) {
+          final dd = d.data() ?? {};
+          _driverStatus = dd['status'] as String? ?? DriverStatus.offline;
+          _assignedRouteId = dd['routeId'] as String?;
+        }
       }
     } catch (e) {
       debugPrint("Error loading driver data: $e");
@@ -188,28 +223,131 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
     }
   }
 
-  Future<void> _toggleDriverStatus() async {
-    if (userDocRef == null) return;
+  bool get _onTrip => _driverStatus == DriverStatus.onTrip;
 
-    final newStatus = !_isOnline;
+  String get _statusLabel {
+    switch (_driverStatus) {
+      case DriverStatus.available:
+        return 'Available';
+      case DriverStatus.onTrip:
+        return 'On trip';
+      default:
+        return 'Offline';
+    }
+  }
 
+  Future<void> _goOnline() async {
+    if (currentUser == null || _onTrip) return;
+    final routeId = _assignedRouteId?.trim();
+    if (routeId == null || routeId.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('No route assigned. Update your driver profile in Firestore.'),
+        ),
+      );
+      return;
+    }
+
+    setState(() => _statusBusy = true);
     try {
-      await userDocRef!.update({"isOnline": newStatus});
+      final batch = FirebaseFirestore.instance.batch();
+      final dRef = FirebaseFirestore.instance
+          .collection('drivers')
+          .doc(currentUser!.uid);
+      final qRef = FirebaseFirestore.instance
+          .collection('route')
+          .doc(routeId)
+          .collection('driverQueue')
+          .doc(currentUser!.uid);
+
+      batch.update(dRef, {'status': DriverStatus.available});
+      batch.set(qRef, {
+        'driverId': currentUser!.uid,
+        'joinedAt': FieldValue.serverTimestamp(),
+      });
+      await batch.commit();
 
       if (mounted) {
-        setState(() => _isOnline = newStatus);
+        setState(() => _driverStatus = DriverStatus.available);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('You are online and in the driver queue.')),
+        );
       }
     } catch (e) {
-      debugPrint("Failed to update online status: $e");
       if (mounted) {
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(SnackBar(content: Text("Failed to update status: $e")));
+        ).showSnackBar(SnackBar(content: Text('Could not go online: $e')));
       }
+    } finally {
+      if (mounted) setState(() => _statusBusy = false);
+    }
+  }
+
+  Future<void> _goOffline() async {
+    if (currentUser == null || _onTrip) return;
+    final routeId = _assignedRouteId?.trim();
+    if (routeId == null || routeId.isEmpty) {
+      await FirebaseFirestore.instance
+          .collection('drivers')
+          .doc(currentUser!.uid)
+          .update({'status': DriverStatus.offline});
+      if (mounted) setState(() => _driverStatus = DriverStatus.offline);
+      return;
+    }
+
+    setState(() => _statusBusy = true);
+    try {
+      final batch = FirebaseFirestore.instance.batch();
+      final dRef = FirebaseFirestore.instance
+          .collection('drivers')
+          .doc(currentUser!.uid);
+      final qRef = FirebaseFirestore.instance
+          .collection('route')
+          .doc(routeId)
+          .collection('driverQueue')
+          .doc(currentUser!.uid);
+
+      batch.update(dRef, {'status': DriverStatus.offline});
+      batch.delete(qRef);
+      await batch.commit();
+
+      if (mounted) {
+        setState(() => _driverStatus = DriverStatus.offline);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('You are offline and left the queue.')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Could not go offline: $e')));
+      }
+    } finally {
+      if (mounted) setState(() => _statusBusy = false);
     }
   }
 
   Future<void> _logout() async {
+    final uid = currentUser?.uid;
+    if (uid != null) {
+      try {
+        final d = await FirebaseFirestore.instance
+            .collection('drivers')
+            .doc(uid)
+            .get();
+        final routeId = d.data()?['routeId'] as String?;
+        if (routeId != null && routeId.isNotEmpty) {
+          await _queueRepo.leaveQueue(routeId, uid);
+        }
+        await FirebaseFirestore.instance.collection('drivers').doc(uid).update({
+          'status': DriverStatus.offline,
+        });
+      } catch (e) {
+        debugPrint('Logout driver cleanup: $e');
+      }
+    }
     await FirebaseAuth.instance.signOut();
     if (mounted) {
       Navigator.of(context).popUntil((route) => route.isFirst);
@@ -218,6 +356,7 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
 
   @override
   void dispose() {
+    _driverDocSub?.cancel();
     _nameController.dispose();
     _phoneController.dispose();
     super.dispose();
@@ -345,26 +484,69 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
                                       : const Text("Save"),
                                 ),
                               ),
-                            const SizedBox(height: 20),
-                            SizedBox(
-                              width: double.infinity,
-                              child: ElevatedButton(
-                                onPressed: _toggleDriverStatus,
-                                style: NavigoDecorations
-                                    .kPrimaryButtonLargeStyle
-                                    .copyWith(
-                                      backgroundColor: WidgetStatePropertyAll(
-                                        _isOnline
-                                            ? NavigoColors.accentRed
-                                            : NavigoColors.accentGreen,
-                                      ),
-                                    ),
-                                child: Text(
-                                  _isOnline
-                                      ? "Switch to Offline"
-                                      : "Switch to Online",
+                            const SizedBox(height: 16),
+                            Align(
+                              alignment: Alignment.centerLeft,
+                              child: Text(
+                                'Driver status: $_statusLabel',
+                                style: NavigoTextStyles.bodyMedium.copyWith(
+                                  fontWeight: FontWeight.w600,
                                 ),
                               ),
+                            ),
+                            if (_onTrip)
+                              Padding(
+                                padding: const EdgeInsets.only(top: 8),
+                                child: Text(
+                                  'Finish your current trip before changing availability.',
+                                  style: NavigoTextStyles.bodySmall.copyWith(
+                                    color: NavigoColors.textMuted,
+                                  ),
+                                ),
+                              ),
+                            const SizedBox(height: 16),
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: ElevatedButton(
+                                    onPressed: (_statusBusy ||
+                                            _onTrip ||
+                                            _driverStatus ==
+                                                DriverStatus.available)
+                                        ? null
+                                        : _goOnline,
+                                    style: NavigoDecorations
+                                        .kPrimaryButtonLargeStyle
+                                        .copyWith(
+                                      backgroundColor:
+                                          const WidgetStatePropertyAll(
+                                        NavigoColors.accentGreen,
+                                      ),
+                                    ),
+                                    child: const Text('Go online'),
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: ElevatedButton(
+                                    onPressed: (_statusBusy ||
+                                            _onTrip ||
+                                            _driverStatus ==
+                                                DriverStatus.offline)
+                                        ? null
+                                        : _goOffline,
+                                    style: NavigoDecorations
+                                        .kPrimaryButtonLargeStyle
+                                        .copyWith(
+                                      backgroundColor:
+                                          const WidgetStatePropertyAll(
+                                        NavigoColors.accentRed,
+                                      ),
+                                    ),
+                                    child: const Text('Go offline'),
+                                  ),
+                                ),
+                              ],
                             ),
                             const SizedBox(height: 20),
                             Align(

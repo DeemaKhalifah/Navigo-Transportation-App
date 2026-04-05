@@ -6,6 +6,9 @@ import '../../theme/app_theme.dart';
 import '../passenger/passengerHomeScreen.dart';
 import '../Driver/DriverHomeScreen.dart';
 import '../../models/driver.dart';
+import '../../models/driver_status.dart';
+import '../../models/Vehicle.dart';
+import '../../services/vehicle_seat_count.dart';
 import 'SignupApproval.dart';
 
 class OtpVerificationScreen extends StatefulWidget {
@@ -54,31 +57,74 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
     required String lastName,
   }) async {
     final driverInfo = widget.driverData ?? {};
+    final fs = FirebaseFirestore.instance;
 
-    final driver = DriverModel(
-      userId: uid,
-      firstName: firstName,
-      lastName: lastName,
-      phone: widget.phoneNumber,
-      image: null,
-      role: "driver",
-      isVerified: true,
-      vehicle: driverInfo['vehicle'] ?? '',
-      route: driverInfo['route'] ?? '',
-      availability: driverInfo['availability'] ?? true,
-      licenseNumber: driverInfo['licenseNumber'] ?? '',
-      isApproved: driverInfo['isApproved'] ?? false,
-    );
+    String vehicleId = (driverInfo['vehicleId'] as String?)?.trim() ?? '';
 
-    await FirebaseFirestore.instance
-        .collection('drivers')
-        .doc(uid)
-        .set(driver.toDriverMap(), SetOptions(merge: true));
+    if (vehicleId.isEmpty) {
+      final vehicleRef = fs.collection('vehicles').doc();
+      vehicleId = vehicleRef.id;
+      final plate = driverInfo['plateNumber'] as String? ?? '';
+      final vType = driverInfo['vehicleType'] as String? ?? 'Unknown';
+      final license = driverInfo['licenseNumber'] as String? ?? '';
 
-    final driverDoc = await FirebaseFirestore.instance
-        .collection('drivers')
-        .doc(uid)
-        .get();
+      final vehicle = Vehicle(
+        vehicleId: vehicleId,
+        type: vType,
+        plateNumber: plate,
+        seatCount: defaultSeatCountForVehicleType(vType),
+        licenseNumber: license,
+      );
+
+      final driver = DriverModel(
+        userId: uid,
+        firstName: firstName,
+        lastName: lastName,
+        phone: widget.phoneNumber,
+        image: null,
+        role: 'driver',
+        isVerified: true,
+        isOnline: false,
+        vehicleId: vehicleId,
+        routeId: driverInfo['routeId'] as String? ??
+            driverInfo['route'] as String? ??
+            '',
+        status: driverInfo['status'] as String? ?? DriverStatus.offline,
+        isApproved: driverInfo['isApproved'] ?? false,
+      );
+
+      final batch = fs.batch();
+      batch.set(vehicleRef, {
+        ...vehicle.toMap(),
+        'driverId': uid,
+      });
+      batch.set(fs.collection('drivers').doc(uid), driver.toDriverMap());
+      await batch.commit();
+    } else {
+      final driver = DriverModel(
+        userId: uid,
+        firstName: firstName,
+        lastName: lastName,
+        phone: widget.phoneNumber,
+        image: null,
+        role: 'driver',
+        isVerified: true,
+        isOnline: false,
+        vehicleId: vehicleId,
+        routeId: driverInfo['routeId'] as String? ??
+            driverInfo['route'] as String? ??
+            '',
+        status: driverInfo['status'] as String? ?? DriverStatus.offline,
+        isApproved: driverInfo['isApproved'] ?? false,
+      );
+
+      await fs
+          .collection('drivers')
+          .doc(uid)
+          .set(driver.toDriverMap(), SetOptions(merge: true));
+    }
+
+    final driverDoc = await fs.collection('drivers').doc(uid).get();
 
     final bool isApproved = driverDoc.data()?['isApproved'] ?? false;
 
@@ -135,6 +181,7 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
         "phone": widget.phoneNumber,
         "image": null,
         "isVerified": true,
+        "isOnline": false,
       };
 
       if (widget.fullName != null && widget.fullName!.trim().isNotEmpty) {
@@ -153,8 +200,8 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
 
       if (widget.role == "passenger") {
         await FirebaseFirestore.instance.collection('passengers').doc(uid).set({
-          "tripHistory": [],
-          "paymentMethods": [],
+          'TripHistory': <String>[],
+          'paymentMethod': <dynamic>[],
         }, SetOptions(merge: true));
 
         if (!mounted) return;

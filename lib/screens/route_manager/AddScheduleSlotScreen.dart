@@ -1,29 +1,72 @@
 import 'package:flutter/material.dart';
+import 'package:navigo/models/schedule_slot.dart';
+import 'package:navigo/services/schedule_slot_repository.dart';
+import 'package:navigo/services/slot_driver_assignment_service.dart';
 import 'package:navigo/theme/app_theme.dart';
 
 class AddScheduleSlotScreen extends StatefulWidget {
-  const AddScheduleSlotScreen({super.key});
+  const AddScheduleSlotScreen({
+    super.key,
+    required this.routeId,
+    this.existingSlot,
+  });
+
+  final String routeId;
+
+  /// When set, the screen saves with merge into this document.
+  final ScheduleSlot? existingSlot;
+
+  bool get isEditing => existingSlot != null;
 
   @override
   State<AddScheduleSlotScreen> createState() => _AddScheduleSlotScreenState();
 }
 
 class _AddScheduleSlotScreenState extends State<AddScheduleSlotScreen> {
-  String selectedType = "bus";
+  final ScheduleSlotRepository _repo = ScheduleSlotRepository();
+  final SlotDriverAssignmentService _assignment = SlotDriverAssignmentService();
 
-  final TextEditingController slotIdController = TextEditingController();
-  final TextEditingController frequencyController = TextEditingController();
+  String _selectedType = 'bus';
 
-  String? seats;
+  final TextEditingController _priceController = TextEditingController();
 
-  TimeOfDay? fromTime;
-  TimeOfDay? toTime;
-  DateTime? selectedDate;
+  String? _capacity;
 
-  List<String> selectedDays = [];
-  List<String> days = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+  TimeOfDay? _fromTime;
+  TimeOfDay? _toTime;
+  DateTime? _selectedDate;
 
-  Future<void> pickTime(bool isFrom) async {
+  bool _saving = false;
+
+  @override
+  void initState() {
+    super.initState();
+    final e = widget.existingSlot;
+    if (e != null) {
+      _selectedType = e.vehicleType;
+      _selectedDate =
+          DateTime(e.serviceDate.year, e.serviceDate.month, e.serviceDate.day);
+      _fromTime = TimeOfDay.fromDateTime(e.departureAt);
+      _toTime = TimeOfDay.fromDateTime(e.arrivalAt);
+      _capacity = e.capacity.toString();
+      if (_selectedType == 'micro' && _capacity == '14') {
+        _capacity = '7';
+      }
+      final p = e.price;
+      if (p != null) {
+        _priceController.text =
+            p.toStringAsFixed(p == p.roundToDouble() ? 0 : 2);
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    _priceController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _pickTime(bool isFrom) async {
     final picked = await showTimePicker(
       context: context,
       initialTime: TimeOfDay.now(),
@@ -31,63 +74,140 @@ class _AddScheduleSlotScreenState extends State<AddScheduleSlotScreen> {
     if (picked != null) {
       setState(() {
         if (isFrom) {
-          fromTime = picked;
+          _fromTime = picked;
         } else {
-          toTime = picked;
+          _toTime = picked;
         }
       });
     }
   }
 
-  Future<void> pickDate() async {
+  Future<void> _pickDate() async {
     final picked = await showDatePicker(
       context: context,
       firstDate: DateTime(2024),
-      lastDate: DateTime(2030),
-      initialDate: DateTime.now(),
+      lastDate: DateTime(2035),
+      initialDate: _selectedDate ?? DateTime.now(),
     );
     if (picked != null) {
-      setState(() => selectedDate = picked);
+      setState(() => _selectedDate = picked);
     }
   }
 
-  String formatTime(TimeOfDay? time) {
-    if (time == null) return "Select";
+  String _formatTime(TimeOfDay? time) {
+    if (time == null) return 'Select';
     return time.format(context);
   }
 
-  String formatDate(DateTime? date) {
-    if (date == null) return "Select date";
-    return "${date.day}/${date.month}/${date.year}";
+  String _formatDate(DateTime? date) {
+    if (date == null) return 'Select date';
+    return '${date.day}/${date.month}/${date.year}';
   }
 
-  void saveSlot() {
-    final slot = {
-      "id": DateTime.now().millisecondsSinceEpoch.toString(),
-      "start": formatTime(fromTime),
-      "end": formatTime(toTime),
-      "frequency": "Every ${frequencyController.text} minutes",
-      "date": formatDate(selectedDate),
-      "line": "L-${slotIdController.text}",
-      "type": selectedType,
-      "seats": seats ?? "",
-    };
-    Navigator.pop(context, slot);
+  DateTime _combine(DateTime date, TimeOfDay time) {
+    return DateTime(date.year, date.month, date.day, time.hour, time.minute);
+  }
+
+  Future<void> _save() async {
+    if (_selectedDate == null || _fromTime == null || _toTime == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please choose date and both times')),
+      );
+      return;
+    }
+
+    final cap = int.tryParse(_capacity ?? '');
+    if (cap == null || cap <= 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please select capacity')),
+      );
+      return;
+    }
+
+    final departure = _combine(_selectedDate!, _fromTime!);
+    final arrival = _combine(_selectedDate!, _toTime!);
+    if (!arrival.isAfter(departure)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('End time must be after start time')),
+      );
+      return;
+    }
+
+    double? price;
+    final priceText = _priceController.text.trim();
+    if (priceText.isNotEmpty) {
+      price = double.tryParse(priceText.replaceAll(',', '.'));
+      if (price == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Invalid price')),
+        );
+        return;
+      }
+    }
+
+    final slot = ScheduleSlot(
+      slotId: widget.existingSlot?.slotId ?? '',
+      routeId: widget.routeId,
+      departureAt: departure,
+      arrivalAt: arrival,
+      price: price,
+      capacity: cap,
+      vehicleType: _selectedType,
+    );
+
+    setState(() => _saving = true);
+    try {
+      if (widget.isEditing) {
+        await _repo.upsertSlot(slot);
+      } else {
+        final slotId = await _repo.addSlot(slot);
+        final assign = await _assignment.tryAssignDriverForNewSlot(
+          routeId: widget.routeId,
+          slotId: slotId,
+          departureAt: departure,
+          arrivalAt: arrival,
+        );
+        if (!mounted) return;
+        if (assign.outcome == SlotAssignmentOutcome.noDriversInQueue) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                'Slot saved. No drivers in queue — assign manually later.',
+              ),
+            ),
+          );
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                'Slot saved. Driver assigned. Trip: ${assign.tripId}',
+              ),
+            ),
+          );
+        }
+      }
+      if (!mounted) return;
+      Navigator.pop(context, true);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not save: $e')),
+      );
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: NavigoColors.backgroundLight,
-
       body: SafeArea(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            /// TOP BAR
             NavigoDecorations.topBar(onBack: () => Navigator.pop(context)),
 
-            /// TITLE
             Padding(
               padding: const EdgeInsets.symmetric(
                 horizontal: NavigoSizes.screenPadding,
@@ -95,10 +215,13 @@ class _AddScheduleSlotScreenState extends State<AddScheduleSlotScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text("Add Schedule Slot", style: NavigoTextStyles.titleLarge),
+                  Text(
+                    widget.isEditing ? 'Edit schedule slot' : 'Add schedule slot',
+                    style: NavigoTextStyles.titleLarge,
+                  ),
                   const SizedBox(height: 4),
                   Text(
-                    "Fill in the details for the new slot",
+                    'Departure window and capacity (slot ID is assigned by Firestore)',
                     style: NavigoTextStyles.bodySmall,
                   ),
                 ],
@@ -107,7 +230,6 @@ class _AddScheduleSlotScreenState extends State<AddScheduleSlotScreen> {
 
             const SizedBox(height: NavigoSizes.sectionGap),
 
-            /// SCROLLABLE CONTENT
             Expanded(
               child: SingleChildScrollView(
                 padding: const EdgeInsets.symmetric(
@@ -116,71 +238,47 @@ class _AddScheduleSlotScreenState extends State<AddScheduleSlotScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    /// TYPE SELECTOR
                     Row(
                       children: [
                         NavigoDecorations.selectorChip(
-                          label: "Bus",
-                          selected: selectedType == "bus",
-                          onTap: () => setState(() => selectedType = "bus"),
+                          label: 'Bus',
+                          selected: _selectedType == 'bus',
+                          onTap: () => setState(() => _selectedType = 'bus'),
                         ),
                         const SizedBox(width: 10),
                         NavigoDecorations.selectorChip(
-                          label: "Micro Bus",
-                          selected: selectedType == "micro",
-                          onTap: () => setState(() => selectedType = "micro"),
+                          label: 'Micro Bus',
+                          selected: _selectedType == 'micro',
+                          onTap: () => setState(() => _selectedType = 'micro'),
                         ),
                       ],
                     ),
 
                     const SizedBox(height: NavigoSizes.sectionGap),
 
-                    /// FORM CARD
                     Container(
                       padding: const EdgeInsets.all(NavigoSizes.cardPadding),
                       decoration: NavigoDecorations.kCardDecoration,
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          /// SLOT ID
-                          Text("Slot ID", style: NavigoTextStyles.label),
-                          const SizedBox(height: 6),
-                          Row(
-                            children: [
-                              Text("L-", style: NavigoTextStyles.fieldText),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: TextField(
-                                  controller: slotIdController,
-                                  keyboardType: TextInputType.number,
-                                  style: NavigoTextStyles.fieldText,
-                                  decoration: NavigoDecorations.kInputDecoration
-                                      .copyWith(hintText: "e.g. 12"),
-                                ),
-                              ),
-                            ],
-                          ),
-
-                          const SizedBox(height: NavigoSizes.itemGap),
-
-                          /// FROM / TO TIME
                           Row(
                             children: [
                               Expanded(
                                 child: _buildPickerBox(
-                                  label: "From",
-                                  value: formatTime(fromTime),
+                                  label: 'From',
+                                  value: _formatTime(_fromTime),
                                   icon: Icons.access_time,
-                                  onTap: () => pickTime(true),
+                                  onTap: () => _pickTime(true),
                                 ),
                               ),
                               const SizedBox(width: 10),
                               Expanded(
                                 child: _buildPickerBox(
-                                  label: "To",
-                                  value: formatTime(toTime),
+                                  label: 'To',
+                                  value: _formatTime(_toTime),
                                   icon: Icons.access_time_filled,
-                                  onTap: () => pickTime(false),
+                                  onTap: () => _pickTime(false),
                                 ),
                               ),
                             ],
@@ -188,100 +286,106 @@ class _AddScheduleSlotScreenState extends State<AddScheduleSlotScreen> {
 
                           const SizedBox(height: NavigoSizes.itemGap),
 
-                          /// FREQUENCY
-                          Text("Frequency", style: NavigoTextStyles.label),
-                          const SizedBox(height: 6),
-                          Row(
-                            children: [
-                              Text("Every ", style: NavigoTextStyles.fieldText),
-                              Expanded(
-                                child: TextField(
-                                  controller: frequencyController,
-                                  keyboardType: TextInputType.number,
-                                  style: NavigoTextStyles.fieldText,
-                                  decoration: NavigoDecorations.kInputDecoration
-                                      .copyWith(hintText: "e.g. 30"),
-                                ),
-                              ),
-                              Text(
-                                " minutes",
-                                style: NavigoTextStyles.fieldText,
-                              ),
-                            ],
-                          ),
-
-                          const SizedBox(height: NavigoSizes.itemGap),
-
-                          /// DATE
-                          Text("Date", style: NavigoTextStyles.label),
+                          Text('Date', style: NavigoTextStyles.label),
                           const SizedBox(height: 6),
                           _buildPickerBox(
-                            label: "",
-                            value: formatDate(selectedDate),
+                            label: '',
+                            value: _formatDate(_selectedDate),
                             icon: Icons.calendar_today,
-                            onTap: pickDate,
+                            onTap: _pickDate,
                           ),
 
-                          /// SEATS (bus only)
-                          if (selectedType == "bus") ...[
-                            const SizedBox(height: NavigoSizes.itemGap),
-                            Text("Seats", style: NavigoTextStyles.label),
-                            const SizedBox(height: 6),
-                            DropdownButtonFormField<String>(
-                              value: seats,
-                              decoration: NavigoDecorations.kInputDecoration,
-                              style: NavigoTextStyles.fieldText,
-                              items: const [
-                                DropdownMenuItem(
-                                  value: "45",
-                                  child: Text("45 seats"),
-                                ),
-                                DropdownMenuItem(
-                                  value: "14",
-                                  child: Text("14 seats"),
-                                ),
-                              ],
-                              onChanged: (value) =>
-                                  setState(() => seats = value),
+                          const SizedBox(height: NavigoSizes.itemGap),
+
+                          Text('Capacity (seats)', style: NavigoTextStyles.label),
+                          const SizedBox(height: 6),
+                          DropdownButtonFormField<String>(
+                            value: _capacity,
+                            decoration: NavigoDecorations.kInputDecoration,
+                            style: NavigoTextStyles.fieldText,
+                            items: _selectedType == 'bus'
+                                ? const [
+                                    DropdownMenuItem(
+                                      value: '45',
+                                      child: Text('45 seats'),
+                                    ),
+                                    DropdownMenuItem(
+                                      value: '14',
+                                      child: Text('14 seats'),
+                                    ),
+                                  ]
+                                : const [
+                                    DropdownMenuItem(
+                                      value: '7',
+                                      child: Text('7 seats'),
+                                    ),
+                                  ],
+                            onChanged: (value) =>
+                                setState(() => _capacity = value),
+                          ),
+
+                          const SizedBox(height: NavigoSizes.itemGap),
+
+                          Text(
+                            'Price override (optional)',
+                            style: NavigoTextStyles.label,
+                          ),
+                          const SizedBox(height: 6),
+                          TextField(
+                            controller: _priceController,
+                            keyboardType: const TextInputType.numberWithOptions(
+                              decimal: true,
                             ),
-                          ],
+                            style: NavigoTextStyles.fieldText,
+                            decoration: NavigoDecorations.kInputDecoration
+                                .copyWith(
+                              hintText: 'Leave empty to use route default',
+                            ),
+                          ),
                         ],
                       ),
                     ),
 
                     const SizedBox(height: NavigoSizes.sectionGap),
 
-                    /// SAVE BUTTON
                     SizedBox(
                       width: double.infinity,
                       height: NavigoSizes.buttonHeight,
                       child: ElevatedButton(
-                        onPressed: saveSlot,
+                        onPressed: _saving ? null : _save,
                         style: NavigoDecorations.kPrimaryButtonLargeStyle,
-                        child: const Text(
-                          "Save Slot",
-                          style: NavigoTextStyles.button,
-                        ),
+                        child: _saving
+                            ? const SizedBox(
+                                width: 22,
+                                height: 22,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: NavigoColors.textLight,
+                                ),
+                              )
+                            : Text(
+                                widget.isEditing ? 'Save changes' : 'Save slot',
+                                style: NavigoTextStyles.button,
+                              ),
                       ),
                     ),
 
                     const SizedBox(height: NavigoSizes.itemGap),
 
-                    /// CANCEL BUTTON
-                    /// CANCEL BUTTON
                     SizedBox(
                       width: double.infinity,
                       height: NavigoSizes.buttonHeight,
                       child: ElevatedButton(
-                        onPressed: () => Navigator.pop(context),
+                        onPressed:
+                            _saving ? null : () => Navigator.pop(context),
                         style: NavigoDecorations.kPrimaryButtonLargeStyle
                             .copyWith(
-                              backgroundColor: const WidgetStatePropertyAll(
-                                NavigoColors.accentRed,
-                              ),
-                            ),
+                          backgroundColor: const WidgetStatePropertyAll(
+                            NavigoColors.accentRed,
+                          ),
+                        ),
                         child: const Text(
-                          "Cancel",
+                          'Cancel',
                           style: NavigoTextStyles.button,
                         ),
                       ),
@@ -325,7 +429,7 @@ class _AddScheduleSlotScreenState extends State<AddScheduleSlotScreen> {
               children: [
                 Icon(icon, size: 18, color: NavigoColors.accentGreen),
                 const SizedBox(width: 8),
-                Text(value, style: NavigoTextStyles.fieldText),
+                Expanded(child: Text(value, style: NavigoTextStyles.fieldText)),
               ],
             ),
           ),

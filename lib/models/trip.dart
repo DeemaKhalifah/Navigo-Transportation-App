@@ -1,61 +1,54 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
+
+/// Stored at `trips/{tripId}` — no trip-level status (use [DriverModel.status]).
 class Trip {
   final String tripId;
   final String driverId;
   final String routeId;
-
-  final String from;
-  final String to;
-
-  final DateTime date;
-
-  final List<String> passengersIds; // list of passenger IDs
-  final List<String> path; // list of stops (or coordinates as strings)
-
-  final double estimatedFare;
-  final String status; // e.g. upcoming, ongoing, completed, cancelled
+  final String slotId;
+  final List<String> passengersIds;
+  final DateTime departureAt;
+  final DateTime arrivalAt;
 
   Trip({
     required this.tripId,
     required this.driverId,
     required this.routeId,
-    required this.from,
-    required this.to,
-    required this.date,
+    required this.slotId,
     required this.passengersIds,
-    required this.path,
-    required this.estimatedFare,
-    required this.status,
+    required this.departureAt,
+    required this.arrivalAt,
   });
 
-  // ✅ Convert to Firestore
   Map<String, dynamic> toMap() {
     return {
-      "tripId": tripId,
-      "driverId": driverId,
-      "routeId": routeId,
-      "from": from,
-      "to": to,
-      "date": date.toIso8601String(),
-      "passengersIds": passengersIds,
-      "path": path,
-      "estimatedFare": estimatedFare,
-      "status": status,
+      'tripId': tripId,
+      'driverId': driverId,
+      'routeId': routeId,
+      'slotId': slotId,
+      'passengersIds': passengersIds,
+      'departureAt': Timestamp.fromDate(departureAt),
+      'arrivalAt': Timestamp.fromDate(arrivalAt),
     };
   }
 
-  // ✅ From Firestore
-  factory Trip.fromMap(Map<String, dynamic> map) {
+  factory Trip.fromMap(String tripId, Map<String, dynamic> map) {
     return Trip(
-      tripId: map["tripId"] ?? "",
-      driverId: map["driverId"] ?? "",
-      routeId: map["routeId"] ?? "",
-      from: map["from"] ?? "",
-      to: map["to"] ?? "",
-      date: DateTime.parse(map["date"]),
-      passengersIds: List<String>.from(map["passengersIds"] ?? []),
-      path: List<String>.from(map["path"] ?? []),
-      estimatedFare: (map["estimatedFare"] ?? 0).toDouble(),
-      status: map["status"] ?? "upcoming",
+      tripId: map['tripId'] as String? ?? tripId,
+      driverId: map['driverId'] ?? '',
+      routeId: map['routeId'] ?? '',
+      slotId: map['slotId'] as String? ?? map['scheduleSlotId'] as String? ?? '',
+      passengersIds: List<String>.from(map['passengersIds'] ?? []),
+      departureAt: _readDate(map['departureAt']) ?? DateTime.now(),
+      arrivalAt: _readDate(map['arrivalAt']) ?? DateTime.now(),
     );
+  }
+
+  static DateTime? _readDate(dynamic v) {
+    if (v == null) return null;
+    if (v is Timestamp) return v.toDate();
+    if (v is DateTime) return v;
+    if (v is String) return DateTime.tryParse(v);
+    return null;
   }
 }

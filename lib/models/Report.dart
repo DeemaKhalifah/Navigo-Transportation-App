@@ -1,6 +1,7 @@
 import 'user.dart';
 import 'driver.dart';
 import 'passenger.dart';
+import 'route_manager.dart';
 
 class ReportModel {
   final String reportId;
@@ -47,17 +48,9 @@ class ReportModel {
       case "driver":
         return DriverModel.fromMap(map);
       case "passenger":
-        return Passenger(
-          userId: map["userId"] ?? "",
-          firstName: map["firstName"] ?? "",
-          lastName: map["lastName"] ?? "",
-          phone: map["phone"] ?? "",
-          image: map["image"],
-          role: map["role"] ?? "passenger",
-          isVerified: map["isVerified"] ?? false,
-          tripHistory: map["tripHistory"] ?? [],
-          paymentMethods: map["paymentMethods"] ?? [],
-        );
+        return Passenger.fromMap(map);
+      case "route_manager":
+        return RouteManagerModel.fromMap(map);
       default:
         throw UnsupportedError("Unknown role: ${map["role"]}");
     }

@@ -5,6 +5,7 @@ import 'package:geolocator/geolocator.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 
 import '../../theme/app_theme.dart';
+import '../../services/trip_completion_service.dart';
 import '../Driver/DriverTripsScreen.dart';
 import 'DriverBottomNavBar.dart';
 import 'DriverHomeScreen.dart';
@@ -376,7 +377,13 @@ class _DriverLiveTripScreenState extends State<DriverLiveTripScreen> {
                       width: double.infinity,
                       height: NavigoSizes.buttonHeight,
                       child: ElevatedButton(
-                        onPressed: () {
+                        onPressed: () async {
+                          final uid = FirebaseAuth.instance.currentUser?.uid;
+                          if (uid != null) {
+                            await TripCompletionService()
+                                .releaseDriverAfterTrip(driverId: uid);
+                          }
+                          if (!context.mounted) return;
                           Navigator.push(
                             context,
                             MaterialPageRoute(

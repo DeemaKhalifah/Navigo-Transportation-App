@@ -1,69 +1,91 @@
+import 'driver_status.dart';
 import 'user.dart';
 
 class DriverModel extends UserModel {
-  final String vehicle;
-  final String route;
-  final bool availability;
-  final String licenseNumber;
+  /// Same as [userId] for auth-backed drivers; document id is `drivers/{driverId}`.
+  final String driverId;
+  final String vehicleId;
+  final String routeId;
+
+  /// `offline` | `available` | `onTrip` — see [DriverStatus].
+  final String status;
+ 
   final bool isApproved;
 
   DriverModel({
-    required super.userId,
+    required String userId,
     required super.firstName,
     required super.lastName,
     required super.phone,
     super.image,
     required super.role,
     required super.isVerified,
-    required this.vehicle,
-    required this.route,
-    required this.availability,
-    required this.licenseNumber,
+    super.isOnline,
+    String? driverId,
+    required this.vehicleId,
+    required this.routeId,
+    required this.status,
     required this.isApproved,
-  });
+  })  : driverId = driverId ?? userId,
+        super(userId: userId);
 
   @override
   Map<String, dynamic> toMap() {
     return {
-      "userId": userId,
-      "firstName": firstName,
-      "lastName": lastName,
-      "phone": phone,
-      "image": image,
-      "role": role,
-      "isVerified": isVerified,
-      "vehicle": vehicle,
-      "route": route,
-      "availability": availability,
-      "licenseNumber": licenseNumber,
-      "isApproved": isApproved,
+      'userId': userId,
+      'driverId': driverId,
+      'firstName': firstName,
+      'lastName': lastName,
+      'phone': phone,
+      'image': image,
+      'role': role,
+      'isVerified': isVerified,
+      'isOnline': isOnline,
+      'vehicleId': vehicleId,
+      'routeId': routeId,
+      'status': status,
+      'isApproved': isApproved,
     };
   }
 
+  /// Fields stored under `drivers/{driverId}` (typically `driverId` == auth uid).
   Map<String, dynamic> toDriverMap() {
     return {
-      "vehicle": vehicle,
-      "route": route,
-      "availability": availability,
-      "licenseNumber": licenseNumber,
-      "isApproved": isApproved,
+      'userId': userId,
+      'routeId': routeId,
+      'vehicleId': vehicleId,
+      'status': status,
+      'isApproved': isApproved,
     };
   }
 
   factory DriverModel.fromMap(Map<String, dynamic> map) {
+    final legacyVehicle = map['vehicle'] as String?;
+    final legacyRoute = map['route'] as String?;
+    final uid = map['userId'] ?? '';
+    final did = map['driverId'] as String? ?? uid;
+
+    final legacyAvailability = map['availability'];
+    final rawStatus = map['status'];
+    String resolvedStatus = DriverStatus.normalize(rawStatus as String?);
+    if (rawStatus == null && legacyAvailability == true) {
+      resolvedStatus = DriverStatus.available;
+    }
+
     return DriverModel(
-      userId: map["userId"] ?? "",
-      firstName: map["firstName"] ?? "",
-      lastName: map["lastName"] ?? "",
-      phone: map["phone"] ?? "",
-      image: map["image"],
-      role: map["role"] ?? "driver",
-      isVerified: map["isVerified"] ?? false,
-      vehicle: map["vehicle"] ?? "",
-      route: map["route"] ?? "",
-      availability: map["availability"] ?? false,
-      licenseNumber: map["licenseNumber"] ?? "",
-      isApproved: map["isApproved"] ?? false,
+      userId: uid,
+      firstName: map['firstName'] ?? '',
+      lastName: map['lastName'] ?? '',
+      phone: map['phone'] ?? '',
+      image: map['image'],
+      role: map['role'] ?? 'driver',
+      isVerified: map['isVerified'] ?? false,
+      isOnline: map['isOnline'] ?? false,
+      driverId: did,
+      vehicleId: map['vehicleId'] as String? ?? legacyVehicle ?? '',
+      routeId: map['routeId'] as String? ?? legacyRoute ?? '',
+      status: resolvedStatus,
+      isApproved: map['isApproved'] ?? false,
     );
   }
 }

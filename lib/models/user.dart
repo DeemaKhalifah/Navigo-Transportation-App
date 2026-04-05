@@ -7,6 +7,9 @@ abstract class UserModel {
   final String role;
   final bool isVerified;
 
+  /// Stored on `users/{uid}` (presence / session hint).
+  final bool isOnline;
+
   UserModel({
     required this.userId,
     required this.firstName,
@@ -15,6 +18,7 @@ abstract class UserModel {
     this.image,
     required this.role,
     required this.isVerified,
+    this.isOnline = false,
   });
 
   Map<String, dynamic> toMap();
