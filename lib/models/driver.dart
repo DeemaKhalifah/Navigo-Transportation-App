@@ -13,7 +13,7 @@ class DriverModel extends UserModel {
   final bool isApproved;
 
   DriverModel({
-    required String userId,
+    required super.userId,
     required super.firstName,
     required super.lastName,
     required super.phone,
@@ -26,8 +26,7 @@ class DriverModel extends UserModel {
     required this.routeId,
     required this.status,
     required this.isApproved,
-  })  : driverId = driverId ?? userId,
-        super(userId: userId);
+  })  : driverId = driverId ?? userId;
 
   @override
   Map<String, dynamic> toMap() {

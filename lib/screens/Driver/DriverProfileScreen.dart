@@ -57,16 +57,16 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
           .doc(currentUser!.uid)
           .snapshots()
           .listen((snap) {
-        if (!mounted || !snap.exists) return;
-        final st = snap.data()?['status'] as String?;
-        final rid = snap.data()?['routeId'] as String?;
-        if (st != null) {
-          setState(() {
-            _driverStatus = st;
-            if (rid != null) _assignedRouteId = rid;
+            if (!mounted || !snap.exists) return;
+            final st = snap.data()?['status'] as String?;
+            final rid = snap.data()?['routeId'] as String?;
+            if (st != null) {
+              setState(() {
+                _driverStatus = st;
+                if (rid != null) _assignedRouteId = rid;
+              });
+            }
           });
-        }
-      });
       _loadUserData();
     } else {
       _isLoading = false;
@@ -227,8 +227,7 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
 
   bool get _assignedTrip => _driverStatus == DriverStatus.assigned;
 
-  bool get _blocksAvailabilityToggle =>
-      _onLiveTrip || _assignedTrip;
+  bool get _blocksAvailabilityToggle => _onLiveTrip || _assignedTrip;
 
   String get _statusLabel {
     switch (_driverStatus) {
@@ -249,7 +248,9 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
     if (routeId == null || routeId.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('No route assigned. Update your driver profile in Firestore.'),
+          content: Text(
+            'No route assigned. Update your driver profile in Firestore.',
+          ),
         ),
       );
       return;
@@ -267,7 +268,9 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
       if (mounted) {
         setState(() => _driverStatus = DriverStatus.available);
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('You are online and in the driver queue.')),
+          const SnackBar(
+            content: Text('You are online and in the driver queue.'),
+          ),
         );
       }
     } catch (e) {
@@ -376,9 +379,11 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
             NavigoDecorations.topBar(
               onBack: () => Navigator.pushReplacement(
                 context,
-                MaterialPageRoute(builder: (_) => const DriverHomeScreen()),
+                MaterialPageRoute(builder: (_) => DriverHomeScreen()),
               ),
+              context: context,
             ),
+
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
               child: Row(
@@ -509,7 +514,8 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
                               children: [
                                 Expanded(
                                   child: ElevatedButton(
-                                    onPressed: (_statusBusy ||
+                                    onPressed:
+                                        (_statusBusy ||
                                             _blocksAvailabilityToggle ||
                                             _driverStatus ==
                                                 DriverStatus.available)
@@ -518,18 +524,19 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
                                     style: NavigoDecorations
                                         .kPrimaryButtonLargeStyle
                                         .copyWith(
-                                      backgroundColor:
-                                          const WidgetStatePropertyAll(
-                                        NavigoColors.accentGreen,
-                                      ),
-                                    ),
+                                          backgroundColor:
+                                              const WidgetStatePropertyAll(
+                                                NavigoColors.accentGreen,
+                                              ),
+                                        ),
                                     child: const Text('Go online'),
                                   ),
                                 ),
                                 const SizedBox(width: 12),
                                 Expanded(
                                   child: ElevatedButton(
-                                    onPressed: (_statusBusy ||
+                                    onPressed:
+                                        (_statusBusy ||
                                             _blocksAvailabilityToggle ||
                                             _driverStatus ==
                                                 DriverStatus.offline)
@@ -538,11 +545,11 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
                                     style: NavigoDecorations
                                         .kPrimaryButtonLargeStyle
                                         .copyWith(
-                                      backgroundColor:
-                                          const WidgetStatePropertyAll(
-                                        NavigoColors.accentRed,
-                                      ),
-                                    ),
+                                          backgroundColor:
+                                              const WidgetStatePropertyAll(
+                                                NavigoColors.accentRed,
+                                              ),
+                                        ),
                                     child: const Text('Go offline'),
                                   ),
                                 ),

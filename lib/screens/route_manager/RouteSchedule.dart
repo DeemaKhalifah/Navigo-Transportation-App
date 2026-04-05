@@ -10,6 +10,7 @@ import 'package:navigo/services/slot_driver_assignment_service.dart';
 import 'AddScheduleSlotScreen.dart';
 import 'RouteManagerNavBar.dart';
 import '../../theme/app_theme.dart';
+import '../NotificationsScreen.dart';
 
 class RouteSchedule extends StatefulWidget {
   const RouteSchedule({super.key});
@@ -81,56 +82,15 @@ class _RouteScheduleState extends State<RouteSchedule> {
     final result = await Navigator.push<bool>(
       context,
       MaterialPageRoute(
-        builder: (_) => AddScheduleSlotScreen(
-          routeId: id,
-          existingSlot: existing,
-        ),
+        builder: (_) =>
+            AddScheduleSlotScreen(routeId: id, existingSlot: existing),
       ),
     );
 
     if (result == true && mounted && existing != null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Trip updated')),
-      );
-    }
-  }
-
-  Future<void> _confirmDelete(ScheduleSlot slot) async {
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Delete trip'),
-        content: const Text(
-          'Remove this trip from the schedule?',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Delete'),
-          ),
-        ],
-      ),
-    );
-    if (ok != true) return;
-
-    final id = _routeId;
-    if (id == null) return;
-
-    try {
-      await _repo.deleteSlot(id, slot.slotId);
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Trip removed')),
-      );
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Could not delete: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Trip updated')));
     }
   }
 
@@ -168,13 +128,15 @@ class _RouteScheduleState extends State<RouteSchedule> {
       await _queueSvc.queueAllAvailableDriversSorted(routeId);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Queue set to all available drivers (A–Z).')),
+        const SnackBar(
+          content: Text('Queue set to all available drivers (A–Z).'),
+        ),
       );
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Could not build queue: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Could not build queue: $e')));
     }
   }
 
@@ -205,9 +167,9 @@ class _RouteScheduleState extends State<RouteSchedule> {
       }
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Assign failed: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Assign failed: $e')));
     } finally {
       if (mounted) setState(() => _assignOneBusy = false);
     }
@@ -289,14 +251,14 @@ class _RouteScheduleState extends State<RouteSchedule> {
     try {
       await _queueSvc.clearQueue(routeId);
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Driver queue cleared.')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Driver queue cleared.')));
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Could not clear queue: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Could not clear queue: $e')));
     }
   }
 
@@ -315,149 +277,146 @@ class _RouteScheduleState extends State<RouteSchedule> {
     );
   }
 
-  /// Queue controls (used inside the bottom sheet).
   Widget _buildDriverQueuePanel(String routeId) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-            Text(
-              'Use “queue all” or tap a driver to append. '
-              'First in list is used for the next assignment.',
-              style: NavigoTextStyles.bodySmall.copyWith(fontSize: 11),
-            ),
-            const SizedBox(height: 10),
-            Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton(
-                    onPressed: () => _onClearQueue(routeId),
-                    child: const Text('Clear queue'),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: ElevatedButton(
-                    onPressed: () => _onQueueAllAvailable(routeId),
-                    style: NavigoDecorations.kPrimaryButtonLargeStyle.copyWith(
-                      padding: const WidgetStatePropertyAll(
-                        EdgeInsets.symmetric(horizontal: 8, vertical: 10),
-                      ),
-                    ),
-                    child: const Text(
-                      'Queue all available',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(fontSize: 12),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 10),
-            StreamBuilder<List<String>>(
-              stream: _queueSvc.watchQueueIds(routeId),
-              builder: (context, qSnap) {
-                final ids = qSnap.data ?? [];
-                if (ids.isEmpty) {
-                  return Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                    child: Text(
-                      'Queue is empty.',
-                      style: NavigoTextStyles.bodySmall,
-                    ),
-                  );
-                }
-                return Column(
-                  children: List.generate(ids.length, (i) {
-                    final id = ids[i];
-                    return ListTile(
-                      dense: true,
-                      contentPadding: EdgeInsets.zero,
-                      leading: CircleAvatar(
-                        radius: 14,
-                        backgroundColor:
-                            NavigoColors.accentGreen.withValues(alpha: 0.15),
-                        child: Text(
-                          '${i + 1}',
-                          style: NavigoTextStyles.bodySmall.copyWith(
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                      ),
-                      title: FutureBuilder<String>(
-                        future: _driverLabelFuture(id),
-                        builder: (c, s) => Text(
-                          s.data ?? '…',
-                          style: NavigoTextStyles.bodySmall,
-                        ),
-                      ),
-                      trailing: IconButton(
-                        icon: const Icon(Icons.close, size: 20),
-                        onPressed: () => _queueSvc.removeDriver(routeId, id),
-                      ),
-                    );
-                  }),
-                );
-              },
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Available drivers — tap to append',
-              style: NavigoTextStyles.label,
-            ),
-            const SizedBox(height: 6),
-            SizedBox(
-              height: 44,
-              child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-                stream: FirebaseFirestore.instance
-                    .collection('drivers')
-                    .where('routeId', isEqualTo: routeId)
-                    .snapshots(),
-                builder: (context, dSnap) {
-                  if (!dSnap.hasData) {
-                    return const Center(
-                      child: SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      ),
-                    );
-                  }
-                  final docs = dSnap.data!.docs.where((d) {
-                    final st = DriverStatus.normalize(
-                      d.data()['status'] as String?,
-                    );
-                    return st == DriverStatus.available;
-                  }).toList();
-
-                  if (docs.isEmpty) {
-                    return Text(
-                      'No available drivers',
-                      style: NavigoTextStyles.bodySmall,
-                    );
-                  }
-
-                  return ListView.separated(
-                    scrollDirection: Axis.horizontal,
-                    itemCount: docs.length,
-                    separatorBuilder: (_, __) => const SizedBox(width: 8),
-                    itemBuilder: (_, i) {
-                      final d = docs[i];
-                      return ActionChip(
-                        label: FutureBuilder<String>(
-                          future: _driverLabelFuture(d.id),
-                          builder: (c, s) => Text(
-                            s.data ?? d.id.substring(0, 6),
-                            style: const TextStyle(fontSize: 12),
-                          ),
-                        ),
-                        onPressed: () =>
-                            _queueSvc.appendDriver(routeId, d.id),
-                      );
-                    },
-                  );
-                },
+        Text(
+          'Use "queue all" or tap a driver to append. '
+          'First in list is used for the next assignment.',
+          style: NavigoTextStyles.bodySmall.copyWith(fontSize: 11),
+        ),
+        const SizedBox(height: 10),
+        Row(
+          children: [
+            Expanded(
+              child: OutlinedButton(
+                onPressed: () => _onClearQueue(routeId),
+                child: const Text('Clear queue'),
               ),
             ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: ElevatedButton(
+                onPressed: () => _onQueueAllAvailable(routeId),
+                style: NavigoDecorations.kPrimaryButtonLargeStyle.copyWith(
+                  padding: const WidgetStatePropertyAll(
+                    EdgeInsets.symmetric(horizontal: 8, vertical: 10),
+                  ),
+                ),
+                child: const Text(
+                  'Queue all available',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontSize: 12),
+                ),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 10),
+        StreamBuilder<List<String>>(
+          stream: _queueSvc.watchQueueIds(routeId),
+          builder: (context, qSnap) {
+            final ids = qSnap.data ?? [];
+            if (ids.isEmpty) {
+              return Padding(
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                child: Text(
+                  'Queue is empty.',
+                  style: NavigoTextStyles.bodySmall,
+                ),
+              );
+            }
+            return Column(
+              children: List.generate(ids.length, (i) {
+                final id = ids[i];
+                return ListTile(
+                  dense: true,
+                  contentPadding: EdgeInsets.zero,
+                  leading: CircleAvatar(
+                    radius: 14,
+                    backgroundColor: NavigoColors.accentGreen.withValues(
+                      alpha: 0.15,
+                    ),
+                    child: Text(
+                      '${i + 1}',
+                      style: NavigoTextStyles.bodySmall.copyWith(
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                  title: FutureBuilder<String>(
+                    future: _driverLabelFuture(id),
+                    builder: (c, s) =>
+                        Text(s.data ?? '…', style: NavigoTextStyles.bodySmall),
+                  ),
+                  trailing: IconButton(
+                    icon: const Icon(Icons.close, size: 20),
+                    onPressed: () => _queueSvc.removeDriver(routeId, id),
+                  ),
+                );
+              }),
+            );
+          },
+        ),
+        const SizedBox(height: 8),
+        Text(
+          'Available drivers — tap to append',
+          style: NavigoTextStyles.label,
+        ),
+        const SizedBox(height: 6),
+        SizedBox(
+          height: 44,
+          child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+            stream: FirebaseFirestore.instance
+                .collection('drivers')
+                .where('routeId', isEqualTo: routeId)
+                .snapshots(),
+            builder: (context, dSnap) {
+              if (!dSnap.hasData) {
+                return const Center(
+                  child: SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  ),
+                );
+              }
+              final docs = dSnap.data!.docs.where((d) {
+                final st = DriverStatus.normalize(
+                  d.data()['status'] as String?,
+                );
+                return st == DriverStatus.available;
+              }).toList();
+
+              if (docs.isEmpty) {
+                return Text(
+                  'No available drivers',
+                  style: NavigoTextStyles.bodySmall,
+                );
+              }
+
+              return ListView.separated(
+                scrollDirection: Axis.horizontal,
+                itemCount: docs.length,
+                separatorBuilder: (_, _) => const SizedBox(width: 8),
+                itemBuilder: (_, i) {
+                  final d = docs[i];
+                  return ActionChip(
+                    label: FutureBuilder<String>(
+                      future: _driverLabelFuture(d.id),
+                      builder: (c, s) => Text(
+                        s.data ?? d.id.substring(0, 6),
+                        style: const TextStyle(fontSize: 12),
+                      ),
+                    ),
+                    onPressed: () => _queueSvc.appendDriver(routeId, d.id),
+                  );
+                },
+              );
+            },
+          ),
+        ),
       ],
     );
   }
@@ -466,118 +425,173 @@ class _RouteScheduleState extends State<RouteSchedule> {
     final dateLabel =
         '${slot.serviceDate.day}/${slot.serviceDate.month}/${slot.serviceDate.year}';
 
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: NavigoDecorations.kCardDecoration,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Container(
-                width: 42,
-                height: 42,
-                decoration: NavigoDecorations.iconCircleDecoration(
-                  NavigoColors.accentGreen.withOpacity(0.1),
-                ),
-                child: const Icon(
-                  Icons.route,
-                  color: NavigoColors.accentGreen,
-                  size: 22,
+    return Dismissible(
+      key: ValueKey(slot.slotId),
+      direction: DismissDirection.endToStart,
+      confirmDismiss: (_) async {
+        return await showDialog<bool>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: const Text('Delete trip'),
+            content: const Text('Remove this trip from the schedule?'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: const Text('Cancel'),
+              ),
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, true),
+                child: Text(
+                  'Delete',
+                  style: TextStyle(color: NavigoColors.accentRed),
                 ),
               ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      _timeRange(slot),
-                      style: NavigoTextStyles.bodyMedium.copyWith(
-                        fontWeight: FontWeight.w700,
-                        fontSize: 14,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      '${slot.capacity} seats'
-                      '${slot.price != null ? ' · ${slot.price} (override)' : ''}'
-                      '${slot.frequencyMinutes != null && slot.frequencyMinutes! > 0 ? ' · every ${slot.frequencyMinutes} min' : ''}',
-                      style: NavigoTextStyles.bodySmall,
-                    ),
-                    const SizedBox(height: 4),
-                    FutureBuilder<String>(
-                      future: _driverLabelFuture(slot.driverId),
-                      builder: (context, snap) {
-                        final t = snap.data ??
-                            (slot.driverId.isEmpty
-                                ? 'Unassigned'
-                                : 'Driver…');
-                        return Text(
-                          'Driver: $t',
-                          style: NavigoTextStyles.bodySmall.copyWith(
-                            fontSize: 12,
-                            color: NavigoColors.textMuted,
-                          ),
-                        );
-                      },
-                    ),
-                    const SizedBox(height: 6),
-                    Row(
-                      children: [
-                        const Icon(
-                          Icons.calendar_today,
-                          size: 13,
-                          color: NavigoColors.textMuted,
-                        ),
-                        const SizedBox(width: 4),
-                        Text(
-                          dateLabel,
-                          style: NavigoTextStyles.bodySmall.copyWith(
-                            fontSize: 12,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
+            ],
+          ),
+        );
+      },
+      onDismissed: (_) async {
+        final id = _routeId;
+        if (id == null) return;
+        try {
+          await _repo.deleteSlot(id, slot.slotId);
+          if (!mounted) return;
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(const SnackBar(content: Text('Trip removed')));
+        } catch (e) {
+          if (!mounted) return;
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text('Could not delete: $e')));
+        }
+      },
+      background: Container(
+        decoration: BoxDecoration(
+          color: NavigoColors.accentRed,
+          borderRadius: BorderRadius.circular(12),
+        ),
+        alignment: Alignment.centerRight,
+        padding: const EdgeInsets.only(right: 24),
+        child: const Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.delete_outline, color: Colors.white, size: 28),
+            SizedBox(height: 4),
+            Text(
+              'Delete',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
               ),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
+            ),
+          ],
+        ),
+      ),
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: NavigoDecorations.kCardDecoration,
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              width: 42,
+              height: 42,
+              decoration: NavigoDecorations.iconCircleDecoration(
+                NavigoColors.accentGreen.withOpacity(0.1),
+              ),
+              child: const Icon(
+                Icons.route,
+                color: NavigoColors.accentGreen,
+                size: 22,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      Expanded(
+                        child: Text(
+                          _timeRange(slot),
+                          style: NavigoTextStyles.bodyMedium.copyWith(
+                            fontWeight: FontWeight.w700,
+                            fontSize: 14,
+                          ),
+                        ),
+                      ),
+                      InkWell(
+                        borderRadius: BorderRadius.circular(20),
+                        onTap: () => _openSlotEditor(existing: slot),
+                        child: Padding(
+                          padding: const EdgeInsets.all(4),
+                          child: Icon(
+                            Icons.edit_outlined,
+                            size: 20,
+                            color: NavigoColors.primaryOrange,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
                   NavigoDecorations.statusChip(
                     label: slot.vehicleType == 'bus' ? 'Bus' : 'Micro',
                     color: NavigoColors.primaryOrange,
                     padding: const EdgeInsets.symmetric(
-                      horizontal: 10,
-                      vertical: 4,
+                      horizontal: 8,
+                      vertical: 2,
                     ),
                   ),
-                  const SizedBox(height: 8),
+                  const SizedBox(height: 6),
+                  Text(
+                    '${slot.capacity} seats'
+                    '${slot.price != null ? ' · ${slot.price} (override)' : ''}'
+                    '${slot.frequencyMinutes != null && slot.frequencyMinutes! > 0 ? ' · every ${slot.frequencyMinutes} min' : ''}',
+                    style: NavigoTextStyles.bodySmall,
+                  ),
+                  const SizedBox(height: 4),
+                  FutureBuilder<String>(
+                    future: _driverLabelFuture(slot.driverId),
+                    builder: (context, snap) {
+                      final t =
+                          snap.data ??
+                          (slot.driverId.isEmpty ? 'Unassigned' : 'Driver…');
+                      return Text(
+                        'Driver: $t',
+                        style: NavigoTextStyles.bodySmall.copyWith(
+                          fontSize: 12,
+                          color: NavigoColors.textMuted,
+                        ),
+                      );
+                    },
+                  ),
+                  const SizedBox(height: 6),
                   Row(
-                    mainAxisSize: MainAxisSize.min,
                     children: [
-                      TextButton(
-                        onPressed: () => _openSlotEditor(existing: slot),
-                        child: const Text('Edit'),
+                      const Icon(
+                        Icons.calendar_today,
+                        size: 13,
+                        color: NavigoColors.textMuted,
                       ),
-                      TextButton(
-                        onPressed: () => _confirmDelete(slot),
-                        child: Text(
-                          'Delete',
-                          style: NavigoTextStyles.bodySmall.copyWith(
-                            color: NavigoColors.accentRed,
-                          ),
+                      const SizedBox(width: 4),
+                      Text(
+                        dateLabel,
+                        style: NavigoTextStyles.bodySmall.copyWith(
+                          fontSize: 12,
                         ),
                       ),
                     ],
                   ),
                 ],
               ),
-            ],
-          ),
-        ],
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -624,20 +638,38 @@ class _RouteScheduleState extends State<RouteSchedule> {
               child: NavigoDecorations.homeStyleTitleBar(
                 title: 'Route Manager',
                 subtitle: _routeTitle(),
-                avatar: CircleAvatar(
-                  radius: 20,
-                  backgroundColor: NavigoColors.surfaceWhite,
-                  child: Padding(
-                    padding: const EdgeInsets.all(3),
-                    child: ClipOval(
-                      child: Image.asset(
-                        'assets/images/logo.png',
-                        fit: BoxFit.contain,
-                        width: 30,
-                        height: 30,
+                avatar: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      decoration: NavigoDecorations.kTopBarBackButton,
+                      child: IconButton(
+                        icon: const Icon(Icons.notifications_none, size: 20),
+                        onPressed: () => Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => const NotificationsScreen(),
+                          ),
+                        ),
                       ),
                     ),
-                  ),
+                    const SizedBox(width: 8),
+                    CircleAvatar(
+                      radius: 30,
+                      backgroundColor: NavigoColors.surfaceWhite,
+                      child: Padding(
+                        padding: const EdgeInsets.all(3),
+                        child: ClipOval(
+                          child: Image.asset(
+                            'assets/images/logo.png',
+                            fit: BoxFit.contain,
+                            width: 40,
+                            height: 40,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ),

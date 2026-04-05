@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:navigo/screens/NotificationsScreen.dart';
 
 class NavigoColors {
   static const Color primaryOrange = Color(0xFFFF9800);
@@ -97,6 +98,7 @@ class NavigoDecorations {
   static Widget topBar({
     required VoidCallback onBack,
     VoidCallback? onNotification,
+    BuildContext? context, // ← add this
   }) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
@@ -119,7 +121,16 @@ class NavigoDecorations {
                 decoration: kTopBarBackButton,
                 child: IconButton(
                   icon: const Icon(Icons.notifications_none, size: 20),
-                  onPressed: onNotification ?? () {},
+                  onPressed:
+                      onNotification ??
+                      (context != null
+                          ? () => Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => const NotificationsScreen(),
+                              ),
+                            )
+                          : () {}),
                 ),
               ),
               const SizedBox(width: 8),
@@ -327,7 +338,7 @@ class NavigoDecorations {
               ],
             ),
           ),
-          if (trailing != null) trailing,
+          ?trailing,
         ],
       ),
     );

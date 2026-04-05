@@ -37,7 +37,10 @@ class _HelpSupportScreenState extends State<HelpSupportScreen> {
         child: Column(
           children: [
             /// TOP BAR
-            NavigoDecorations.topBar(onBack: () => Navigator.pop(context)),
+            NavigoDecorations.topBar(
+              onBack: () => Navigator.pop(context),
+              context: context,
+            ),
 
             /// TITLE
             Padding(

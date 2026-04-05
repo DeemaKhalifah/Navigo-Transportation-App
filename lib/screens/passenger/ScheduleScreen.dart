@@ -92,6 +92,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                 context,
                 MaterialPageRoute(builder: (_) => const PassengerHomeScreen()),
               ),
+              context: context,
             ),
             // ── CONTENT ──────────────────────────────────
             Expanded(

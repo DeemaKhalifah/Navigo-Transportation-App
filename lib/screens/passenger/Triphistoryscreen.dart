@@ -188,6 +188,7 @@ class _TripHistoryScreenState extends State<TripHistoryScreen> {
                 context,
                 MaterialPageRoute(builder: (_) => const PassengerHomeScreen()),
               ),
+              context: context,
             ),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -250,8 +251,8 @@ class _TripHistoryScreenState extends State<TripHistoryScreen> {
                                 Container(
                                   width: 42,
                                   height: 42,
-                                  decoration: NavigoDecorations
-                                      .iconCircleDecoration(
+                                  decoration:
+                                      NavigoDecorations.iconCircleDecoration(
                                         _statusColor(trip.status),
                                       ),
                                   child: Icon(
@@ -288,7 +289,7 @@ class _TripHistoryScreenState extends State<TripHistoryScreen> {
                                         children: [
                                           const Icon(
                                             Icons.calendar_today,
-                                          size: 13,
+                                            size: 13,
                                             color: NavigoColors.textMuted,
                                           ),
                                           const SizedBox(width: 4),
@@ -390,9 +391,7 @@ class _TripDetailSheet extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           // Drag handle
-          Center(
-            child: NavigoDecorations.dragHandle(),
-          ),
+          Center(child: NavigoDecorations.dragHandle()),
 
           const SizedBox(height: 20),
 

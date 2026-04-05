@@ -108,8 +108,9 @@ class _DriverLiveTripScreenState extends State<DriverLiveTripScreen> {
         permission = await Geolocator.requestPermission();
       }
       if (permission == LocationPermission.denied ||
-          permission == LocationPermission.deniedForever)
+          permission == LocationPermission.deniedForever) {
         return;
+      }
 
       final serviceEnabled = await Geolocator.isLocationServiceEnabled();
       if (!serviceEnabled) return;
@@ -171,8 +172,10 @@ class _DriverLiveTripScreenState extends State<DriverLiveTripScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             // ── TOP BAR ─────────────────────────────────────
-            NavigoDecorations.topBar(onBack: () => Navigator.pop(context)),
-
+            NavigoDecorations.topBar(
+              onBack: () => Navigator.pop(context),
+              context: context,
+            ),
             // ── HEADER ──────────────────────────────────────
             const Padding(
               padding: EdgeInsets.symmetric(horizontal: 20),

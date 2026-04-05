@@ -7,6 +7,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../theme/app_theme.dart';
 import 'schedulescreen.dart';
 import 'PassengerBottomNavBar.dart';
+import '../NotificationsScreen.dart';
 
 class PassengerHomeScreen extends StatefulWidget {
   const PassengerHomeScreen({super.key});
@@ -178,22 +179,43 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> {
                 children: [
                   // ── HEADER ───────────────────────────────
                   NavigoDecorations.homeStyleTitleBar(
-                    title: "Hello, $_userName 👋",
+                    title: "Hello, $_userName",
                     subtitle: "Where would you like to go?",
-                    avatar: CircleAvatar(
-                      radius: 20,
-                      backgroundColor: NavigoColors.surfaceWhite,
-                      child: Padding(
-                        padding: const EdgeInsets.all(3),
-                        child: ClipOval(
-                          child: Image.asset(
-                            'assets/images/logo.png',
-                            fit: BoxFit.contain,
-                            width: 30,
-                            height: 30,
+                    avatar: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Container(
+                          decoration: NavigoDecorations.kTopBarBackButton,
+                          child: IconButton(
+                            icon: const Icon(
+                              Icons.notifications_none,
+                              size: 20,
+                            ),
+                            onPressed: () => Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => const NotificationsScreen(),
+                              ),
+                            ),
                           ),
                         ),
-                      ),
+                        const SizedBox(width: 8),
+                        CircleAvatar(
+                          radius: 30,
+                          backgroundColor: NavigoColors.surfaceWhite,
+                          child: Padding(
+                            padding: const EdgeInsets.all(3),
+                            child: ClipOval(
+                              child: Image.asset(
+                                'assets/images/logo.png',
+                                fit: BoxFit.contain,
+                                width: 40,
+                                height: 40,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
 

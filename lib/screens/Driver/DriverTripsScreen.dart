@@ -208,8 +208,9 @@ class _DriverTripsScreenState extends State<DriverTripsScreen> {
             NavigoDecorations.topBar(
               onBack: () => Navigator.pushReplacement(
                 context,
-                MaterialPageRoute(builder: (_) => const DriverHomeScreen()),
+                MaterialPageRoute(builder: (_) => DriverHomeScreen()),
               ),
+              context: context,
             ),
             const Padding(
               padding: EdgeInsets.symmetric(horizontal: 20),
@@ -261,7 +262,7 @@ class _DriverTripsScreenState extends State<DriverTripsScreen> {
                   : ListView.separated(
                       padding: const EdgeInsets.symmetric(horizontal: 16),
                       itemCount: _filtered.length,
-                      separatorBuilder: (_, __) => const SizedBox(height: 12),
+                      separatorBuilder: (_, _) => const SizedBox(height: 12),
                       itemBuilder: (_, i) {
                         final trip = _filtered[i];
                         return GestureDetector(
@@ -276,8 +277,8 @@ class _DriverTripsScreenState extends State<DriverTripsScreen> {
                                 Container(
                                   width: 42,
                                   height: 42,
-                                  decoration: NavigoDecorations
-                                      .iconCircleDecoration(
+                                  decoration:
+                                      NavigoDecorations.iconCircleDecoration(
                                         _statusColor(trip.status),
                                       ),
                                   child: Icon(
@@ -418,9 +419,7 @@ class _DriverTripDetailSheet extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           // Drag handle
-          Center(
-            child: NavigoDecorations.dragHandle(),
-          ),
+          Center(child: NavigoDecorations.dragHandle()),
           const SizedBox(height: 20),
 
           // ── Title + status badge ──────────────────────────

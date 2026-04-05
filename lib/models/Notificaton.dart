@@ -1,4 +1,3 @@
-import 'user.dart';
 
 class NotificationModel {
   final String notificationId; // Firestore document ID

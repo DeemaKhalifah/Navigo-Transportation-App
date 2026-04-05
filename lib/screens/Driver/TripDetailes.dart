@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 import '../../services/trip_completion_service.dart';
 import '../../theme/app_theme.dart';
 import 'DriverBottomNavBar.dart';
-import 'DriverHomeScreen.dart';
 import 'DriverLiveTripScreen.dart';
 
 class TripDetailes extends StatelessWidget {
@@ -28,8 +27,10 @@ class TripDetailes extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             // ── TOP BAR ───────────────────────────────────────
-            NavigoDecorations.topBar(onBack: () => Navigator.pop(context)),
-
+            NavigoDecorations.topBar(
+              onBack: () => Navigator.pop(context),
+              context: context,
+            ),
             // ── HEADER ────────────────────────────────────────
             const Padding(
               padding: EdgeInsets.symmetric(horizontal: 20),
@@ -124,7 +125,7 @@ class TripDetailes extends StatelessWidget {
                     Expanded(
                       child: ListView.separated(
                         itemCount: passengers.length,
-                        separatorBuilder: (_, __) =>
+                        separatorBuilder: (_, _) =>
                             const SizedBox(height: NavigoSizes.itemGap),
                         itemBuilder: (context, index) {
                           return _PassengerTile(

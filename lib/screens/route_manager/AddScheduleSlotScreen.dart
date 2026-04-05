@@ -3,6 +3,7 @@ import 'package:navigo/models/schedule_slot.dart';
 import 'package:navigo/services/schedule_slot_repository.dart';
 import 'package:navigo/services/slot_driver_assignment_service.dart';
 import 'package:navigo/theme/app_theme.dart';
+import 'RouteManagerNavBar.dart';
 
 class AddScheduleSlotScreen extends StatefulWidget {
   const AddScheduleSlotScreen({
@@ -12,8 +13,6 @@ class AddScheduleSlotScreen extends StatefulWidget {
   });
 
   final String routeId;
-
-  /// When set, the screen saves with merge into this document.
   final ScheduleSlot? existingSlot;
 
   bool get isEditing => existingSlot != null;
@@ -30,8 +29,9 @@ class _AddScheduleSlotScreenState extends State<AddScheduleSlotScreen> {
 
   final TextEditingController _priceController = TextEditingController();
   final TextEditingController _frequencyController = TextEditingController();
-  final TextEditingController _tripLengthController =
-      TextEditingController(text: '60');
+  final TextEditingController _tripLengthController = TextEditingController(
+    text: '60',
+  );
 
   String? _capacity;
 
@@ -47,8 +47,11 @@ class _AddScheduleSlotScreenState extends State<AddScheduleSlotScreen> {
     final e = widget.existingSlot;
     if (e != null) {
       _selectedType = e.vehicleType;
-      _selectedDate =
-          DateTime(e.serviceDate.year, e.serviceDate.month, e.serviceDate.day);
+      _selectedDate = DateTime(
+        e.serviceDate.year,
+        e.serviceDate.month,
+        e.serviceDate.day,
+      );
       _fromTime = TimeOfDay.fromDateTime(e.departureAt);
       if (e.vehicleType == 'micro') {
         _toTime = null;
@@ -68,8 +71,9 @@ class _AddScheduleSlotScreenState extends State<AddScheduleSlotScreen> {
       }
       final p = e.price;
       if (p != null) {
-        _priceController.text =
-            p.toStringAsFixed(p == p.roundToDouble() ? 0 : 2);
+        _priceController.text = p.toStringAsFixed(
+          p == p.roundToDouble() ? 0 : 2,
+        );
       }
     }
   }
@@ -225,16 +229,18 @@ class _AddScheduleSlotScreenState extends State<AddScheduleSlotScreen> {
 
     if (_selectedType == 'bus' && _toTime == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please choose end time / last departure')),
+        const SnackBar(
+          content: Text('Please choose end time / last departure'),
+        ),
       );
       return;
     }
 
     final cap = int.tryParse(_capacity ?? '');
     if (cap == null || cap <= 0) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please select capacity')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Please select capacity')));
       return;
     }
 
@@ -277,9 +283,9 @@ class _AddScheduleSlotScreenState extends State<AddScheduleSlotScreen> {
     if (priceText.isNotEmpty) {
       price = double.tryParse(priceText.replaceAll(',', '.'));
       if (price == null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Invalid price')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Invalid price')));
         return;
       }
     }
@@ -355,9 +361,9 @@ class _AddScheduleSlotScreenState extends State<AddScheduleSlotScreen> {
       Navigator.pop(context, true);
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Could not save: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Could not save: $e')));
     } finally {
       if (mounted) setState(() => _saving = false);
     }
@@ -366,13 +372,20 @@ class _AddScheduleSlotScreenState extends State<AddScheduleSlotScreen> {
   @override
   Widget build(BuildContext context) {
     final isMicro = _selectedType == 'micro';
-    final busRepeat = !isMicro &&
+    final busRepeat =
+        !isMicro &&
         int.tryParse(_frequencyController.text.trim()) != null &&
         (int.tryParse(_frequencyController.text.trim()) ?? 0) > 0;
 
     return Scaffold(
       backgroundColor: NavigoColors.backgroundLight,
+      // ✅ Fix: bottomNavigationBar is correctly at the Scaffold root,
+      // completely outside SafeArea so it always renders.
+      bottomNavigationBar: const RouteManagerNavBar(currentIndex: 0),
       body: SafeArea(
+        // ✅ Fix: bottom: false so SafeArea doesn't consume the nav bar's space,
+        // preventing layout conflicts that caused the nav bar to not appear.
+        bottom: false,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -394,8 +407,8 @@ class _AddScheduleSlotScreenState extends State<AddScheduleSlotScreen> {
                     isMicro
                         ? 'Start time, date, and capacity'
                         : busRepeat
-                            ? 'First departure, last departure start, trip length, repeat interval'
-                            : 'Departure window, date, and capacity',
+                        ? 'First departure, last departure start, trip length, repeat interval'
+                        : 'Departure window, date, and capacity',
                     style: NavigoTextStyles.bodySmall,
                   ),
                 ],
@@ -510,8 +523,8 @@ class _AddScheduleSlotScreenState extends State<AddScheduleSlotScreen> {
                               style: NavigoTextStyles.fieldText,
                               decoration: NavigoDecorations.kInputDecoration
                                   .copyWith(
-                                hintText: 'Leave empty for a single trip',
-                              ),
+                                    hintText: 'Leave empty for a single trip',
+                                  ),
                               onChanged: (_) => setState(() {}),
                             ),
                           ],
@@ -529,10 +542,13 @@ class _AddScheduleSlotScreenState extends State<AddScheduleSlotScreen> {
 
                           const SizedBox(height: NavigoSizes.itemGap),
 
-                          Text('Capacity (seats)', style: NavigoTextStyles.label),
+                          Text(
+                            'Capacity (seats)',
+                            style: NavigoTextStyles.label,
+                          ),
                           const SizedBox(height: 6),
                           DropdownButtonFormField<String>(
-                            value: _capacity,
+                            initialValue: _capacity,
                             decoration: NavigoDecorations.kInputDecoration,
                             style: NavigoTextStyles.fieldText,
                             items: _selectedType == 'bus'
@@ -571,8 +587,8 @@ class _AddScheduleSlotScreenState extends State<AddScheduleSlotScreen> {
                             style: NavigoTextStyles.fieldText,
                             decoration: NavigoDecorations.kInputDecoration
                                 .copyWith(
-                              hintText: 'Leave empty to use route default',
-                            ),
+                                  hintText: 'Leave empty to use route default',
+                                ),
                           ),
                         ],
                       ),
@@ -608,14 +624,15 @@ class _AddScheduleSlotScreenState extends State<AddScheduleSlotScreen> {
                       width: double.infinity,
                       height: NavigoSizes.buttonHeight,
                       child: ElevatedButton(
-                        onPressed:
-                            _saving ? null : () => Navigator.pop(context),
+                        onPressed: _saving
+                            ? null
+                            : () => Navigator.pop(context),
                         style: NavigoDecorations.kPrimaryButtonLargeStyle
                             .copyWith(
-                          backgroundColor: const WidgetStatePropertyAll(
-                            NavigoColors.accentRed,
-                          ),
-                        ),
+                              backgroundColor: const WidgetStatePropertyAll(
+                                NavigoColors.accentRed,
+                              ),
+                            ),
                         child: const Text(
                           'Cancel',
                           style: NavigoTextStyles.button,

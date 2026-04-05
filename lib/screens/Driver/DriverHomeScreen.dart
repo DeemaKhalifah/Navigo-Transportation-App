@@ -4,6 +4,7 @@ import '../../theme/app_theme.dart';
 import 'DriverBottomNavBar.dart';
 import 'DriverRequestsScreen.dart';
 import 'DriverTripsScreen.dart';
+import 'package:navigo/screens/NotificationsScreen.dart';
 
 class DriverHomeScreen extends StatelessWidget {
   const DriverHomeScreen({super.key});
@@ -20,22 +21,40 @@ class DriverHomeScreen extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               NavigoDecorations.homeStyleTitleBar(
-                title: "Driver Home",
-                subtitle: "Track your line and manage requests",
-                avatar: CircleAvatar(
-                  radius: 20,
-                  backgroundColor: NavigoColors.surfaceWhite,
-                  child: Padding(
-                    padding: const EdgeInsets.all(3),
-                    child: ClipOval(
-                      child: Image.asset(
-                        'assets/images/logo.png',
-                        fit: BoxFit.contain,
-                        width: 30,
-                        height: 30,
+                title: 'Driver Home',
+                subtitle: 'Track your line and manage requests',
+                avatar: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      decoration: NavigoDecorations.kTopBarBackButton,
+                      child: IconButton(
+                        icon: const Icon(Icons.notifications_none, size: 20),
+                        onPressed: () => Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => const NotificationsScreen(),
+                          ),
+                        ),
                       ),
                     ),
-                  ),
+                    const SizedBox(width: 8),
+                    CircleAvatar(
+                      radius: 30,
+                      backgroundColor: NavigoColors.surfaceWhite,
+                      child: Padding(
+                        padding: const EdgeInsets.all(3),
+                        child: ClipOval(
+                          child: Image.asset(
+                            'assets/images/logo.png',
+                            fit: BoxFit.contain,
+                            width: 40,
+                            height: 40,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ),
 
@@ -47,12 +66,12 @@ class DriverHomeScreen extends StatelessWidget {
                   const Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text("Line 12", style: NavigoTextStyles.bodySmall),
+                      Text('Line 12', style: NavigoTextStyles.bodySmall),
                       Text(
-                        "Vehicle: Microbus",
+                        'Vehicle: Microbus',
                         style: NavigoTextStyles.bodySmall,
                       ),
-                      Text("Plate: 7-12345", style: NavigoTextStyles.bodySmall),
+                      Text('Plate: 7-12345', style: NavigoTextStyles.bodySmall),
                     ],
                   ),
                   CircleAvatar(
@@ -83,7 +102,7 @@ class DriverHomeScreen extends StatelessWidget {
                           style: NavigoTextStyles.titleSmall,
                         ),
                         NavigoDecorations.statusChip(
-                          label: "Available",
+                          label: 'Available',
                           color: NavigoColors.accentGreen,
                           padding: const EdgeInsets.symmetric(
                             horizontal: 14,
@@ -93,46 +112,46 @@ class DriverHomeScreen extends StatelessWidget {
                       ],
                     ),
                     const SizedBox(height: 10),
-                    const Text("Trips: 8", style: NavigoTextStyles.bodyMedium),
+                    const Text('Trips: 8', style: NavigoTextStyles.bodyMedium),
                     const Text(
-                      "Earnings: 54 NIS",
+                      'Earnings: 54 NIS',
                       style: NavigoTextStyles.bodyMedium,
                     ),
                   ],
                 ),
               ),
+
               const SizedBox(height: 30),
+
               SizedBox(
                 width: double.infinity,
                 height: NavigoSizes.buttonHeight,
                 child: ElevatedButton(
                   style: NavigoDecorations.kPrimaryButtonLargeStyle,
-                  onPressed: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => const DriverTripsScreen(),
-                      ),
-                    );
-                  },
-                  child: const Text("Trip Details"),
+                  onPressed: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const DriverTripsScreen(),
+                    ),
+                  ),
+                  child: const Text('Trip Details'),
                 ),
               ),
+
               const SizedBox(height: 16),
+
               SizedBox(
                 width: double.infinity,
                 height: NavigoSizes.buttonHeight,
                 child: ElevatedButton(
                   style: NavigoDecorations.kPrimaryButtonLargeStyle,
-                  onPressed: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => const DriverRequestsScreen(),
-                      ),
-                    );
-                  },
-                  child: const Text("Open Requests"),
+                  onPressed: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const DriverRequestsScreen(),
+                    ),
+                  ),
+                  child: const Text('Open Requests'),
                 ),
               ),
             ],

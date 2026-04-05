@@ -207,10 +207,10 @@ class _DriverRequestsScreenState extends State<DriverRequestsScreen> {
             NavigoDecorations.topBar(
               onBack: () => Navigator.pushReplacement(
                 context,
-                MaterialPageRoute(builder: (_) => const DriverHomeScreen()),
+                MaterialPageRoute(builder: (_) => DriverHomeScreen()),
               ),
+              context: context,
             ),
-
             const Padding(
               padding: EdgeInsets.symmetric(horizontal: 20),
               child: Text("Trip Requests", style: NavigoTextStyles.titleLarge),
@@ -260,7 +260,7 @@ class _DriverRequestsScreenState extends State<DriverRequestsScreen> {
                   : ListView.separated(
                       padding: const EdgeInsets.symmetric(horizontal: 16),
                       itemCount: filteredRequests.length,
-                      separatorBuilder: (_, __) => const SizedBox(height: 12),
+                      separatorBuilder: (_, _) => const SizedBox(height: 12),
                       itemBuilder: (_, index) {
                         return buildRequestCard(filteredRequests[index]);
                       },

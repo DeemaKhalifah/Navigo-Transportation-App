@@ -55,7 +55,8 @@ class AssignDriver extends StatefulWidget {
 }
 
 class _AssignDriverState extends State<AssignDriver> {
-  final ManualDriverAssignmentService _assignment = ManualDriverAssignmentService();
+  final ManualDriverAssignmentService _assignment =
+      ManualDriverAssignmentService();
 
   String selectedFilter = 'All';
   String? _routeId;
@@ -106,8 +107,10 @@ class _AssignDriverState extends State<AssignDriver> {
 
       _routeId = routeId;
 
-      final routeSnap =
-          await FirebaseFirestore.instance.collection('route').doc(routeId).get();
+      final routeSnap = await FirebaseFirestore.instance
+          .collection('route')
+          .doc(routeId)
+          .get();
       if (!mounted) return;
 
       if (routeSnap.exists) {
@@ -225,7 +228,9 @@ class _AssignDriverState extends State<AssignDriver> {
       final first = u?['firstName'] ?? '';
       final last = u?['lastName'] ?? '';
       final name = '$first $last'.trim();
-      final displayName = name.isEmpty ? 'Driver ${d.id.substring(0, 6)}' : name;
+      final displayName = name.isEmpty
+          ? 'Driver ${d.id.substring(0, 6)}'
+          : name;
 
       final vid = data['vehicleId'] as String? ?? '';
       String vehicleLabel = vid.isEmpty ? 'No vehicle' : 'Vehicle: $vid';
@@ -234,7 +239,10 @@ class _AssignDriverState extends State<AssignDriver> {
         if (vm != null) {
           final plate = vm['plateNumber'] ?? '';
           final type = vm['type'] ?? '';
-          vehicleLabel = [type, plate].where((e) => e.toString().isNotEmpty).join(' · ');
+          vehicleLabel = [
+            type,
+            plate,
+          ].where((e) => e.toString().isNotEmpty).join(' · ');
           if (vehicleLabel.isEmpty) vehicleLabel = 'Vehicle: $vid';
         }
       }
@@ -279,8 +287,10 @@ class _AssignDriverState extends State<AssignDriver> {
     final routeId = _routeId;
     if (routeId == null) return [];
 
-    final snap =
-        await FirebaseFirestore.instance.collection('route').doc(routeId).get();
+    final snap = await FirebaseFirestore.instance
+        .collection('route')
+        .doc(routeId)
+        .get();
     final raw = snap.data()?['scheduleSlots'];
     final maps = ScheduleSlotRepository.parseSlotList(raw);
 
@@ -376,9 +386,9 @@ class _AssignDriverState extends State<AssignDriver> {
       );
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Assignment failed: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Assignment failed: $e')));
     }
   }
 
@@ -395,7 +405,9 @@ class _AssignDriverState extends State<AssignDriver> {
                 context,
                 MaterialPageRoute(builder: (_) => const RouteSchedule()),
               ),
+              context: context,
             ),
+
             Padding(
               padding: const EdgeInsets.symmetric(
                 horizontal: NavigoSizes.screenPadding,
@@ -420,24 +432,20 @@ class _AssignDriverState extends State<AssignDriver> {
               child: SingleChildScrollView(
                 scrollDirection: Axis.horizontal,
                 child: Row(
-                  children: [
-                    'All',
-                    'Available',
-                    'Assigned',
-                    'On Trip',
-                    'Offline',
-                  ]
-                      .map(
-                        (label) => Padding(
-                          padding: const EdgeInsets.only(right: 8),
-                          child: NavigoDecorations.selectorChip(
-                            label: label,
-                            selected: selectedFilter == label,
-                            onTap: () => setState(() => selectedFilter = label),
-                          ),
-                        ),
-                      )
-                      .toList(),
+                  children:
+                      ['All', 'Available', 'Assigned', 'On Trip', 'Offline']
+                          .map(
+                            (label) => Padding(
+                              padding: const EdgeInsets.only(right: 8),
+                              child: NavigoDecorations.selectorChip(
+                                label: label,
+                                selected: selectedFilter == label,
+                                onTap: () =>
+                                    setState(() => selectedFilter = label),
+                              ),
+                            ),
+                          )
+                          .toList(),
                 ),
               ),
             ),
@@ -446,116 +454,121 @@ class _AssignDriverState extends State<AssignDriver> {
               child: _loading
                   ? const Center(child: CircularProgressIndicator())
                   : _loadError != null
-                      ? Center(
-                          child: Padding(
-                            padding: const EdgeInsets.all(24),
-                            child: Text(
-                              _loadError!,
-                              textAlign: TextAlign.center,
-                              style: NavigoTextStyles.bodyMedium,
-                            ),
-                          ),
-                        )
-                      : RefreshIndicator(
-                          onRefresh: _attach,
-                          child: filteredDrivers.isEmpty
-                              ? ListView(
-                                  physics: const AlwaysScrollableScrollPhysics(),
-                                  children: const [
-                                    SizedBox(height: 120),
-                                    Center(
-                                      child: Text('No drivers for this route.'),
-                                    ),
-                                  ],
-                                )
-                              : ListView.builder(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: NavigoSizes.screenPadding,
+                  ? Center(
+                      child: Padding(
+                        padding: const EdgeInsets.all(24),
+                        child: Text(
+                          _loadError!,
+                          textAlign: TextAlign.center,
+                          style: NavigoTextStyles.bodyMedium,
+                        ),
+                      ),
+                    )
+                  : RefreshIndicator(
+                      onRefresh: _attach,
+                      child: filteredDrivers.isEmpty
+                          ? ListView(
+                              physics: const AlwaysScrollableScrollPhysics(),
+                              children: const [
+                                SizedBox(height: 120),
+                                Center(
+                                  child: Text('No drivers for this route.'),
+                                ),
+                              ],
+                            )
+                          : ListView.builder(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: NavigoSizes.screenPadding,
+                              ),
+                              itemCount: filteredDrivers.length,
+                              itemBuilder: (context, index) {
+                                final driver = filteredDrivers[index];
+                                return Container(
+                                  margin: const EdgeInsets.only(
+                                    bottom: NavigoSizes.itemGap,
                                   ),
-                                  itemCount: filteredDrivers.length,
-                                  itemBuilder: (context, index) {
-                                    final driver = filteredDrivers[index];
-                                    return Container(
-                                      margin: const EdgeInsets.only(
-                                        bottom: NavigoSizes.itemGap,
-                                      ),
-                                      padding: const EdgeInsets.all(
-                                        NavigoSizes.cardPadding,
-                                      ),
-                                      decoration: NavigoDecorations.kCardDecoration,
-                                      child: Row(
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.start,
-                                        mainAxisAlignment:
-                                            MainAxisAlignment.spaceBetween,
-                                        children: [
-                                          Expanded(
-                                            child: Column(
-                                              crossAxisAlignment:
-                                                  CrossAxisAlignment.start,
-                                              children: [
-                                                Text(
-                                                  driver.name,
-                                                  style: NavigoTextStyles.titleSmall,
-                                                ),
-                                                const SizedBox(height: 6),
-                                                Text(
-                                                  driver.vehicleLabel,
-                                                  style: NavigoTextStyles.bodyMedium,
-                                                ),
-                                                const SizedBox(height: 4),
-                                                Text(
-                                                  'Route: ${driver.routeLine}',
-                                                  style: NavigoTextStyles.label,
-                                                ),
-                                              ],
+                                  padding: const EdgeInsets.all(
+                                    NavigoSizes.cardPadding,
+                                  ),
+                                  decoration: NavigoDecorations.kCardDecoration,
+                                  child: Row(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    mainAxisAlignment:
+                                        MainAxisAlignment.spaceBetween,
+                                    children: [
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          children: [
+                                            Text(
+                                              driver.name,
+                                              style:
+                                                  NavigoTextStyles.titleSmall,
                                             ),
-                                          ),
-                                          Column(
-                                            crossAxisAlignment:
-                                                CrossAxisAlignment.end,
-                                            children: [
-                                              _statusChip(driver.statusLabel),
-                                              if (driver.rawStatus ==
-                                                  DriverStatus.available) ...[
-                                                const SizedBox(height: 8),
-                                                ElevatedButton(
-                                                  onPressed: () =>
-                                                      _onAssign(driver),
-                                                  style: NavigoDecorations
-                                                      .kPrimaryButtonLargeStyle
-                                                      .copyWith(
+                                            const SizedBox(height: 6),
+                                            Text(
+                                              driver.vehicleLabel,
+                                              style:
+                                                  NavigoTextStyles.bodyMedium,
+                                            ),
+                                            const SizedBox(height: 4),
+                                            Text(
+                                              'Route: ${driver.routeLine}',
+                                              style: NavigoTextStyles.label,
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                      Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.end,
+                                        children: [
+                                          _statusChip(driver.statusLabel),
+                                          if (driver.rawStatus ==
+                                              DriverStatus.available) ...[
+                                            const SizedBox(height: 8),
+                                            ElevatedButton(
+                                              onPressed: () =>
+                                                  _onAssign(driver),
+                                              style: NavigoDecorations
+                                                  .kPrimaryButtonLargeStyle
+                                                  .copyWith(
                                                     padding:
                                                         const WidgetStatePropertyAll(
-                                                      EdgeInsets.symmetric(
-                                                        horizontal: 24,
-                                                        vertical: 10,
-                                                      ),
-                                                    ),
+                                                          EdgeInsets.symmetric(
+                                                            horizontal: 24,
+                                                            vertical: 10,
+                                                          ),
+                                                        ),
                                                     elevation:
                                                         const WidgetStatePropertyAll(
-                                                      4,
-                                                    ),
+                                                          4,
+                                                        ),
                                                     shadowColor:
                                                         WidgetStatePropertyAll(
-                                                      NavigoColors.primaryOrange
-                                                          .withValues(alpha: 0.4),
-                                                    ),
+                                                          NavigoColors
+                                                              .primaryOrange
+                                                              .withValues(
+                                                                alpha: 0.4,
+                                                              ),
+                                                        ),
                                                   ),
-                                                  child: const Text(
-                                                    'Assign',
-                                                    style: NavigoTextStyles.button,
-                                                  ),
-                                                ),
-                                              ],
-                                            ],
-                                          ),
+                                              child: const Text(
+                                                'Assign',
+                                                style: NavigoTextStyles.button,
+                                              ),
+                                            ),
+                                          ],
                                         ],
                                       ),
-                                    );
-                                  },
-                                ),
-                        ),
+                                    ],
+                                  ),
+                                );
+                              },
+                            ),
+                    ),
             ),
           ],
         ),
