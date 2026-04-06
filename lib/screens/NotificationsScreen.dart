@@ -1,4 +1,3 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:navigo/screens/route_manager/RouteSchedule.dart';
 import 'package:navigo/theme/app_theme.dart';

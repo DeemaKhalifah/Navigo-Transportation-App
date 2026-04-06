@@ -86,7 +86,8 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
         isVerified: true,
         isOnline: false,
         vehicleId: vehicleId,
-        routeId: driverInfo['routeId'] as String? ??
+        routeId:
+            driverInfo['routeId'] as String? ??
             driverInfo['route'] as String? ??
             '',
         status: driverInfo['status'] as String? ?? DriverStatus.offline,
@@ -94,10 +95,7 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
       );
 
       final batch = fs.batch();
-      batch.set(vehicleRef, {
-        ...vehicle.toMap(),
-        'driverId': uid,
-      });
+      batch.set(vehicleRef, {...vehicle.toMap(), 'driverId': uid});
       batch.set(fs.collection('drivers').doc(uid), driver.toDriverMap());
       await batch.commit();
     } else {
@@ -111,7 +109,8 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
         isVerified: true,
         isOnline: false,
         vehicleId: vehicleId,
-        routeId: driverInfo['routeId'] as String? ??
+        routeId:
+            driverInfo['routeId'] as String? ??
             driverInfo['route'] as String? ??
             '',
         status: driverInfo['status'] as String? ?? DriverStatus.offline,
@@ -285,19 +284,18 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
 
   Widget _buildOtpTextField(int index) {
     return SizedBox(
-      width: 52,
-      height: 62,
+      height: 56,
       child: TextField(
         controller: _otpControllers[index],
         focusNode: _focusNodes[index],
         keyboardType: TextInputType.number,
         textAlign: TextAlign.center,
+        textAlignVertical: TextAlignVertical.center, // ← add this
         maxLength: 1,
-        style: NavigoTextStyles.fieldText.copyWith(
-          fontWeight: FontWeight.bold,
-        ),
+        style: NavigoTextStyles.fieldText.copyWith(fontWeight: FontWeight.bold),
         decoration: InputDecoration(
           counterText: "",
+          contentPadding: EdgeInsets.zero, // ← add this
           filled: true,
           fillColor: NavigoColors.inputFill,
           border: OutlineInputBorder(
@@ -365,11 +363,16 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
                           ),
                           const SizedBox(height: 28),
                           Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                            children: List.generate(
-                              6,
-                              (index) => _buildOtpTextField(index),
-                            ),
+                            children: List.generate(6, (index) {
+                              return Expanded(
+                                child: Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 4,
+                                  ),
+                                  child: _buildOtpTextField(index),
+                                ),
+                              );
+                            }),
                           ),
                           const SizedBox(height: 20),
                           Row(
