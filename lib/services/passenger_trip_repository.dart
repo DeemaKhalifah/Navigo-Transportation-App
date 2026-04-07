@@ -183,14 +183,6 @@ class PassengerTripRepository {
     return LatLng(lat, lng);
   }
 
-  Future<void> savePassengerSelectedLine(String selectedLine) async {
-    final uid = FirebaseAuth.instance.currentUser?.uid;
-    if (uid == null) return;
-    await _db.collection('users').doc(uid).set({
-      'selectedLine': selectedLine,
-    }, SetOptions(merge: true));
-  }
-
   Future<LatLng?> getSavedPassengerLocation() async {
     final uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid == null) return null;

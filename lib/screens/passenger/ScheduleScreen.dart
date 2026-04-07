@@ -4,6 +4,7 @@ import 'dart:async';
 import '../../theme/app_theme.dart';
 import '../../models/schedule_slot.dart';
 import '../../services/passenger_trip_repository.dart';
+import '../../services/local_storage_service.dart';
 import 'PassengerBottomNavBar.dart';
 import 'passengerHomeScreen.dart';
 
@@ -34,8 +35,18 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
   @override
   void initState() {
     super.initState();
-    _selectedLine = widget.selectedLine;
-    _loadRouteAndSlots();
+    _bootstrapFromWidgetOrStorage();
+  }
+
+  Future<void> _bootstrapFromWidgetOrStorage() async {
+    String? line = widget.selectedLine?.trim();
+    if (line == null || line.isEmpty) {
+      final saved = await LocalStorageService.getSelectedLine();
+      line = saved?.trim();
+    }
+    if (!mounted) return;
+    setState(() => _selectedLine = line);
+    await _loadRouteAndSlots();
   }
 
   Future<void> _loadRouteAndSlots() async {

@@ -4,6 +4,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+import '../../services/local_storage_service.dart';
 import '../../theme/app_theme.dart';
 import '../passenger/PassengerBottomNavBar.dart';
 import '../passenger/support_screen.dart';
@@ -93,8 +94,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  void _logout() async {
+  Future<void> _logout() async {
+    await LocalStorageService.clearSelectedLine();
     await FirebaseAuth.instance.signOut();
+    if (!mounted) return;
     Navigator.of(context).popUntil((route) => route.isFirst);
   }
 

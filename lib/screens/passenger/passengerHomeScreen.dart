@@ -11,20 +11,7 @@ import 'PassengerBottomNavBar.dart';
 import '../NotificationsScreen.dart';
 import 'ScheduleScreen.dart';
 import '../../services/passenger_trip_repository.dart';
-
-import 'package:flutter/material.dart';
-import 'package:google_maps_flutter/google_maps_flutter.dart';
-import 'package:geolocator/geolocator.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:flutter/services.dart';
-import 'dart:ui' as ui;
-
-import '../../theme/app_theme.dart';
-import 'PassengerBottomNavBar.dart';
-import '../NotificationsScreen.dart';
-import 'ScheduleScreen.dart';
-import '../../services/passenger_trip_repository.dart';
+import '../../services/local_storage_service.dart';
 
 class PassengerHomeScreen extends StatefulWidget {
   const PassengerHomeScreen({super.key});
@@ -60,6 +47,7 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> {
   void initState() {
     super.initState();
     _loadUserData();
+    _loadSavedRoute();
     _loadCarMarker();
     _loadLinesFromFirestore();
     _tripRepository.ensureManualDriverLocations();
@@ -91,17 +79,10 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> {
       if (!mounted) return;
 
       if (doc.exists) {
-        final savedLine = (doc.data()?['selectedLine'] as String?)?.trim();
-
         setState(() {
-          _userName =
-              "${doc['firstName'] ?? ''} ${doc['lastName'] ?? ''}".trim();
+          _userName = "${doc['firstName'] ?? ''} ${doc['lastName'] ?? ''}"
+              .trim();
           if (_userName.isEmpty) _userName = "Guest";
-
-          if (savedLine != null && savedLine.isNotEmpty) {
-            _selectedLine = savedLine;
-            _searchController.text = savedLine;
-          }
         });
       } else {
         setState(() => _userName = "Guest");
@@ -120,12 +101,13 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> {
     try {
       final routes = await _tripRepository.fetchRoutes();
 
-      final lines = routes
-          .map(PassengerTripRepository.buildLineLabel)
-          .where((line) => line.trim().isNotEmpty)
-          .toSet()
-          .toList()
-        ..sort();
+      final lines =
+          routes
+              .map(PassengerTripRepository.buildLineLabel)
+              .where((line) => line.trim().isNotEmpty)
+              .toSet()
+              .toList()
+            ..sort();
 
       if (!mounted) return;
 
@@ -138,13 +120,24 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> {
     } catch (e) {
       debugPrint("Routes load error: $e");
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Failed to load routes: $e")),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text("Failed to load routes: $e")));
     } finally {
       if (mounted) {
         setState(() => _isLoadingLines = false);
       }
+    }
+  }
+
+  Future<void> _loadSavedRoute() async {
+    final savedLine = await LocalStorageService.getSelectedLine();
+
+    if (savedLine != null && mounted) {
+      setState(() {
+        _selectedLine = savedLine;
+        _searchController.text = savedLine;
+      });
     }
   }
 
@@ -173,8 +166,9 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> {
         targetHeight: 90,
       );
       final ui.FrameInfo fi = await codec.getNextFrame();
-      final ByteData? byteData =
-          await fi.image.toByteData(format: ui.ImageByteFormat.png);
+      final ByteData? byteData = await fi.image.toByteData(
+        format: ui.ImageByteFormat.png,
+      );
 
       if (byteData != null && mounted) {
         setState(() {
@@ -270,9 +264,9 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> {
     } catch (e) {
       debugPrint("Location error: $e");
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Error getting location")),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text("Error getting location")));
     } finally {
       if (mounted) {
         setState(() => _isLocating = false);
@@ -280,10 +274,7 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> {
     }
   }
 
-  void _setSelectedLocation(
-    LatLng location, {
-    bool saveToFirestore = true,
-  }) {
+  void _setSelectedLocation(LatLng location, {bool saveToFirestore = true}) {
     if (!mounted) return;
 
     setState(() {
@@ -346,7 +337,8 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> {
       return Marker(
         markerId: MarkerId(driver['id'] as String),
         position: LatLng(driver['lat'] as double, driver['lng'] as double),
-        icon: _carIcon ??
+        icon:
+            _carIcon ??
             BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueOrange),
         infoWindow: InfoWindow(
           title: driver['name'] as String,
@@ -445,7 +437,11 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> {
                       "Available seats",
                       "${driver['availableSeats']}",
                     ),
-                    _tripInfoRow(Icons.phone, "Phone", driver['phone'] as String),
+                    _tripInfoRow(
+                      Icons.phone,
+                      "Phone",
+                      driver['phone'] as String,
+                    ),
                     const SizedBox(height: 18),
                     Row(
                       children: [
@@ -577,18 +573,25 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> {
     );
   }
 
-  void _openScheduleTrip() {
-    if (_selectedLine == null || _selectedLine!.trim().isEmpty) {
+  Future<void> _openScheduleTrip() async {
+    final saved = await LocalStorageService.getSelectedLine();
+    final line = (saved != null && saved.trim().isNotEmpty)
+        ? saved.trim()
+        : _selectedLine?.trim();
+
+    if (line == null || line.isEmpty) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text("Please select a line first")),
       );
       return;
     }
 
+    if (!mounted) return;
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (_) => ScheduleScreen(selectedLine: _selectedLine),
+        builder: (_) => ScheduleScreen(selectedLine: line),
       ),
     );
   }
@@ -685,28 +688,27 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> {
                                             child: SizedBox(
                                               width: 18,
                                               height: 18,
-                                              child:
-                                                  CircularProgressIndicator(
+                                              child: CircularProgressIndicator(
                                                 strokeWidth: 2,
                                               ),
                                             ),
                                           )
                                         : (_searchController.text.isNotEmpty
-                                            ? IconButton(
-                                                icon: const Icon(
-                                                  Icons.close,
-                                                  color: Colors.grey,
-                                                ),
-                                                onPressed: () {
-                                                  setState(() {
-                                                    _searchController.clear();
-                                                    _selectedLine = null;
-                                                    _filteredLines =
-                                                        List.from(_lines);
-                                                  });
-                                                },
-                                              )
-                                            : null),
+                                              ? IconButton(
+                                                  icon: const Icon(
+                                                    Icons.close,
+                                                    color: Colors.grey,
+                                                  ),
+                                                  onPressed: () {
+                                                    setState(() {
+                                                      _searchController.clear();
+                                                      _selectedLine = null;
+                                                      _filteredLines =
+                                                          List.from(_lines);
+                                                    });
+                                                  },
+                                                )
+                                              : null),
                                     border: OutlineInputBorder(
                                       borderRadius: BorderRadius.circular(30),
                                       borderSide: BorderSide.none,
@@ -738,14 +740,15 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> {
                                     final line = _filteredLines[index];
                                     return ListTile(
                                       title: Text(line),
-                                      onTap: () {
+                                      onTap: () async {
                                         setState(() {
                                           _selectedLine = line;
                                           _searchController.text = line;
                                           _filteredLines = [];
                                         });
-                                        _tripRepository
-                                            .savePassengerSelectedLine(line);
+                                        await LocalStorageService.saveSelectedLine(
+                                          line,
+                                        );
                                       },
                                     );
                                   },
@@ -860,7 +863,7 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> {
                         child: SizedBox(
                           height: 50,
                           child: ElevatedButton(
-                            onPressed: _openScheduleTrip,
+                            onPressed: () => _openScheduleTrip(),
                             style: NavigoDecorations.kPrimaryButtonLargeStyle,
                             child: const Text(
                               "Schedule a trip",
