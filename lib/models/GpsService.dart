@@ -5,7 +5,6 @@ class GpsService {
 
   final String passengerId;
   final Map<String, double> passengerLocation; // {"lat": 32.223, "lng": 35.256}
-
   final DateTime timestamp; // last update time
   final String? routeId; // optional, link to route
 
@@ -39,7 +38,7 @@ class GpsService {
       driverId: map["driverId"] ?? "",
       driverLocation: Map<String, double>.from(map["driverLocation"]),
       passengerId: map["passengerId"] ?? "",
-      passengerLocation: Map<String, double>.from(map["passengerLocation"]),
+      passengerLocation: Map<String, double>.from(map["passengerLocation"] ?? {}),
       timestamp: DateTime.parse(map["timestamp"]),
       routeId: map["routeId"],
     );

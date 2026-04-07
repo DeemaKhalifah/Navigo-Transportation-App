@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:navigo/screens/passenger/Triphistoryscreen.dart';
 import '../../theme/app_theme.dart';
 import 'passengerHomeScreen.dart';
-import 'schedulescreen.dart';
+import 'ScheduleScreen.dart';
 //import 'RouteDetailsScreen.dart';
 import 'ProfileScreen.dart';
 

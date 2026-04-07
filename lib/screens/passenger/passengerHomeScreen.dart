@@ -3,13 +3,28 @@ import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/services.dart';
+import 'dart:ui' as ui;
 
 import '../../theme/app_theme.dart';
 import 'PassengerBottomNavBar.dart';
 import '../NotificationsScreen.dart';
 import 'ScheduleScreen.dart';
+import '../../services/passenger_trip_repository.dart';
+
+import 'package:flutter/material.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:geolocator/geolocator.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/services.dart';
 import 'dart:ui' as ui;
+
+import '../../theme/app_theme.dart';
+import 'PassengerBottomNavBar.dart';
+import '../NotificationsScreen.dart';
+import 'ScheduleScreen.dart';
+import '../../services/passenger_trip_repository.dart';
 
 class PassengerHomeScreen extends StatefulWidget {
   const PassengerHomeScreen({super.key});
@@ -27,12 +42,11 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> {
   String? _selectedLine;
   String? _selectedLocation;
   bool _isLocating = false;
+  bool _isLoadingLines = false;
 
-  final List<String> _lines = [
-    'Birzeit <-----> Ramallah',
-    'Nablus <-----> Ramallah',
-    'Jerusalem <-----> Ramallah',
-  ];
+  final PassengerTripRepository _tripRepository = PassengerTripRepository();
+
+  List<String> _lines = [];
   List<String> _filteredLines = [];
 
   String _userName = "Loading...";
@@ -42,125 +56,14 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> {
 
   int _selectedSeatsCount = 1;
 
-  // ================= EXAMPLE DRIVERS DATA =================
-  final List<Map<String, dynamic>> _drivers = [
-    {
-      'id': 'd1',
-      'name': 'Ahmad Khaled',
-      'busNumber': 'BUS-101',
-      'line': 'Birzeit <-----> Ramallah',
-      'from': 'Birzeit',
-      'to': 'Ramallah',
-      'availableSeats': 4,
-      'price': '5 NIS',
-      'eta': '6 min',
-      'phone': '+970 59 123 4567',
-      'vehicleType': 'Bus',
-      'lat': 31.9555,
-      'lng': 35.2042,
-    },
-    {
-      'id': 'd2',
-      'name': 'Omar Naser',
-      'busNumber': 'BUS-205',
-      'line': 'Birzeit <-----> Ramallah',
-      'from': 'Ramallah',
-      'to': 'Birzeit',
-      'availableSeats': 2,
-      'price': '5 NIS',
-      'eta': '9 min',
-      'phone': '+970 59 987 6543',
-      'vehicleType': 'Bus',
-      'lat': 31.9528,
-      'lng': 35.1988,
-    },
-    {
-      'id': 'd3',
-      'name': 'Sami Yousef',
-      'busNumber': 'MICRO-11',
-      'line': 'Birzeit <-----> Ramallah',
-      'from': 'Birzeit',
-      'to': 'Ramallah',
-      'availableSeats': 6,
-      'price': '4 NIS',
-      'eta': '3 min',
-      'phone': '+970 59 222 3344',
-      'vehicleType': 'Microbus',
-      'lat': 31.9586,
-      'lng': 35.2103,
-    },
-    {
-      'id': 'd4',
-      'name': 'Yousef Adel',
-      'busNumber': 'BUS-301',
-      'line': 'Nablus <-----> Ramallah',
-      'from': 'Nablus',
-      'to': 'Ramallah',
-      'availableSeats': 7,
-      'price': '10 NIS',
-      'eta': '12 min',
-      'phone': '+970 59 332 1111',
-      'vehicleType': 'Bus',
-      'lat': 32.2200,
-      'lng': 35.2544,
-    },
-    {
-      'id': 'd5',
-      'name': 'Majd Ali',
-      'busNumber': 'MICRO-22',
-      'line': 'Nablus <-----> Ramallah',
-      'from': 'Ramallah',
-      'to': 'Nablus',
-      'availableSeats': 3,
-      'price': '9 NIS',
-      'eta': '8 min',
-      'phone': '+970 59 444 5555',
-      'vehicleType': 'Microbus',
-      'lat': 32.2155,
-      'lng': 35.2610,
-    },
-    {
-      'id': 'd6',
-      'name': 'Khaled Issa',
-      'busNumber': 'BUS-401',
-      'line': 'Jerusalem <-----> Ramallah',
-      'from': 'Jerusalem',
-      'to': 'Ramallah',
-      'availableSeats': 5,
-      'price': '8 NIS',
-      'eta': '15 min',
-      'phone': '+970 59 777 8888',
-      'vehicleType': 'Bus',
-      'lat': 31.7950,
-      'lng': 35.2200,
-    },
-    {
-      'id': 'd7',
-      'name': 'Fadi Hasan',
-      'busNumber': 'MICRO-33',
-      'line': 'Jerusalem <-----> Ramallah',
-      'from': 'Ramallah',
-      'to': 'Jerusalem',
-      'availableSeats': 4,
-      'price': '7 NIS',
-      'eta': '11 min',
-      'phone': '+970 59 666 1212',
-      'vehicleType': 'Microbus',
-      'lat': 31.8050,
-      'lng': 35.2350,
-    },
-  ];
-
   @override
   void initState() {
     super.initState();
-    _filteredLines = List.from(_lines);
     _loadUserData();
     _loadCarMarker();
-
-    Future.delayed(const Duration(milliseconds: 500), () {
-      _getUserLocation();
-    });
+    _loadLinesFromFirestore();
+    _tripRepository.ensureManualDriverLocations();
+    _loadInitialPassengerLocation();
   }
 
   @override
@@ -170,12 +73,12 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> {
     super.dispose();
   }
 
-  // ================= USER DATA =================
   Future<void> _loadUserData() async {
     try {
       final user = FirebaseAuth.instance.currentUser;
 
       if (user == null) {
+        if (!mounted) return;
         setState(() => _userName = "Guest");
         return;
       }
@@ -185,36 +88,95 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> {
           .doc(user.uid)
           .get();
 
+      if (!mounted) return;
+
       if (doc.exists) {
+        final savedLine = (doc.data()?['selectedLine'] as String?)?.trim();
+
         setState(() {
-          _userName = "${doc['firstName'] ?? ''} ${doc['lastName'] ?? ''}"
-              .trim();
+          _userName =
+              "${doc['firstName'] ?? ''} ${doc['lastName'] ?? ''}".trim();
           if (_userName.isEmpty) _userName = "Guest";
+
+          if (savedLine != null && savedLine.isNotEmpty) {
+            _selectedLine = savedLine;
+            _searchController.text = savedLine;
+          }
         });
       } else {
         setState(() => _userName = "Guest");
       }
     } catch (e) {
       debugPrint("User load error: $e");
+      if (!mounted) return;
       setState(() => _userName = "Guest");
     }
   }
 
-  // ================= IMAGE MARKER =================
+  Future<void> _loadLinesFromFirestore() async {
+    if (!mounted) return;
+    setState(() => _isLoadingLines = true);
+
+    try {
+      final routes = await _tripRepository.fetchRoutes();
+
+      final lines = routes
+          .map(PassengerTripRepository.buildLineLabel)
+          .where((line) => line.trim().isNotEmpty)
+          .toSet()
+          .toList()
+        ..sort();
+
+      if (!mounted) return;
+
+      setState(() {
+        _lines = lines;
+        _filteredLines = List.from(lines);
+      });
+
+      debugPrint('Loaded route lines: $_lines');
+    } catch (e) {
+      debugPrint("Routes load error: $e");
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Failed to load routes: $e")),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _isLoadingLines = false);
+      }
+    }
+  }
+
+  Future<void> _loadInitialPassengerLocation() async {
+    try {
+      final savedLocation = await _tripRepository.getSavedPassengerLocation();
+      if (!mounted) return;
+
+      if (savedLocation != null) {
+        _setSelectedLocation(savedLocation, saveToFirestore: false);
+        return;
+      }
+
+      await _getUserLocation();
+    } catch (e) {
+      debugPrint("Initial location load error: $e");
+    }
+  }
+
   Future<void> _loadCarMarker() async {
     try {
       final ByteData data = await rootBundle.load('assets/images/logo.png');
       final ui.Codec codec = await ui.instantiateImageCodec(
         data.buffer.asUint8List(),
-        targetWidth: 80, // same pixel width as a default pin
-        targetHeight: 90, // same pixel height as a default pin
+        targetWidth: 80,
+        targetHeight: 90,
       );
       final ui.FrameInfo fi = await codec.getNextFrame();
-      final ByteData? byteData = await fi.image.toByteData(
-        format: ui.ImageByteFormat.png,
-      );
+      final ByteData? byteData =
+          await fi.image.toByteData(format: ui.ImageByteFormat.png);
 
-      if (byteData != null) {
+      if (byteData != null && mounted) {
         setState(() {
           _carIcon = BitmapDescriptor.fromBytes(byteData.buffer.asUint8List());
         });
@@ -224,25 +186,23 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> {
     }
   }
 
-  // ================= LOCATION =================
   Future<void> _getUserLocation() async {
     if (_isLocating) return;
 
+    if (!mounted) return;
     setState(() => _isLocating = true);
 
     try {
-      // ✅ Step 1: check service
-      bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
+      final bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
       if (!serviceEnabled) {
+        if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text("Please enable location services")),
         );
         return;
       }
 
-      // ✅ Step 2: check permission safely
       LocationPermission permission;
-
       try {
         permission = await Geolocator.checkPermission();
       } catch (e) {
@@ -250,7 +210,6 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> {
         return;
       }
 
-      // ✅ Step 3: request permission ONLY if needed
       if (permission == LocationPermission.denied) {
         try {
           permission = await Geolocator.requestPermission();
@@ -260,16 +219,16 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> {
         }
       }
 
-      // ❌ still denied
       if (permission == LocationPermission.denied) {
+        if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text("Location permission denied")),
         );
         return;
       }
 
-      // ❌ permanently denied
       if (permission == LocationPermission.deniedForever) {
+        if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text("Enable location permission from settings"),
@@ -279,13 +238,13 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> {
         return;
       }
 
-      // ✅ Step 4: get location
-      Position position = await Geolocator.getCurrentPosition(
+      final position = await Geolocator.getCurrentPosition(
         desiredAccuracy: LocationAccuracy.high,
       );
 
-      final LatLng newPosition = LatLng(position.latitude, position.longitude);
+      final newPosition = LatLng(position.latitude, position.longitude);
 
+      if (!mounted) return;
       setState(() {
         _initialPosition = newPosition;
         _selectedLocation =
@@ -306,11 +265,14 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> {
           CameraPosition(target: newPosition, zoom: 15.5),
         ),
       );
+
+      await _tripRepository.savePassengerLocation(newPosition);
     } catch (e) {
       debugPrint("Location error: $e");
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text("Error getting location")));
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Error getting location")),
+      );
     } finally {
       if (mounted) {
         setState(() => _isLocating = false);
@@ -318,29 +280,60 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> {
     }
   }
 
-  // ================= FILTER LINES =================
-  void _filterLines(String query) {
+  void _setSelectedLocation(
+    LatLng location, {
+    bool saveToFirestore = true,
+  }) {
+    if (!mounted) return;
+
     setState(() {
-      _filteredLines = _lines
-          .where((line) => line.toLowerCase().contains(query.toLowerCase()))
-          .toList();
+      _initialPosition = location;
+      _selectedLocation =
+          "${location.latitude.toStringAsFixed(6)}, ${location.longitude.toStringAsFixed(6)}";
+
+      _markers.removeWhere((m) => m.markerId.value == "current_location");
+      _markers.add(
+        Marker(
+          markerId: const MarkerId("current_location"),
+          position: location,
+          infoWindow: const InfoWindow(title: "My Location"),
+        ),
+      );
+    });
+
+    _mapController?.animateCamera(
+      CameraUpdate.newCameraPosition(
+        CameraPosition(target: location, zoom: 15.5),
+      ),
+    );
+
+    if (saveToFirestore) {
+      _tripRepository.savePassengerLocation(location);
+    }
+  }
+
+  void _filterLines(String query) {
+    final trimmed = query.trim().toLowerCase();
+
+    setState(() {
+      if (trimmed.isEmpty) {
+        _filteredLines = List.from(_lines);
+      } else {
+        _filteredLines = _lines.where((line) {
+          return line.toLowerCase().contains(trimmed);
+        }).toList();
+      }
     });
   }
 
-  // ================= FILTER DRIVERS BY LINE =================
-  List<Map<String, dynamic>> _getFilteredDrivers() {
-    if (_selectedLine == null || _selectedLine!.trim().isEmpty) {
-      return _drivers;
-    }
+  Future<void> _showDriversNow() async {
+    final hasLine = _selectedLine != null && _selectedLine!.trim().isNotEmpty;
 
-    return _drivers.where((driver) {
-      return driver['line'] == _selectedLine;
-    }).toList();
-  }
+    final filteredDrivers = hasLine
+        ? await _tripRepository.getDriversForLine(_selectedLine!)
+        : await _tripRepository.getAllDrivers();
 
-  // ================= SHOW DRIVERS NOW =================
-  void _showDriversNow() {
-    final filteredDrivers = _getFilteredDrivers();
+    if (!mounted) return;
 
     if (filteredDrivers.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -351,13 +344,12 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> {
 
     final Set<Marker> driverMarkers = filteredDrivers.map((driver) {
       return Marker(
-        markerId: MarkerId(driver['id']),
-        position: LatLng(driver['lat'], driver['lng']),
-        icon:
-            _carIcon ??
+        markerId: MarkerId(driver['id'] as String),
+        position: LatLng(driver['lat'] as double, driver['lng'] as double),
+        icon: _carIcon ??
             BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueOrange),
         infoWindow: InfoWindow(
-          title: driver['name'],
+          title: driver['name'] as String,
           snippet: "${driver['line']} • ${driver['eta']}",
         ),
         onTap: () {
@@ -374,7 +366,10 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> {
     final first = filteredDrivers.first;
     _mapController?.animateCamera(
       CameraUpdate.newCameraPosition(
-        CameraPosition(target: LatLng(first['lat'], first['lng']), zoom: 12.8),
+        CameraPosition(
+          target: LatLng(first['lat'] as double, first['lng'] as double),
+          zoom: 12.8,
+        ),
       ),
     );
   }
@@ -410,7 +405,6 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> {
                       ),
                     ),
                     const SizedBox(height: 16),
-
                     Row(
                       children: [
                         CircleAvatar(
@@ -424,7 +418,7 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> {
                         const SizedBox(width: 12),
                         Expanded(
                           child: Text(
-                            driver['name'],
+                            driver['name'] as String,
                             style: const TextStyle(
                               fontSize: 18,
                               fontWeight: FontWeight.bold,
@@ -434,30 +428,25 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> {
                         ),
                       ],
                     ),
-
                     const SizedBox(height: 18),
-
                     _tripInfoRow(
                       Icons.confirmation_number,
                       "Vehicle",
-                      driver['busNumber'],
+                      driver['busNumber'] as String,
                     ),
                     _tripInfoRow(
                       Icons.directions_bus,
                       "Type",
-                      driver['vehicleType'],
+                      driver['vehicleType'] as String,
                     ),
-                    _tripInfoRow(Icons.route, "Line", driver['line']),
+                    _tripInfoRow(Icons.route, "Line", driver['line'] as String),
                     _tripInfoRow(
                       Icons.event_seat,
                       "Available seats",
                       "${driver['availableSeats']}",
                     ),
-                    _tripInfoRow(Icons.phone, "Phone", driver['phone']),
-
+                    _tripInfoRow(Icons.phone, "Phone", driver['phone'] as String),
                     const SizedBox(height: 18),
-
-                    /// 🔥 NUMBER OF SEATS (INLINE + FIXED STYLE)
                     Row(
                       children: [
                         const Text(
@@ -469,7 +458,6 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> {
                           ),
                         ),
                         const Spacer(),
-
                         Container(
                           height: 40,
                           padding: const EdgeInsets.symmetric(horizontal: 6),
@@ -494,21 +482,19 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> {
                                   color: NavigoColors.primaryOrange,
                                 ),
                               ),
-
                               SizedBox(
                                 width: 35,
                                 child: Center(
                                   child: Text(
                                     _selectedSeatsCount.toString(),
                                     style: const TextStyle(
-                                      color: Colors.black, // ✅ FIXED BLACK TEXT
+                                      color: Colors.black,
                                       fontWeight: FontWeight.bold,
                                       fontSize: 16,
                                     ),
                                   ),
                                 ),
                               ),
-
                               IconButton(
                                 onPressed: () {
                                   if (_selectedSeatsCount <
@@ -529,10 +515,7 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> {
                         ),
                       ],
                     ),
-
-                    /// 🔥 EXTRA SPACE BEFORE BUTTON
                     const SizedBox(height: 28),
-
                     SizedBox(
                       width: double.infinity,
                       height: 52,
@@ -594,15 +577,22 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> {
     );
   }
 
-  // ================= NAVIGATION =================
   void _openScheduleTrip() {
+    if (_selectedLine == null || _selectedLine!.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Please select a line first")),
+      );
+      return;
+    }
+
     Navigator.push(
       context,
-      MaterialPageRoute(builder: (_) => const ScheduleScreen()),
+      MaterialPageRoute(
+        builder: (_) => ScheduleScreen(selectedLine: _selectedLine),
+      ),
     );
   }
 
-  // ================= BUILD =================
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -620,8 +610,8 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> {
             zoomControlsEnabled: false,
             markers: _markers,
             onMapCreated: (controller) => _mapController = controller,
+            onTap: (latLng) => _setSelectedLocation(latLng),
           ),
-
           SafeArea(
             child: Padding(
               padding: const EdgeInsets.all(16),
@@ -667,9 +657,7 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> {
                       ],
                     ),
                   ),
-
                   const SizedBox(height: 14),
-
                   Row(
                     children: [
                       Expanded(
@@ -682,13 +670,43 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> {
                               ),
                               decoration: NavigoDecorations.kInputDecoration
                                   .copyWith(
-                                    hintText: "Search or select a line",
+                                    hintText: _isLoadingLines
+                                        ? "Loading routes..."
+                                        : "Search or select a route",
                                     filled: true,
                                     fillColor: NavigoColors.surfaceWhite,
                                     prefixIcon: const Icon(
                                       Icons.search,
                                       color: NavigoColors.accentGreen,
                                     ),
+                                    suffixIcon: _isLoadingLines
+                                        ? const Padding(
+                                            padding: EdgeInsets.all(12),
+                                            child: SizedBox(
+                                              width: 18,
+                                              height: 18,
+                                              child:
+                                                  CircularProgressIndicator(
+                                                strokeWidth: 2,
+                                              ),
+                                            ),
+                                          )
+                                        : (_searchController.text.isNotEmpty
+                                            ? IconButton(
+                                                icon: const Icon(
+                                                  Icons.close,
+                                                  color: Colors.grey,
+                                                ),
+                                                onPressed: () {
+                                                  setState(() {
+                                                    _searchController.clear();
+                                                    _selectedLine = null;
+                                                    _filteredLines =
+                                                        List.from(_lines);
+                                                  });
+                                                },
+                                              )
+                                            : null),
                                     border: OutlineInputBorder(
                                       borderRadius: BorderRadius.circular(30),
                                       borderSide: BorderSide.none,
@@ -701,25 +719,33 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> {
                               Container(
                                 margin: const EdgeInsets.only(top: 6),
                                 constraints: const BoxConstraints(
-                                  maxHeight: 150,
+                                  maxHeight: 180,
                                 ),
                                 decoration: BoxDecoration(
                                   color: NavigoColors.surfaceWhite,
                                   borderRadius: BorderRadius.circular(16),
+                                  boxShadow: const [
+                                    BoxShadow(
+                                      color: Colors.black12,
+                                      blurRadius: 8,
+                                    ),
+                                  ],
                                 ),
                                 child: ListView.builder(
                                   shrinkWrap: true,
                                   itemCount: _filteredLines.length,
                                   itemBuilder: (context, index) {
+                                    final line = _filteredLines[index];
                                     return ListTile(
-                                      title: Text(_filteredLines[index]),
+                                      title: Text(line),
                                       onTap: () {
                                         setState(() {
-                                          _selectedLine = _filteredLines[index];
-                                          _searchController.text =
-                                              _selectedLine!;
+                                          _selectedLine = line;
+                                          _searchController.text = line;
                                           _filteredLines = [];
                                         });
+                                        _tripRepository
+                                            .savePassengerSelectedLine(line);
                                       },
                                     );
                                   },
@@ -742,7 +768,6 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> {
               ),
             ),
           ),
-
           Positioned(
             bottom: 20,
             left: 0,

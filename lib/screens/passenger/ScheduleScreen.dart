@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
+import 'dart:async';
 
 import '../../theme/app_theme.dart';
+import '../../models/schedule_slot.dart';
+import '../../services/passenger_trip_repository.dart';
 import 'PassengerBottomNavBar.dart';
-import '../passenger/PassengerHomeScreen.dart';
+import 'passengerHomeScreen.dart';
 
 class ScheduleScreen extends StatefulWidget {
   final String? selectedLine;
@@ -14,11 +17,17 @@ class ScheduleScreen extends StatefulWidget {
 }
 
 class _ScheduleScreenState extends State<ScheduleScreen> {
+  final PassengerTripRepository _tripRepository = PassengerTripRepository();
+
   String? _selectedLine;
   String? _vehicleType;
   DateTime? _selectedDate;
   TimeOfDay? _selectedTime;
   int _seatCount = 1;
+  String? _routeId;
+  List<ScheduleSlot> _slots = [];
+  bool _isLoadingSlots = false;
+  StreamSubscription<List<ScheduleSlot>>? _slotsSubscription;
 
   final List<String> _vehicles = ['Bus', 'Micro Bus'];
 
@@ -26,6 +35,42 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
   void initState() {
     super.initState();
     _selectedLine = widget.selectedLine;
+    _loadRouteAndSlots();
+  }
+
+  Future<void> _loadRouteAndSlots() async {
+    final selected = _selectedLine?.trim();
+    if (selected == null || selected.isEmpty) return;
+
+    setState(() => _isLoadingSlots = true);
+    try {
+      final route = await _tripRepository.getRouteForLine(selected);
+      if (!mounted) return;
+      if (route == null) {
+        setState(() {
+          _routeId = null;
+          _slots = [];
+        });
+        return;
+      }
+
+      setState(() => _routeId = route.routeId);
+
+      _slotsSubscription?.cancel();
+      _slotsSubscription = _tripRepository.watchSlotsForRoute(route.routeId).listen((slots) {
+        if (!mounted) return;
+        setState(() => _slots = slots);
+      });
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Failed to load route schedule')),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _isLoadingSlots = false);
+      }
+    }
   }
 
   Future<void> _pickDate() async {
@@ -36,6 +81,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
       firstDate: now,
       lastDate: DateTime(2100),
     );
+    if (!mounted) return;
     if (picked != null) setState(() => _selectedDate = picked);
   }
 
@@ -44,6 +90,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
       context: context,
       initialTime: TimeOfDay.now(),
     );
+    if (!mounted) return;
     if (picked != null) setState(() => _selectedTime = picked);
   }
 
@@ -54,6 +101,12 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
   String _formatTime() => _selectedTime == null
       ? "Select time"
       : "${_selectedTime!.hour}:${_selectedTime!.minute.toString().padLeft(2, '0')}";
+
+  @override
+  void dispose() {
+    _slotsSubscription?.cancel();
+    super.dispose();
+  }
 
   void _incrementSeat() {
     if (_seatCount < 10) setState(() => _seatCount++);
@@ -73,6 +126,44 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
       );
       return;
     }
+    if (_routeId == null || _routeId!.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("This line is not linked to a route yet")),
+      );
+      return;
+    }
+
+    final selectedDateTime = DateTime(
+      _selectedDate!.year,
+      _selectedDate!.month,
+      _selectedDate!.day,
+      _selectedTime!.hour,
+      _selectedTime!.minute,
+    );
+
+    final matchingSlot = _slots.where((slot) {
+      final dep = slot.departureAt;
+      final sameDate = dep.year == selectedDateTime.year &&
+          dep.month == selectedDateTime.month &&
+          dep.day == selectedDateTime.day;
+      final sameTime =
+          dep.hour == selectedDateTime.hour && dep.minute == selectedDateTime.minute;
+      if (!sameDate || !sameTime) return false;
+      if (_vehicleType == 'Bus') {
+        return slot.vehicleType.toLowerCase().contains('bus');
+      }
+      return slot.vehicleType.toLowerCase().contains('micro');
+    }).toList();
+
+    if (matchingSlot.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("No trip found for selected date/time on this line"),
+        ),
+      );
+      return;
+    }
+
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text("Ride Scheduled: $_seatCount seat(s) 🚀")),
     );
@@ -105,6 +196,11 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                     Text("Schedule Ride", style: NavigoTextStyles.titleLarge),
 
                     const SizedBox(height: 20),
+                    if (_isLoadingSlots)
+                      const Padding(
+                        padding: EdgeInsets.only(bottom: 12),
+                        child: LinearProgressIndicator(),
+                      ),
 
                     // ── VEHICLE TYPE ───────────────────────
                     Text("Vehicle Type", style: NavigoTextStyles.label),
