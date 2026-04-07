@@ -20,7 +20,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
   TimeOfDay? _selectedTime;
   int _seatCount = 1;
 
-  final List<String> _vehicles = ['Bus', 'Mini Bus', 'Van'];
+  final List<String> _vehicles = ['Bus', 'Micro Bus'];
 
   @override
   void initState() {

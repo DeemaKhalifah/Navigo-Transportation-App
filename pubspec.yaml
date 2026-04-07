@@ -1,7 +1,7 @@
 name: navigo
 description: "A new Flutter project."
 
-publish_to: 'none' # keep private
+publish_to: 'none'
 
 version: 1.0.0+1
 
@@ -9,20 +9,20 @@ environment:
   sdk: ">=3.10.1 <4.0.0"
 
 dependencies:
-  image_picker: ^1.0.7
-  google_maps_flutter: ^2.6.0
-  geolocator: ^10.1.0
   flutter:
     sdk: flutter
 
-  # Firebase packages compatible with Flutter 3.10.1
+  cupertino_icons: ^1.0.8
+  image_picker: ^1.0.7
+
   firebase_core: ^4.6.0
   firebase_auth: ^6.3.0
-  cloud_firestore: ^6.2.0   # downgraded for Flutter 3.10.1 compatibility
+  cloud_firestore: ^6.2.0
   firebase_storage: ^13.2.0
 
-  # iOS-style icons
-  cupertino_icons: ^1.0.8
+  geocoding: ^3.0.0
+  geolocator: ^11.0.0
+  google_maps_flutter: ^2.6.1
 
 dev_dependencies:
   flutter_test:
@@ -34,11 +34,5 @@ flutter:
 
   assets:
     - assets/images/welcome.png
-    - assets/images/logo.png  
-
-
-  # Add custom fonts if needed
-  # fonts:
-  #   - family: Roboto
-  #     fonts:
-  #       - asset: fonts/Roboto-Regular.ttf
+    - assets/images/logo.png
+    

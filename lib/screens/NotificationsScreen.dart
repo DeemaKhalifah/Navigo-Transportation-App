@@ -164,10 +164,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
           children: [
             /// TOP BAR
             NavigoDecorations.topBar(
-              onBack: () => Navigator.pushReplacement(
-                context,
-                MaterialPageRoute(builder: (_) => const RouteSchedule()),
-              ),
+              onBack: () => Navigator.pop(context),
               context: context,
             ),
 
