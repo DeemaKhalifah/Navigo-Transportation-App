@@ -6,8 +6,6 @@ abstract class UserModel {
   final String? image;
   final String role;
   final bool isVerified;
-
-  /// Stored on `users/{uid}` (presence / session hint).
   final bool isOnline;
 
   UserModel({

@@ -262,11 +262,35 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
           .collection('drivers')
           .doc(currentUser!.uid);
 
-      await dRef.update({'status': DriverStatus.available});
-      await _queueRepo.joinQueue(routeId, currentUser!.uid);
+      // Update both drivers and users collections
+      try {
+        await dRef.update({'status': DriverStatus.available});
+        await FirebaseFirestore.instance
+            .collection('users')
+            .doc(currentUser!.uid)
+            .update({'isOnline': true});
+        debugPrint('Firebase status updated to available');
+      } catch (firebaseError) {
+        debugPrint('Firebase update error: $firebaseError');
+        rethrow;
+      }
+
+      // Then join the queue
+      try {
+        await _queueRepo.joinQueue(routeId, currentUser!.uid);
+        debugPrint('Successfully joined queue');
+      } catch (queueError) {
+        debugPrint('Queue error: $queueError');
+        // If queue fails, revert status back to offline
+        await dRef.update({'status': DriverStatus.offline});
+        await FirebaseFirestore.instance
+            .collection('users')
+            .doc(currentUser!.uid)
+            .update({'isOnline': false});
+        rethrow;
+      }
 
       if (mounted) {
-        setState(() => _driverStatus = DriverStatus.available);
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('You are online and in the driver queue.'),
@@ -287,14 +311,6 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
   Future<void> _goOffline() async {
     if (currentUser == null || _blocksAvailabilityToggle) return;
     final routeId = _assignedRouteId?.trim();
-    if (routeId == null || routeId.isEmpty) {
-      await FirebaseFirestore.instance
-          .collection('drivers')
-          .doc(currentUser!.uid)
-          .update({'status': DriverStatus.offline});
-      if (mounted) setState(() => _driverStatus = DriverStatus.offline);
-      return;
-    }
 
     setState(() => _statusBusy = true);
     try {
@@ -302,11 +318,31 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
           .collection('drivers')
           .doc(currentUser!.uid);
 
-      await dRef.update({'status': DriverStatus.offline});
-      await _queueRepo.leaveQueue(routeId, currentUser!.uid);
+      // First, update Firebase with offline status (both drivers and users collections)
+      try {
+        await dRef.update({'status': DriverStatus.offline});
+        await FirebaseFirestore.instance
+            .collection('users')
+            .doc(currentUser!.uid)
+            .update({'isOnline': false});
+        debugPrint('Firebase status updated to offline');
+      } catch (firebaseError) {
+        debugPrint('Firebase update error: $firebaseError');
+        rethrow;
+      }
+
+      // Then leave the queue if routeId exists
+      if (routeId != null && routeId.isNotEmpty) {
+        try {
+          await _queueRepo.leaveQueue(routeId, currentUser!.uid);
+          debugPrint('Successfully left queue');
+        } catch (queueError) {
+          debugPrint('Queue error: $queueError');
+          // Queue error is not critical, continue
+        }
+      }
 
       if (mounted) {
-        setState(() => _driverStatus = DriverStatus.offline);
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('You are offline and left the queue.')),
         );
@@ -336,6 +372,9 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
         }
         await FirebaseFirestore.instance.collection('drivers').doc(uid).update({
           'status': DriverStatus.offline,
+        });
+        await FirebaseFirestore.instance.collection('users').doc(uid).update({
+          'isOnline': false,
         });
       } catch (e) {
         debugPrint('Logout driver cleanup: $e');
