@@ -15,11 +15,11 @@ class PassengerScheduleService {
 
   static const String _routesCollection = 'route';
 
-  final Map<String, String> _lineBySlotId = {};
-  final Map<String, String> _fromBySlotId = {};
-  final Map<String, String> _toBySlotId = {};
-  final Map<String, int> _availableSeatsBySlotId = {};
-  final Map<String, String> _statusBySlotId = {};
+  final Map<String, String> _lineBySlotKey = {};
+  final Map<String, String> _fromBySlotKey = {};
+  final Map<String, String> _toBySlotKey = {};
+  final Map<String, int> _availableSeatsBySlotKey = {};
+  final Map<String, String> _statusBySlotKey = {};
 
   String? get currentUserId => _auth.currentUser?.uid;
 
@@ -36,11 +36,11 @@ class PassengerScheduleService {
 
     final List<ScheduleSlot> candidates = [];
 
-    _lineBySlotId.clear();
-    _fromBySlotId.clear();
-    _toBySlotId.clear();
-    _availableSeatsBySlotId.clear();
-    _statusBySlotId.clear();
+    _lineBySlotKey.clear();
+    _fromBySlotKey.clear();
+    _toBySlotKey.clear();
+    _availableSeatsBySlotKey.clear();
+    _statusBySlotKey.clear();
 
     for (final doc in snapshot.docs) {
       final data = doc.data();
@@ -53,7 +53,11 @@ class PassengerScheduleService {
           .toString()
           .trim();
       final String lineText =
-          (data['line'] ?? data['routeName'] ?? '$fromText ↔ $toText')
+          (data['line'] ??
+                  data['routeName'] ??
+                  (fromText.isNotEmpty && toText.isNotEmpty
+                      ? '$fromText ↔ $toText'
+                      : 'Route $routeId'))
               .toString()
               .trim();
 
@@ -62,18 +66,14 @@ class PassengerScheduleService {
         continue;
       }
 
-      final rawSlots = data['scheduleSlots'];
-      if (rawSlots is! List) continue;
+      final List<ScheduleSlot> routeSlots = await _loadRouteSlots(
+        routeId,
+        data,
+      );
 
-      for (int i = 0; i < rawSlots.length; i++) {
-        final raw = rawSlots[i];
-        if (raw is! Map) continue;
-
-        final map = Map<String, dynamic>.from(raw as Map);
-        final slot = ScheduleSlot.fromMap('slot_$i', map);
-
-        final String slotStatus = TripStatus.normalize(map['status']);
-        if (slotStatus != TripStatus.scheduled) continue;
+      for (final slot in routeSlots) {
+        final slotMapStatus = TripStatus.normalize(slot.status);
+        if (slotMapStatus != TripStatus.scheduled) continue;
 
         if (normalizedVehicle.isNotEmpty &&
             slot.vehicleType.toLowerCase() != normalizedVehicle &&
@@ -95,22 +95,19 @@ class PassengerScheduleService {
           driverId: slot.driverId,
           passengersIds: List<String>.from(slot.passengersIds),
           frequencyMinutes: slot.frequencyMinutes,
-          status: slotStatus,
+          status: slotMapStatus,
         );
 
         candidates.add(fixedSlot);
 
-        _lineBySlotId[fixedSlot.slotId] = lineText.isEmpty
+        final slotKey = _slotKey(fixedSlot.routeId, fixedSlot.slotId);
+        _lineBySlotKey[slotKey] = lineText.isEmpty
             ? 'Route ${fixedSlot.routeId}'
             : lineText;
-        _fromBySlotId[fixedSlot.slotId] = fromText.isEmpty
-            ? 'Unknown start'
-            : fromText;
-        _toBySlotId[fixedSlot.slotId] = toText.isEmpty
-            ? 'Unknown destination'
-            : toText;
-        _availableSeatsBySlotId[fixedSlot.slotId] = availableSeats;
-        _statusBySlotId[fixedSlot.slotId] = slotStatus;
+        _fromBySlotKey[slotKey] = fromText.isEmpty ? 'Unknown start' : fromText;
+        _toBySlotKey[slotKey] = toText.isEmpty ? 'Unknown destination' : toText;
+        _availableSeatsBySlotKey[slotKey] = availableSeats;
+        _statusBySlotKey[slotKey] = slotMapStatus;
       }
     }
 
@@ -181,17 +178,40 @@ class PassengerScheduleService {
     }
 
     final routeRef = _db.collection(_routesCollection).doc(slot.routeId);
+    final subSlotRef = routeRef.collection('scheduleSlots').doc(slot.slotId);
 
     await _db.runTransaction((tx) async {
-      final snap = await tx.get(routeRef);
+      final subSnap = await tx.get(subSlotRef);
+      if (subSnap.exists) {
+        final subData = subSnap.data() as Map<String, dynamic>;
+        final currentSlot = ScheduleSlot.fromMap(slot.slotId, subData);
+        final availableSeats =
+            currentSlot.capacity - currentSlot.passengersIds.length;
+        if (seatsToBook > availableSeats) {
+          throw Exception(
+            'Only $availableSeats seat(s) are available for this schedule.',
+          );
+        }
 
+        final updatedPassengers = List<String>.from(currentSlot.passengersIds);
+        for (int i = 0; i < seatsToBook; i++) {
+          updatedPassengers.add(uid);
+        }
+
+        tx.update(subSlotRef, {
+          'passengersIds': updatedPassengers,
+          'status': TripStatus.scheduled,
+        });
+        return;
+      }
+
+      final snap = await tx.get(routeRef);
       if (!snap.exists) {
         throw Exception('Route not found.');
       }
 
       final data = snap.data() as Map<String, dynamic>;
       final rawList = (data['scheduleSlots'] as List? ?? []);
-
       final List<Map<String, dynamic>> scheduleSlots = rawList
           .map((e) => Map<String, dynamic>.from(e as Map))
           .toList();
@@ -199,42 +219,28 @@ class PassengerScheduleService {
       final index = scheduleSlots.indexWhere((item) {
         return (item['slotId'] ?? '').toString() == slot.slotId;
       });
-
       if (index == -1) {
         throw Exception('Schedule slot not found.');
       }
 
-      final Map<String, dynamic> currentMap = Map<String, dynamic>.from(
-        scheduleSlots[index],
-      );
-
-      final ScheduleSlot currentSlot = ScheduleSlot.fromMap(
-        slot.slotId,
-        currentMap,
-      );
-
-      final int availableSeats =
+      final currentMap = Map<String, dynamic>.from(scheduleSlots[index]);
+      final currentSlot = ScheduleSlot.fromMap(slot.slotId, currentMap);
+      final availableSeats =
           currentSlot.capacity - currentSlot.passengersIds.length;
-
       if (seatsToBook > availableSeats) {
         throw Exception(
           'Only $availableSeats seat(s) are available for this schedule.',
         );
       }
 
-      final List<String> updatedPassengers = List<String>.from(
-        currentSlot.passengersIds,
-      );
-
+      final updatedPassengers = List<String>.from(currentSlot.passengersIds);
       for (int i = 0; i < seatsToBook; i++) {
         updatedPassengers.add(uid);
       }
 
       currentMap['passengersIds'] = updatedPassengers;
       currentMap['status'] = TripStatus.scheduled;
-
       scheduleSlots[index] = currentMap;
-
       tx.update(routeRef, {'scheduleSlots': scheduleSlots});
     });
   }
@@ -265,31 +271,95 @@ class PassengerScheduleService {
       status: slot.status,
     );
 
-    _availableSeatsBySlotId[slot.slotId] =
+    _availableSeatsBySlotKey[_slotKey(slot.routeId, slot.slotId)] =
         updatedSlot.capacity - updatedSlot.passengersIds.length;
 
     return updatedSlot;
   }
 
   String lineOf(ScheduleSlot slot) {
-    return _lineBySlotId[slot.slotId] ?? 'Route ${slot.routeId}';
+    return _lineBySlotKey[_slotKey(slot.routeId, slot.slotId)] ??
+        'Route ${slot.routeId}';
   }
 
   String fromOf(ScheduleSlot slot) {
-    return _fromBySlotId[slot.slotId] ?? 'Unknown start';
+    return _fromBySlotKey[_slotKey(slot.routeId, slot.slotId)] ??
+        'Unknown start';
   }
 
   String toOf(ScheduleSlot slot) {
-    return _toBySlotId[slot.slotId] ?? 'Unknown destination';
+    return _toBySlotKey[_slotKey(slot.routeId, slot.slotId)] ??
+        'Unknown destination';
   }
 
   int availableSeatsOf(ScheduleSlot slot) {
-    return _availableSeatsBySlotId[slot.slotId] ??
+    return _availableSeatsBySlotKey[_slotKey(slot.routeId, slot.slotId)] ??
         (slot.capacity - slot.passengersIds.length);
   }
 
   String statusOf(ScheduleSlot slot) {
-    return _statusBySlotId[slot.slotId] ?? TripStatus.scheduled;
+    return _statusBySlotKey[_slotKey(slot.routeId, slot.slotId)] ??
+        TripStatus.scheduled;
+  }
+
+  String _slotKey(String routeId, String slotId) => '$routeId::$slotId';
+
+  Future<List<ScheduleSlot>> _loadRouteSlots(
+    String routeId,
+    Map<String, dynamic> routeData,
+  ) async {
+    final subSnap = await _db
+        .collection(_routesCollection)
+        .doc(routeId)
+        .collection('scheduleSlots')
+        .get();
+
+    if (subSnap.docs.isNotEmpty) {
+      return subSnap.docs.map((doc) {
+        final map = doc.data();
+        final slot = ScheduleSlot.fromMap(doc.id, map);
+        return ScheduleSlot(
+          slotId: slot.slotId,
+          routeId: slot.routeId.isEmpty ? routeId : slot.routeId,
+          departureAt: slot.departureAt,
+          arrivalAt: slot.arrivalAt,
+          price: slot.price,
+          capacity: slot.capacity,
+          vehicleType: slot.vehicleType,
+          driverId: slot.driverId,
+          passengersIds: List<String>.from(slot.passengersIds),
+          frequencyMinutes: slot.frequencyMinutes,
+          status: slot.status,
+        );
+      }).toList();
+    }
+
+    final rawSlots = routeData['scheduleSlots'];
+    if (rawSlots is! List) return <ScheduleSlot>[];
+
+    final List<ScheduleSlot> slots = [];
+    for (int i = 0; i < rawSlots.length; i++) {
+      final raw = rawSlots[i];
+      if (raw is! Map) continue;
+      final map = Map<String, dynamic>.from(raw);
+      final slot = ScheduleSlot.fromMap('slot_$i', map);
+      slots.add(
+        ScheduleSlot(
+          slotId: slot.slotId,
+          routeId: slot.routeId.isEmpty ? routeId : slot.routeId,
+          departureAt: slot.departureAt,
+          arrivalAt: slot.arrivalAt,
+          price: slot.price,
+          capacity: slot.capacity,
+          vehicleType: slot.vehicleType,
+          driverId: slot.driverId,
+          passengersIds: List<String>.from(slot.passengersIds),
+          frequencyMinutes: slot.frequencyMinutes,
+          status: slot.status,
+        ),
+      );
+    }
+    return slots;
   }
 
   String priceTextOf(ScheduleSlot slot) {
@@ -344,7 +414,7 @@ class PassengerScheduleService {
     } else if (hours > 0) {
       return '${hours}h';
     } else {
-      return '${minutes} min';
+      return '$minutes min';
     }
   }
 }

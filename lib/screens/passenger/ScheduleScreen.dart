@@ -25,6 +25,8 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
   TimeOfDay? _selectedTime;
   int _seatCount = 1;
   bool _isLoading = false;
+  bool _lineFilterFromNavigation = false;
+  List<ScheduleSlot> _schedules = [];
 
   final List<String> _vehicles = ['Bus', 'Micro Bus'];
 
@@ -36,12 +38,14 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
 
   Future<void> _bootstrapFromWidgetOrStorage() async {
     String? line = widget.selectedLine?.trim();
+    _lineFilterFromNavigation = line != null && line.isNotEmpty;
     if (line == null || line.isEmpty) {
       final saved = await LocalStorageService.getSelectedLine();
       line = saved?.trim();
     }
     if (!mounted) return;
     setState(() => _selectedLine = line);
+    await _loadSchedules();
   }
 
   Future<void> _pickDate() async {
@@ -55,6 +59,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
     if (!mounted) return;
     if (picked != null) {
       setState(() => _selectedDate = picked);
+      await _loadSchedules();
     }
   }
 
@@ -66,19 +71,16 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
     if (!mounted) return;
     if (picked != null) {
       setState(() => _selectedTime = picked);
+      await _loadSchedules();
     }
   }
 
   void _incrementSeat() {
-    if (_seatCount < 10) {
-      setState(() => _seatCount++);
-    }
+    if (_seatCount < 10) setState(() => _seatCount++);
   }
 
   void _decrementSeat() {
-    if (_seatCount > 1) {
-      setState(() => _seatCount--);
-    }
+    if (_seatCount > 1) setState(() => _seatCount--);
   }
 
   String _formatDate() {
@@ -91,39 +93,224 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
     return '${_selectedTime!.hour}:${_selectedTime!.minute.toString().padLeft(2, '0')}';
   }
 
-  Future<void> _showSchedulesAvailable() async {
+  Future<void> _loadSchedules() async {
     try {
       setState(() => _isLoading = true);
+      final selectedLineForQuery = _lineFilterFromNavigation
+          ? _selectedLine
+          : null;
 
       final schedules = await _scheduleService.findAvailableSchedules(
-        selectedLine: _selectedLine,
+        selectedLine: selectedLineForQuery,
         vehicleType: _vehicleType,
         selectedDate: _selectedDate,
         selectedTime: _selectedTime,
       );
 
       if (!mounted) return;
-
-      await showModalBottomSheet(
-        context: context,
-        isScrollControlled: true,
-        backgroundColor: NavigoColors.transparent,
-        builder: (_) => _AvailableSchedulesSheet(
-          schedules: schedules,
-          seatCount: _seatCount,
-          scheduleService: _scheduleService,
-        ),
-      );
+      setState(() => _schedules = schedules);
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text('Failed to load schedules: $e')));
     } finally {
-      if (mounted) {
-        setState(() => _isLoading = false);
-      }
+      if (mounted) setState(() => _isLoading = false);
     }
+  }
+
+  Future<void> _openTripDetails(ScheduleSlot slot) async {
+    int sheetSeatCount = _seatCount;
+    bool isConfirming = false;
+
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: NavigoColors.transparent,
+      builder: (sheetContext) {
+        return StatefulBuilder(
+          builder: (sheetContext, setSheetState) {
+            final availableSeats = _scheduleService.availableSeatsOf(slot);
+            return Container(
+              decoration: NavigoDecorations.kBottomSheetDecoration,
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 20),
+              child: SafeArea(
+                top: false,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Center(child: NavigoDecorations.dragHandle()),
+                    const SizedBox(height: 14),
+                    Text(
+                      _scheduleService.lineOf(slot),
+                      style: NavigoTextStyles.titleSmall,
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      '${_scheduleService.fromOf(slot)} → ${_scheduleService.toOf(slot)}',
+                      style: NavigoTextStyles.bodySmall.copyWith(
+                        color: NavigoColors.textMuted,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      'Date: ${PassengerScheduleService.formatDate(slot.departureAt)}',
+                      style: NavigoTextStyles.bodyMedium,
+                    ),
+                    Text(
+                      'Time: ${PassengerScheduleService.formatTime(slot.departureAt)}',
+                      style: NavigoTextStyles.bodyMedium,
+                    ),
+                    Text(
+                      'Price: ${_scheduleService.priceTextOf(slot)}',
+                      style: NavigoTextStyles.bodyMedium,
+                    ),
+                    Text(
+                      'Available seats: $availableSeats',
+                      style: NavigoTextStyles.bodyMedium,
+                    ),
+                    const SizedBox(height: 14),
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.symmetric(
+                        vertical: 12,
+                        horizontal: 14,
+                      ),
+                      decoration: NavigoDecorations.kCardDecoration,
+                      child: Row(
+                        children: [
+                          Text(
+                            'Seats:',
+                            style: NavigoTextStyles.bodyMedium.copyWith(
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Text(
+                            '$sheetSeatCount',
+                            style: NavigoTextStyles.bodyMedium.copyWith(
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                          const Spacer(),
+                          IconButton(
+                            onPressed: sheetSeatCount > 1
+                                ? () => setSheetState(() => sheetSeatCount--)
+                                : null,
+                            icon: const Icon(Icons.remove_circle_outline),
+                            color: NavigoColors.accentGreen,
+                          ),
+                          IconButton(
+                            onPressed: sheetSeatCount < 10
+                                ? () => setSheetState(() => sheetSeatCount++)
+                                : null,
+                            icon: const Icon(Icons.add_circle_outline),
+                            color: NavigoColors.accentGreen,
+                          ),
+                        ],
+                      ),
+                    ),
+                    if (sheetSeatCount > availableSeats)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 8),
+                        child: Text(
+                          'Only $availableSeats seat(s) are available for this trip.',
+                          style: NavigoTextStyles.bodySmall.copyWith(
+                            color: NavigoColors.accentRed,
+                          ),
+                        ),
+                      ),
+                    const SizedBox(height: 16),
+                    SizedBox(
+                      width: double.infinity,
+                      height: NavigoSizes.buttonHeightLarge,
+                      child: ElevatedButton(
+                        onPressed: isConfirming
+                            ? null
+                            : () async {
+                                if (sheetSeatCount > availableSeats) return;
+                                setSheetState(() => isConfirming = true);
+                                try {
+                                  await _scheduleService.confirmSchedule(
+                                    slot: slot,
+                                    seatsToBook: sheetSeatCount,
+                                  );
+                                  final updated = _scheduleService
+                                      .applyLocalBooking(
+                                        slot: slot,
+                                        seatsBooked: sheetSeatCount,
+                                        userId: _scheduleService.currentUserId,
+                                      );
+                                  if (!mounted) return;
+                                  setState(() {
+                                    _seatCount = sheetSeatCount;
+                                    final index = _schedules.indexWhere(
+                                      (s) =>
+                                          s.slotId == updated.slotId &&
+                                          s.routeId == updated.routeId,
+                                    );
+                                    if (index != -1)
+                                      _schedules[index] = updated;
+                                    _schedules = _schedules
+                                        .where(
+                                          (s) =>
+                                              _scheduleService.availableSeatsOf(
+                                                s,
+                                              ) >
+                                              0,
+                                        )
+                                        .toList();
+                                  });
+                                  if (!sheetContext.mounted) return;
+                                  Navigator.pop(sheetContext);
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: Text(
+                                        'Schedule confirmed for $sheetSeatCount seat(s).',
+                                      ),
+                                    ),
+                                  );
+                                } catch (e) {
+                                  if (!mounted) return;
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: Text(
+                                        e.toString().replaceFirst(
+                                          'Exception: ',
+                                          '',
+                                        ),
+                                      ),
+                                    ),
+                                  );
+                                } finally {
+                                  if (sheetContext.mounted)
+                                    setSheetState(() => isConfirming = false);
+                                }
+                              },
+                        style: NavigoDecorations.kPrimaryButtonLargeStyle,
+                        child: isConfirming
+                            ? const SizedBox(
+                                height: 22,
+                                width: 22,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
+                              )
+                            : const Text(
+                                'Confirm schedule',
+                                style: NavigoTextStyles.button,
+                              ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
   }
 
   @override
@@ -171,7 +358,12 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                           child: Padding(
                             padding: const EdgeInsets.symmetric(horizontal: 4),
                             child: GestureDetector(
-                              onTap: () => setState(() => _vehicleType = v),
+                              onTap: () async {
+                                setState(() {
+                                  _vehicleType = _vehicleType == v ? null : v;
+                                });
+                                await _loadSchedules();
+                              },
                               child: AnimatedContainer(
                                 duration: const Duration(milliseconds: 180),
                                 padding: const EdgeInsets.symmetric(
@@ -199,458 +391,166 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                       }).toList(),
                     ),
                     const SizedBox(height: 20),
-                    Text('Date', style: NavigoTextStyles.label),
+
+                    // ── Date & Time on the same row ──────────────────────────
+                    Text('Date & Time', style: NavigoTextStyles.label),
                     const SizedBox(height: 8),
-                    GestureDetector(
-                      onTap: _pickDate,
-                      child: Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.symmetric(
-                          vertical: 14,
-                          horizontal: 16,
-                        ),
-                        decoration: NavigoDecorations.kCardDecoration,
-                        child: Row(
-                          children: [
-                            const Icon(
-                              Icons.calendar_today,
-                              color: NavigoColors.accentGreen,
-                              size: 20,
-                            ),
-                            const SizedBox(width: 12),
-                            Text(
-                              _formatDate(),
-                              style: NavigoTextStyles.bodyMedium.copyWith(
-                                fontSize: 15,
+                    Row(
+                      children: [
+                        Expanded(
+                          child: GestureDetector(
+                            onTap: _pickDate,
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                vertical: 14,
+                                horizontal: 12,
+                              ),
+                              decoration: NavigoDecorations.kCardDecoration,
+                              child: Row(
+                                children: [
+                                  const Icon(
+                                    Icons.calendar_today,
+                                    color: NavigoColors.accentGreen,
+                                    size: 18,
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: Text(
+                                      _formatDate(),
+                                      style: NavigoTextStyles.bodyMedium
+                                          .copyWith(fontSize: 14),
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                ],
                               ),
                             ),
-                          ],
+                          ),
                         ),
-                      ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: GestureDetector(
+                            onTap: _pickTime,
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                vertical: 14,
+                                horizontal: 12,
+                              ),
+                              decoration: NavigoDecorations.kCardDecoration,
+                              child: Row(
+                                children: [
+                                  const Icon(
+                                    Icons.access_time,
+                                    color: NavigoColors.accentGreen,
+                                    size: 18,
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: Text(
+                                      _formatTime(),
+                                      style: NavigoTextStyles.bodyMedium
+                                          .copyWith(fontSize: 14),
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
-                    const SizedBox(height: 15),
-                    Text('Time', style: NavigoTextStyles.label),
+
+                    // ────────────────────────────────────────────────────────
+                    const SizedBox(height: 22),
+                    Row(
+                      children: [
+                        Text('Available Trips', style: NavigoTextStyles.label),
+                        const Spacer(),
+                        IconButton(
+                          onPressed: _isLoading ? null : _loadSchedules,
+                          icon: const Icon(Icons.refresh),
+                        ),
+                      ],
+                    ),
                     const SizedBox(height: 8),
-                    GestureDetector(
-                      onTap: _pickTime,
-                      child: Container(
+                    if (_isLoading)
+                      const Center(child: CircularProgressIndicator())
+                    else if (_schedules.isEmpty)
+                      Container(
                         width: double.infinity,
-                        padding: const EdgeInsets.symmetric(
-                          vertical: 14,
-                          horizontal: 16,
-                        ),
+                        padding: const EdgeInsets.all(16),
                         decoration: NavigoDecorations.kCardDecoration,
-                        child: Row(
-                          children: [
-                            const Icon(
-                              Icons.access_time,
-                              color: NavigoColors.accentGreen,
-                              size: 20,
-                            ),
-                            const SizedBox(width: 12),
-                            Text(
-                              _formatTime(),
-                              style: NavigoTextStyles.bodyMedium.copyWith(
-                                fontSize: 15,
-                              ),
-                            ),
-                          ],
+                        child: Text(
+                          'No available schedules found.',
+                          style: NavigoTextStyles.bodySmall,
                         ),
-                      ),
-                    ),
-                    const SizedBox(height: 20),
-                    Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.symmetric(
-                        vertical: 14,
-                        horizontal: 16,
-                      ),
-                      decoration: NavigoDecorations.kCardDecoration,
-                      child: Row(
-                        children: [
-                          Text(
-                            'Seats:',
-                            style: NavigoTextStyles.bodyMedium.copyWith(
-                              fontWeight: FontWeight.w600,
-                              fontSize: 14,
-                            ),
-                          ),
-                          const SizedBox(width: 10),
-                          Text(
-                            '$_seatCount',
-                            style: NavigoTextStyles.bodySmall.copyWith(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w700,
-                              color: NavigoColors.textDark,
-                            ),
-                          ),
-                          const Spacer(),
-                          IconButton(
-                            onPressed: _decrementSeat,
-                            icon: const Icon(Icons.remove_circle_outline),
-                            color: NavigoColors.accentGreen,
-                          ),
-                          IconButton(
-                            onPressed: _incrementSeat,
-                            icon: const Icon(Icons.add_circle_outline),
-                            color: NavigoColors.accentGreen,
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 30),
-                    SizedBox(
-                      width: double.infinity,
-                      height: NavigoSizes.buttonHeightLarge,
-                      child: ElevatedButton(
-                        onPressed: _isLoading ? null : _showSchedulesAvailable,
-                        style: NavigoDecorations.kPrimaryButtonLargeStyle,
-                        child: _isLoading
-                            ? const SizedBox(
-                                height: 22,
-                                width: 22,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                ),
-                              )
-                            : const Text(
-                                'Show schedules available',
-                                style: NavigoTextStyles.button,
+                      )
+                    else
+                      ListView.separated(
+                        shrinkWrap: true,
+                        physics: const NeverScrollableScrollPhysics(),
+                        itemCount: _schedules.length,
+                        separatorBuilder: (_, _) => const SizedBox(height: 10),
+                        itemBuilder: (_, index) {
+                          final slot = _schedules[index];
+                          final available = _scheduleService.availableSeatsOf(
+                            slot,
+                          );
+                          return InkWell(
+                            borderRadius: BorderRadius.circular(18),
+                            onTap: () => _openTripDetails(slot),
+                            child: Container(
+                              padding: const EdgeInsets.all(16),
+                              decoration: NavigoDecorations.kCardDecoration,
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    _scheduleService.lineOf(slot),
+                                    style: NavigoTextStyles.bodyMedium.copyWith(
+                                      fontWeight: FontWeight.w700,
+                                      color: NavigoColors.textDark,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    '${_scheduleService.fromOf(slot)} → ${_scheduleService.toOf(slot)}',
+                                    style: NavigoTextStyles.bodySmall.copyWith(
+                                      color: NavigoColors.textMuted,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 8),
+                                  Wrap(
+                                    spacing: 10,
+                                    runSpacing: 8,
+                                    children: [
+                                      Text(
+                                        '${PassengerScheduleService.formatDate(slot.departureAt)} • ${PassengerScheduleService.formatTime(slot.departureAt)}',
+                                        style: NavigoTextStyles.bodySmall,
+                                      ),
+                                      Text(
+                                        'Seats: $available',
+                                        style: NavigoTextStyles.bodySmall,
+                                      ),
+                                      Text(
+                                        'Price: ${_scheduleService.priceTextOf(slot)}',
+                                        style: NavigoTextStyles.bodySmall,
+                                      ),
+                                    ],
+                                  ),
+                                ],
                               ),
+                            ),
+                          );
+                        },
                       ),
-                    ),
                   ],
                 ),
               ),
             ),
           ],
         ),
-      ),
-    );
-  }
-}
-
-class _AvailableSchedulesSheet extends StatefulWidget {
-  const _AvailableSchedulesSheet({
-    required this.schedules,
-    required this.seatCount,
-    required this.scheduleService,
-  });
-
-  final List<ScheduleSlot> schedules;
-  final int seatCount;
-  final PassengerScheduleService scheduleService;
-
-  @override
-  State<_AvailableSchedulesSheet> createState() =>
-      _AvailableSchedulesSheetState();
-}
-
-class _AvailableSchedulesSheetState extends State<_AvailableSchedulesSheet> {
-  ScheduleSlot? _selectedSlot;
-  late int _seatCount;
-  late List<ScheduleSlot> _schedules;
-  bool _isConfirming = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _seatCount = widget.seatCount;
-    _schedules = List<ScheduleSlot>.from(widget.schedules);
-  }
-
-  void _increaseSeat() {
-    setState(() => _seatCount++);
-  }
-
-  void _decreaseSeat() {
-    if (_seatCount > 1) {
-      setState(() => _seatCount--);
-    }
-  }
-
-  int _availableForSelected() {
-    if (_selectedSlot == null) return 0;
-    return widget.scheduleService.availableSeatsOf(_selectedSlot!);
-  }
-
-  Future<void> _confirm() async {
-    if (_selectedSlot == null) {
-      _showPrompt('Please select a schedule first.');
-      return;
-    }
-
-    final available = _availableForSelected();
-
-    if (_seatCount > available) {
-      _showPrompt('Only $available seat(s) are available for this schedule.');
-      return;
-    }
-
-    try {
-      setState(() => _isConfirming = true);
-
-      await widget.scheduleService.confirmSchedule(
-        slot: _selectedSlot!,
-        seatsToBook: _seatCount,
-      );
-
-      final updatedSlot = widget.scheduleService.applyLocalBooking(
-        slot: _selectedSlot!,
-        seatsBooked: _seatCount,
-        userId: widget.scheduleService.currentUserId,
-      );
-
-      final index = _schedules.indexWhere(
-        (s) => s.slotId == updatedSlot.slotId,
-      );
-      if (index != -1) {
-        _schedules[index] = updatedSlot;
-      }
-
-      setState(() {
-        _selectedSlot = updatedSlot;
-        _schedules = _schedules
-            .where((slot) => widget.scheduleService.availableSeatsOf(slot) > 0)
-            .toList();
-      });
-
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Schedule confirmed for $_seatCount seat(s).')),
-      );
-    } catch (e) {
-      if (!mounted) return;
-      _showPrompt(e.toString().replaceFirst('Exception: ', ''));
-    } finally {
-      if (mounted) {
-        setState(() => _isConfirming = false);
-      }
-    }
-  }
-
-  void _showPrompt(String message) {
-    showDialog<void>(
-      context: context,
-      builder: (_) => AlertDialog(
-        title: const Text('Notice'),
-        content: Text(message),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('OK'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final selectedAvailable = _availableForSelected();
-
-    return Container(
-      height: MediaQuery.of(context).size.height * 0.82,
-      decoration: NavigoDecorations.kBottomSheetDecoration,
-      child: Column(
-        children: [
-          const SizedBox(height: 10),
-          Center(child: NavigoDecorations.dragHandle()),
-          const SizedBox(height: 12),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20),
-            child: Row(
-              children: [
-                Text('Available Schedules', style: NavigoTextStyles.titleSmall),
-              ],
-            ),
-          ),
-          const SizedBox(height: 12),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-              decoration: NavigoDecorations.kCardDecoration,
-              child: Row(
-                children: [
-                  Text(
-                    'Seats:',
-                    style: NavigoTextStyles.bodyMedium.copyWith(
-                      fontWeight: FontWeight.w600,
-                      fontSize: 14,
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  Text(
-                    '$_seatCount',
-                    style: NavigoTextStyles.bodySmall.copyWith(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w700,
-                      color: NavigoColors.textDark,
-                    ),
-                  ),
-                  const Spacer(),
-                  IconButton(
-                    onPressed: _decreaseSeat,
-                    icon: const Icon(Icons.remove_circle_outline),
-                    color: NavigoColors.accentGreen,
-                  ),
-                  IconButton(
-                    onPressed: _increaseSeat,
-                    icon: const Icon(Icons.add_circle_outline),
-                    color: NavigoColors.accentGreen,
-                  ),
-                ],
-              ),
-            ),
-          ),
-          if (_selectedSlot != null && _seatCount > selectedAvailable)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
-              child: Align(
-                alignment: Alignment.centerLeft,
-                child: Text(
-                  'Only $selectedAvailable seat(s) available for the selected trip.',
-                  style: NavigoTextStyles.bodySmall.copyWith(
-                    color: NavigoColors.accentRed,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
-            ),
-          const SizedBox(height: 12),
-          Expanded(
-            child: _schedules.isEmpty
-                ? Center(
-                    child: Text(
-                      'No available schedules found.',
-                      style: NavigoTextStyles.bodySmall,
-                    ),
-                  )
-                : ListView.separated(
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    itemCount: _schedules.length,
-                    separatorBuilder: (_, _) => const SizedBox(height: 10),
-                    itemBuilder: (_, index) {
-                      final slot = _schedules[index];
-                      final selected = _selectedSlot?.slotId == slot.slotId;
-                      final available = widget.scheduleService.availableSeatsOf(
-                        slot,
-                      );
-
-                      return GestureDetector(
-                        onTap: () => setState(() => _selectedSlot = slot),
-                        child: Container(
-                          padding: const EdgeInsets.all(16),
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            borderRadius: BorderRadius.circular(18),
-                            border: Border.all(
-                              color: selected
-                                  ? NavigoColors.primaryOrange
-                                  : Colors.transparent,
-                              width: 1.6,
-                            ),
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.black.withOpacity(0.04),
-                                blurRadius: 10,
-                                offset: const Offset(0, 4),
-                              ),
-                            ],
-                          ),
-                          child: Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Icon(
-                                selected
-                                    ? Icons.radio_button_checked
-                                    : Icons.radio_button_off,
-                                color: selected
-                                    ? NavigoColors.primaryOrange
-                                    : NavigoColors.textMuted,
-                              ),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      widget.scheduleService.lineOf(slot),
-                                      style: NavigoTextStyles.bodyMedium
-                                          .copyWith(
-                                            fontWeight: FontWeight.w700,
-                                            color: NavigoColors.textDark,
-                                            fontSize: 14,
-                                          ),
-                                    ),
-                                    const SizedBox(height: 3),
-                                    Text(
-                                      '${widget.scheduleService.fromOf(slot)} → ${widget.scheduleService.toOf(slot)}',
-                                      style: NavigoTextStyles.bodySmall
-                                          .copyWith(
-                                            fontSize: 12,
-                                            color: NavigoColors.textMuted,
-                                          ),
-                                    ),
-                                    const SizedBox(height: 8),
-                                    Wrap(
-                                      spacing: 12,
-                                      runSpacing: 8,
-                                      children: [
-                                        Text(
-                                          '${PassengerScheduleService.formatDate(slot.departureAt)} • ${PassengerScheduleService.formatTime(slot.departureAt)}',
-                                          style: NavigoTextStyles.bodySmall
-                                              .copyWith(fontSize: 12),
-                                        ),
-                                        Text(
-                                          'Seats: $available',
-                                          style: NavigoTextStyles.bodySmall
-                                              .copyWith(fontSize: 12),
-                                        ),
-                                        Text(
-                                          'Price: ${widget.scheduleService.priceTextOf(slot)}',
-                                          style: NavigoTextStyles.bodySmall
-                                              .copyWith(fontSize: 12),
-                                        ),
-                                      ],
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      );
-                    },
-                  ),
-          ),
-          SafeArea(
-            top: false,
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(16, 10, 16, 16),
-              child: SizedBox(
-                width: double.infinity,
-                height: NavigoSizes.buttonHeightLarge,
-                child: ElevatedButton(
-                  onPressed: _isConfirming ? null : _confirm,
-                  style: NavigoDecorations.kPrimaryButtonLargeStyle,
-                  child: _isConfirming
-                      ? const SizedBox(
-                          height: 22,
-                          width: 22,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Text(
-                          'Confirm schedule',
-                          style: NavigoTextStyles.button,
-                        ),
-                ),
-              ),
-            ),
-          ),
-        ],
       ),
     );
   }

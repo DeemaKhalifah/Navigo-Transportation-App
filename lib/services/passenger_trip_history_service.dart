@@ -60,7 +60,7 @@ class PassengerTripHistoryService {
           final raw = rawSlots[i];
           if (raw is! Map) continue;
 
-          final map = Map<String, dynamic>.from(raw as Map);
+          final map = Map<String, dynamic>.from(raw);
           final slot = ScheduleSlot.fromMap('slot_$i', map);
 
           if (!slot.passengersIds.contains(uid)) continue;
@@ -179,7 +179,7 @@ class PassengerTripHistoryService {
     } else if (hours > 0) {
       return '${hours}h';
     } else {
-      return '${minutes} min';
+      return '$minutes min';
     }
   }
 }
