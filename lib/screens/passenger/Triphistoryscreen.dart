@@ -1,109 +1,12 @@
 import 'package:flutter/material.dart';
+
+import '../../models/schedule_slot.dart';
+import '../../models/trip_status.dart';
+import '../../services/passenger_trip_history_service.dart';
 import '../../theme/app_theme.dart';
-import 'PassengerBottomNavBar.dart';
 import '../passenger/PassengerHomeScreen.dart';
+import 'PassengerBottomNavBar.dart';
 
-// ── TRIP MODEL ────────────────────────────────────────────────────────────────
-enum TripStatus { completed, cancelled, ongoing }
-
-class Trip {
-  final String id;
-  final String line;
-  final String from;
-  final String to;
-  final String date;
-  final String time;
-  final String duration;
-  final String price;
-  final int seats;
-  final String vehicleType;
-  final TripStatus status;
-
-  const Trip({
-    required this.id,
-    required this.line,
-    required this.from,
-    required this.to,
-    required this.date,
-    required this.time,
-    required this.duration,
-    required this.price,
-    required this.seats,
-    required this.vehicleType,
-    required this.status,
-  });
-}
-
-// ── DUMMY DATA ────────────────────────────────────────────────────────────────
-const List<Trip> _trips = [
-  Trip(
-    id: 'T001',
-    line: 'Birzeit ↔ Ramallah (Line 12)',
-    from: 'Birzeit – Main Gate',
-    to: 'Ramallah – Al-Manara',
-    date: '01 Apr 2026',
-    time: '09:50',
-    duration: '20 min',
-    price: '6.00 NIS',
-    seats: 1,
-    vehicleType: 'Bus',
-    status: TripStatus.ongoing,
-  ),
-  Trip(
-    id: 'T002',
-    line: 'Birzeit ↔ Ramallah (Line 12)',
-    from: 'Ramallah – Bus Station',
-    to: 'Birzeit – Main Gate',
-    date: '31 Mar 2026',
-    time: '14:30',
-    duration: '22 min',
-    price: '6.00 NIS',
-    seats: 2,
-    vehicleType: 'Mini Bus',
-    status: TripStatus.completed,
-  ),
-  Trip(
-    id: 'T003',
-    line: 'Birzeit ↔ Ramallah (Line 12)',
-    from: 'Birzeit – Main Gate',
-    to: 'Ramallah – Bus Station',
-    date: '29 Mar 2026',
-    time: '08:15',
-    duration: '20 min',
-    price: '6.00 NIS',
-    seats: 1,
-    vehicleType: 'Bus',
-    status: TripStatus.cancelled,
-  ),
-  Trip(
-    id: 'T004',
-    line: 'Birzeit ↔ Ramallah (Line 12)',
-    from: 'Al-Bireh – Roundabout',
-    to: 'Birzeit – Main Gate',
-    date: '27 Mar 2026',
-    time: '17:00',
-    duration: '18 min',
-    price: '6.00 NIS',
-    seats: 1,
-    vehicleType: 'Bus',
-    status: TripStatus.completed,
-  ),
-  Trip(
-    id: 'T005',
-    line: 'Birzeit ↔ Ramallah (Line 12)',
-    from: 'Birzeit – Main Gate',
-    to: 'Ramallah – Al-Manara',
-    date: '25 Mar 2026',
-    time: '11:00',
-    duration: '20 min',
-    price: '6.00 NIS',
-    seats: 3,
-    vehicleType: 'Mini Bus',
-    status: TripStatus.completed,
-  ),
-];
-
-// ── SCREEN ────────────────────────────────────────────────────────────────────
 class TripHistoryScreen extends StatefulWidget {
   const TripHistoryScreen({super.key});
 
@@ -112,59 +15,48 @@ class TripHistoryScreen extends StatefulWidget {
 }
 
 class _TripHistoryScreenState extends State<TripHistoryScreen> {
-  TripStatus? _filterStatus; // null = show all
+  final PassengerTripHistoryService _historyService =
+      PassengerTripHistoryService();
 
-  List<Trip> get _filtered => _filterStatus == null
-      ? _trips
-      : _trips.where((t) => t.status == _filterStatus).toList();
+  String _filterStatus = TripStatus.all;
 
-  // ── STATUS HELPERS ────────────────────────────────────────────────────────
-  Color _statusColor(TripStatus s) {
-    switch (s) {
+  List<ScheduleSlot> _applyFilter(List<ScheduleSlot> slots) {
+    if (_filterStatus == TripStatus.all) return slots;
+
+    return slots.where((slot) {
+      return _historyService.statusOf(slot) == _filterStatus;
+    }).toList();
+  }
+
+  Color _statusColor(String status) {
+    switch (TripStatus.normalize(status)) {
       case TripStatus.completed:
         return NavigoColors.accentGreen;
       case TripStatus.cancelled:
         return NavigoColors.accentRed;
-      case TripStatus.ongoing:
+      case TripStatus.scheduled:
+        return NavigoColors.primaryOrange;
+      default:
         return NavigoColors.primaryOrange;
     }
   }
 
-  String _statusLabel(TripStatus s) {
-    switch (s) {
-      case TripStatus.completed:
-        return 'Completed';
-      case TripStatus.cancelled:
-        return 'Cancelled';
-      case TripStatus.ongoing:
-        return 'Ongoing';
-    }
-  }
-
-  IconData _statusIcon(TripStatus s) {
-    switch (s) {
+  IconData _statusIcon(String status) {
+    switch (TripStatus.normalize(status)) {
       case TripStatus.completed:
         return Icons.check_circle_outline;
       case TripStatus.cancelled:
         return Icons.cancel_outlined;
-      case TripStatus.ongoing:
-        return Icons.directions_bus;
+      case TripStatus.scheduled:
+        return Icons.schedule;
+      default:
+        return Icons.schedule;
     }
   }
 
-  // ── BOTTOM SHEET ──────────────────────────────────────────────────────────
-  void _showDetails(Trip trip) {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: NavigoColors.transparent,
-      builder: (_) => _TripDetailSheet(trip: trip),
-    );
-  }
-
-  // ── FILTER CHIP ───────────────────────────────────────────────────────────
-  Widget _filterChip({required String label, required TripStatus? value}) {
+  Widget _filterChip({required String label, required String value}) {
     final selected = _filterStatus == value;
+
     return NavigoDecorations.selectorChip(
       label: label,
       selected: selected,
@@ -172,7 +64,16 @@ class _TripHistoryScreenState extends State<TripHistoryScreen> {
     );
   }
 
-  // ── BUILD ─────────────────────────────────────────────────────────────────
+  void _showDetails(ScheduleSlot slot) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: NavigoColors.transparent,
+      builder: (_) =>
+          _TripHistoryDetailsSheet(slot: slot, historyService: _historyService),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -182,7 +83,6 @@ class _TripHistoryScreenState extends State<TripHistoryScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // ── HEADER ──────────────────────────────────────
             NavigoDecorations.topBar(
               onBack: () => Navigator.pushReplacement(
                 context,
@@ -194,19 +94,19 @@ class _TripHistoryScreenState extends State<TripHistoryScreen> {
               padding: const EdgeInsets.symmetric(horizontal: 20),
               child: Text('Trip History', style: NavigoTextStyles.titleLarge),
             ),
-
             const SizedBox(height: 12),
-
-            // ── FILTER CHIPS ─────────────────────────────────
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
               child: SingleChildScrollView(
                 scrollDirection: Axis.horizontal,
                 child: Row(
                   children: [
-                    _filterChip(label: 'All', value: null),
+                    _filterChip(label: 'All', value: TripStatus.all),
                     const SizedBox(width: 7),
-                    _filterChip(label: 'Ongoing', value: TripStatus.ongoing),
+                    _filterChip(
+                      label: 'Scheduled',
+                      value: TripStatus.scheduled,
+                    ),
                     const SizedBox(width: 7),
                     _filterChip(
                       label: 'Completed',
@@ -221,106 +121,123 @@ class _TripHistoryScreenState extends State<TripHistoryScreen> {
                 ),
               ),
             ),
-
             const SizedBox(height: 16),
-
-            // ── TRIP LIST ────────────────────────────────────
             Expanded(
-              child: _filtered.isEmpty
-                  ? Center(
+              child: StreamBuilder<List<ScheduleSlot>>(
+                stream: _historyService.watchPassengerTripHistory(),
+                builder: (context, snapshot) {
+                  if (snapshot.connectionState == ConnectionState.waiting) {
+                    return const Center(child: CircularProgressIndicator());
+                  }
+
+                  if (snapshot.hasError) {
+                    return Center(
+                      child: Padding(
+                        padding: const EdgeInsets.all(20),
+                        child: Text(
+                          'Failed to load trip history.\n${snapshot.error}',
+                          textAlign: TextAlign.center,
+                          style: NavigoTextStyles.bodySmall,
+                        ),
+                      ),
+                    );
+                  }
+
+                  final slots = _applyFilter(snapshot.data ?? []);
+
+                  if (slots.isEmpty) {
+                    return Center(
                       child: Text(
                         'No trips found.',
                         style: NavigoTextStyles.bodySmall,
                       ),
-                    )
-                  : ListView.separated(
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      itemCount: _filtered.length,
-                      separatorBuilder: (_, _) => const SizedBox(height: 12),
-                      itemBuilder: (_, i) {
-                        final trip = _filtered[i];
-                        return GestureDetector(
-                          onTap: () => _showDetails(trip),
-                          child: Container(
-                            padding: const EdgeInsets.all(16),
-                            decoration: NavigoDecorations.kCardDecoration,
-                            child: Row(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                // Status icon circle
-                                Container(
-                                  width: 42,
-                                  height: 42,
-                                  decoration:
-                                      NavigoDecorations.iconCircleDecoration(
-                                        _statusColor(trip.status),
-                                      ),
-                                  child: Icon(
-                                    _statusIcon(trip.status),
-                                    color: _statusColor(trip.status),
-                                    size: 22,
-                                  ),
+                    );
+                  }
+
+                  return ListView.separated(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    itemCount: slots.length,
+                    separatorBuilder: (_, _) => const SizedBox(height: 12),
+                    itemBuilder: (_, index) {
+                      final slot = slots[index];
+                      final status = _historyService.statusOf(slot);
+
+                      return GestureDetector(
+                        onTap: () => _showDetails(slot),
+                        child: Container(
+                          padding: const EdgeInsets.all(16),
+                          decoration: NavigoDecorations.kCardDecoration,
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Container(
+                                width: 42,
+                                height: 42,
+                                decoration:
+                                    NavigoDecorations.iconCircleDecoration(
+                                      _statusColor(status),
+                                    ),
+                                child: Icon(
+                                  _statusIcon(status),
+                                  color: _statusColor(status),
+                                  size: 22,
                                 ),
-
-                                const SizedBox(width: 12),
-
-                                // Trip info
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        trip.line,
-                                        style: NavigoTextStyles.bodyMedium
-                                            .copyWith(
-                                              fontWeight: FontWeight.w700,
-                                              color: NavigoColors.textDark,
-                                              fontSize: 14,
-                                            ),
-                                      ),
-                                      const SizedBox(height: 4),
-                                      Text(
-                                        '${trip.from}  →  ${trip.to}',
-                                        style: NavigoTextStyles.bodySmall,
-                                      ),
-                                      const SizedBox(height: 6),
-                                      Row(
-                                        children: [
-                                          const Icon(
-                                            Icons.calendar_today,
-                                            size: 13,
-                                            color: NavigoColors.textMuted,
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      _historyService.lineOf(slot),
+                                      style: NavigoTextStyles.bodyMedium
+                                          .copyWith(
+                                            fontWeight: FontWeight.w700,
+                                            color: NavigoColors.textDark,
+                                            fontSize: 14,
                                           ),
-                                          const SizedBox(width: 4),
-                                          Text(
-                                            '${trip.date}  •  ${trip.time}',
-                                            style: NavigoTextStyles.bodySmall
-                                                .copyWith(fontSize: 12),
-                                          ),
-                                        ],
-                                      ),
-                                    ],
-                                  ),
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      '${_historyService.fromOf(slot)}  →  ${_historyService.toOf(slot)}',
+                                      style: NavigoTextStyles.bodySmall,
+                                    ),
+                                    const SizedBox(height: 6),
+                                    Row(
+                                      children: [
+                                        const Icon(
+                                          Icons.calendar_today,
+                                          size: 13,
+                                          color: NavigoColors.textMuted,
+                                        ),
+                                        const SizedBox(width: 4),
+                                        Text(
+                                          '${PassengerTripHistoryService.formatDate(slot.departureAt)}  •  ${PassengerTripHistoryService.formatTime(slot.departureAt)}',
+                                          style: NavigoTextStyles.bodySmall
+                                              .copyWith(fontSize: 12),
+                                        ),
+                                      ],
+                                    ),
+                                  ],
                                 ),
-
-                                // Status badge
-                                NavigoDecorations.statusChip(
-                                  label: _statusLabel(trip.status),
-                                  color: _statusColor(trip.status),
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 10,
-                                    vertical: 4,
-                                  ),
+                              ),
+                              NavigoDecorations.statusChip(
+                                label: TripStatus.label(status),
+                                color: _statusColor(status),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 10,
+                                  vertical: 4,
                                 ),
-                              ],
-                            ),
+                              ),
+                            ],
                           ),
-                        );
-                      },
-                    ),
+                        ),
+                      );
+                    },
+                  );
+                },
+              ),
             ),
-
             const SizedBox(height: 8),
           ],
         ),
@@ -329,31 +246,25 @@ class _TripHistoryScreenState extends State<TripHistoryScreen> {
   }
 }
 
-// ── TRIP DETAIL BOTTOM SHEET ──────────────────────────────────────────────────
-class _TripDetailSheet extends StatelessWidget {
-  final Trip trip;
+class _TripHistoryDetailsSheet extends StatelessWidget {
+  const _TripHistoryDetailsSheet({
+    required this.slot,
+    required this.historyService,
+  });
 
-  const _TripDetailSheet({required this.trip});
+  final ScheduleSlot slot;
+  final PassengerTripHistoryService historyService;
 
-  Color get _statusColor {
-    switch (trip.status) {
+  Color _statusColor(String status) {
+    switch (TripStatus.normalize(status)) {
       case TripStatus.completed:
         return NavigoColors.accentGreen;
       case TripStatus.cancelled:
         return NavigoColors.accentRed;
-      case TripStatus.ongoing:
+      case TripStatus.scheduled:
         return NavigoColors.primaryOrange;
-    }
-  }
-
-  String get _statusLabel {
-    switch (trip.status) {
-      case TripStatus.completed:
-        return 'Completed';
-      case TripStatus.cancelled:
-        return 'Cancelled';
-      case TripStatus.ongoing:
-        return 'Ongoing';
+      default:
+        return NavigoColors.primaryOrange;
     }
   }
 
@@ -383,6 +294,8 @@ class _TripDetailSheet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final status = historyService.statusOf(slot);
+
     return Container(
       decoration: NavigoDecorations.kBottomSheetDecoration,
       padding: const EdgeInsets.fromLTRB(20, 12, 20, 28),
@@ -390,46 +303,48 @@ class _TripDetailSheet extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Drag handle
           Center(child: NavigoDecorations.dragHandle()),
-
           const SizedBox(height: 20),
-
-          // Title + status badge
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text('Trip Details', style: NavigoTextStyles.titleSmall),
               NavigoDecorations.statusChip(
-                label: _statusLabel,
-                color: _statusColor,
+                label: TripStatus.label(status),
+                color: _statusColor(status),
               ),
             ],
           ),
-
           const SizedBox(height: 16),
-
-          // Divider
           Divider(color: NavigoColors.primaryOrange.withOpacity(0.3)),
-
           const SizedBox(height: 8),
-
-          // Details rows
-          _row('Trip ID', trip.id),
-          _row('Line', trip.line),
-          _row('From', trip.from),
-          _row('To', trip.to),
-          _row('Date', trip.date),
-          _row('Time', trip.time),
-          _row('Duration', trip.duration),
-          _row('Price', trip.price),
-          _row('Seats', trip.seats.toString()),
-          _row('Vehicle', trip.vehicleType),
-
+          _row('Slot ID', slot.slotId),
+          _row('Route ID', slot.routeId),
+          _row('Line', historyService.lineOf(slot)),
+          _row('From', historyService.fromOf(slot)),
+          _row('To', historyService.toOf(slot)),
+          _row(
+            'Date',
+            PassengerTripHistoryService.formatDate(slot.departureAt),
+          ),
+          _row(
+            'Departure',
+            PassengerTripHistoryService.formatTime(slot.departureAt),
+          ),
+          _row(
+            'Arrival',
+            PassengerTripHistoryService.formatTime(slot.arrivalAt),
+          ),
+          _row('Duration', historyService.durationTextOf(slot)),
+          _row('Price', historyService.priceTextOf(slot)),
+          _row('Seats', slot.capacity.toString()),
+          _row('Vehicle', historyService.vehicleTypeTextOf(slot)),
+          _row(
+            'Driver ID',
+            slot.driverId.isEmpty ? 'Not assigned' : slot.driverId,
+          ),
           const SizedBox(height: 20),
-
-          // Track button — only for ongoing trips
-          if (trip.status == TripStatus.ongoing)
+          if (status == TripStatus.scheduled)
             SizedBox(
               width: double.infinity,
               height: 52,
@@ -445,7 +360,7 @@ class _TripDetailSheet extends StatelessWidget {
                 },
                 style: NavigoDecorations.kPrimaryButtonLargeStyle,
                 icon: const Icon(Icons.location_on, size: 20),
-                label: const Text('Track Live', style: NavigoTextStyles.button),
+                label: const Text('View Route', style: NavigoTextStyles.button),
               ),
             ),
         ],

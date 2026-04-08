@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'trip_status.dart';
 
 /// Embedded in `route/{routeId}` under the `scheduleSlots` array field.
 class ScheduleSlot {
@@ -19,6 +20,9 @@ class ScheduleSlot {
   /// Bus only: repeat interval in minutes (optional metadata / generation).
   final int? frequencyMinutes;
 
+  /// NEW: Trip status
+  final String status;
+
   ScheduleSlot({
     required this.slotId,
     required this.routeId,
@@ -30,6 +34,7 @@ class ScheduleSlot {
     this.driverId = '',
     List<String>? passengersIds,
     this.frequencyMinutes,
+    this.status = TripStatus.scheduled, // default
   }) : passengersIds = passengersIds ?? const [];
 
   DateTime get serviceDate =>
@@ -45,14 +50,19 @@ class ScheduleSlot {
       'vehicleType': vehicleType,
       'driverId': driverId,
       'passengersIds': passengersIds,
+      'status': status, // ✅ added
     };
     if (price != null) m['price'] = price;
     if (frequencyMinutes != null) m['frequencyMinutes'] = frequencyMinutes;
     return m;
   }
 
-  factory ScheduleSlot.fromMap(String fallbackSlotId, Map<String, dynamic> map) {
+  factory ScheduleSlot.fromMap(
+    String fallbackSlotId,
+    Map<String, dynamic> map,
+  ) {
     final id = map['slotId'] as String? ?? fallbackSlotId;
+
     return ScheduleSlot(
       slotId: id,
       routeId: map['routeId'] as String? ?? '',
@@ -64,6 +74,9 @@ class ScheduleSlot {
       driverId: map['driverId'] as String? ?? '',
       passengersIds: _parseIdList(map['passengersIds']),
       frequencyMinutes: (map['frequencyMinutes'] as num?)?.toInt(),
+
+      // ✅ NEW: normalize status from Firestore
+      status: TripStatus.normalize(map['status']),
     );
   }
 

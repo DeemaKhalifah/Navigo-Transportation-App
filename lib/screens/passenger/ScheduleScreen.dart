@@ -68,10 +68,12 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
       setState(() => _routeId = route.routeId);
 
       _slotsSubscription?.cancel();
-      _slotsSubscription = _tripRepository.watchSlotsForRoute(route.routeId).listen((slots) {
-        if (!mounted) return;
-        setState(() => _slots = slots);
-      });
+      _slotsSubscription = _tripRepository
+          .watchSlotsForRoute(route.routeId)
+          .listen((slots) {
+            if (!mounted) return;
+            setState(() => _slots = slots);
+          });
     } catch (_) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -154,11 +156,13 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
 
     final matchingSlot = _slots.where((slot) {
       final dep = slot.departureAt;
-      final sameDate = dep.year == selectedDateTime.year &&
+      final sameDate =
+          dep.year == selectedDateTime.year &&
           dep.month == selectedDateTime.month &&
           dep.day == selectedDateTime.day;
       final sameTime =
-          dep.hour == selectedDateTime.hour && dep.minute == selectedDateTime.minute;
+          dep.hour == selectedDateTime.hour &&
+          dep.minute == selectedDateTime.minute;
       if (!sameDate || !sameTime) return false;
       if (_vehicleType == 'Bus') {
         return slot.vehicleType.toLowerCase().contains('bus');
