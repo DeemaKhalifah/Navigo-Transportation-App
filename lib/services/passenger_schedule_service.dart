@@ -1,0 +1,350 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/material.dart';
+
+import '../models/schedule_slot.dart';
+import '../models/trip_status.dart';
+
+class PassengerScheduleService {
+  PassengerScheduleService({FirebaseFirestore? firestore, FirebaseAuth? auth})
+    : _db = firestore ?? FirebaseFirestore.instance,
+      _auth = auth ?? FirebaseAuth.instance;
+
+  final FirebaseFirestore _db;
+  final FirebaseAuth _auth;
+
+  static const String _routesCollection = 'route';
+
+  final Map<String, String> _lineBySlotId = {};
+  final Map<String, String> _fromBySlotId = {};
+  final Map<String, String> _toBySlotId = {};
+  final Map<String, int> _availableSeatsBySlotId = {};
+  final Map<String, String> _statusBySlotId = {};
+
+  String? get currentUserId => _auth.currentUser?.uid;
+
+  Future<List<ScheduleSlot>> findAvailableSchedules({
+    String? selectedLine,
+    String? vehicleType,
+    DateTime? selectedDate,
+    TimeOfDay? selectedTime,
+  }) async {
+    final snapshot = await _db.collection(_routesCollection).get();
+
+    final String normalizedLine = (selectedLine ?? '').trim().toLowerCase();
+    final String normalizedVehicle = (vehicleType ?? '').trim().toLowerCase();
+
+    final List<ScheduleSlot> candidates = [];
+
+    _lineBySlotId.clear();
+    _fromBySlotId.clear();
+    _toBySlotId.clear();
+    _availableSeatsBySlotId.clear();
+    _statusBySlotId.clear();
+
+    for (final doc in snapshot.docs) {
+      final data = doc.data();
+
+      final String routeId = doc.id;
+      final String fromText = (data['startPoint'] ?? data['from'] ?? '')
+          .toString()
+          .trim();
+      final String toText = (data['endPoint'] ?? data['to'] ?? '')
+          .toString()
+          .trim();
+      final String lineText =
+          (data['line'] ?? data['routeName'] ?? '$fromText ↔ $toText')
+              .toString()
+              .trim();
+
+      if (normalizedLine.isNotEmpty &&
+          !lineText.toLowerCase().contains(normalizedLine)) {
+        continue;
+      }
+
+      final rawSlots = data['scheduleSlots'];
+      if (rawSlots is! List) continue;
+
+      for (int i = 0; i < rawSlots.length; i++) {
+        final raw = rawSlots[i];
+        if (raw is! Map) continue;
+
+        final map = Map<String, dynamic>.from(raw as Map);
+        final slot = ScheduleSlot.fromMap('slot_$i', map);
+
+        final String slotStatus = TripStatus.normalize(map['status']);
+        if (slotStatus != TripStatus.scheduled) continue;
+
+        if (normalizedVehicle.isNotEmpty &&
+            slot.vehicleType.toLowerCase() != normalizedVehicle &&
+            !slot.vehicleType.toLowerCase().contains(normalizedVehicle)) {
+          continue;
+        }
+
+        final int availableSeats = slot.capacity - slot.passengersIds.length;
+        if (availableSeats <= 0) continue;
+
+        final ScheduleSlot fixedSlot = ScheduleSlot(
+          slotId: slot.slotId,
+          routeId: slot.routeId.isEmpty ? routeId : slot.routeId,
+          departureAt: slot.departureAt,
+          arrivalAt: slot.arrivalAt,
+          price: slot.price,
+          capacity: slot.capacity,
+          vehicleType: slot.vehicleType,
+          driverId: slot.driverId,
+          passengersIds: List<String>.from(slot.passengersIds),
+          frequencyMinutes: slot.frequencyMinutes,
+          status: slotStatus,
+        );
+
+        candidates.add(fixedSlot);
+
+        _lineBySlotId[fixedSlot.slotId] = lineText.isEmpty
+            ? 'Route ${fixedSlot.routeId}'
+            : lineText;
+        _fromBySlotId[fixedSlot.slotId] = fromText.isEmpty
+            ? 'Unknown start'
+            : fromText;
+        _toBySlotId[fixedSlot.slotId] = toText.isEmpty
+            ? 'Unknown destination'
+            : toText;
+        _availableSeatsBySlotId[fixedSlot.slotId] = availableSeats;
+        _statusBySlotId[fixedSlot.slotId] = slotStatus;
+      }
+    }
+
+    candidates.sort((a, b) => a.departureAt.compareTo(b.departureAt));
+
+    final bool noFilters =
+        normalizedLine.isEmpty &&
+        normalizedVehicle.isEmpty &&
+        selectedDate == null &&
+        selectedTime == null;
+
+    if (noFilters) return candidates;
+
+    List<ScheduleSlot> filtered = candidates;
+
+    if (selectedDate != null) {
+      filtered = filtered.where((slot) {
+        return slot.departureAt.year == selectedDate.year &&
+            slot.departureAt.month == selectedDate.month &&
+            slot.departureAt.day == selectedDate.day;
+      }).toList();
+    }
+
+    if (selectedTime == null) {
+      return filtered;
+    }
+
+    final List<ScheduleSlot> exactMatches = filtered.where((slot) {
+      return slot.departureAt.hour == selectedTime.hour &&
+          slot.departureAt.minute == selectedTime.minute;
+    }).toList();
+
+    if (exactMatches.isNotEmpty) {
+      return exactMatches;
+    }
+
+    final int selectedMinutes = selectedTime.hour * 60 + selectedTime.minute;
+
+    final List<ScheduleSlot> nearestMatches = filtered.where((slot) {
+      final int slotMinutes =
+          slot.departureAt.hour * 60 + slot.departureAt.minute;
+      final int diff = (slotMinutes - selectedMinutes).abs();
+      return diff <= 60;
+    }).toList();
+
+    nearestMatches.sort((a, b) {
+      final int aMinutes = a.departureAt.hour * 60 + a.departureAt.minute;
+      final int bMinutes = b.departureAt.hour * 60 + b.departureAt.minute;
+      final int aDiff = (aMinutes - selectedMinutes).abs();
+      final int bDiff = (bMinutes - selectedMinutes).abs();
+      return aDiff.compareTo(bDiff);
+    });
+
+    return nearestMatches;
+  }
+
+  Future<void> confirmSchedule({
+    required ScheduleSlot slot,
+    required int seatsToBook,
+  }) async {
+    final uid = currentUserId;
+    if (uid == null) {
+      throw Exception('User is not logged in.');
+    }
+
+    if (seatsToBook <= 0) {
+      throw Exception('Please select at least 1 seat.');
+    }
+
+    final routeRef = _db.collection(_routesCollection).doc(slot.routeId);
+
+    await _db.runTransaction((tx) async {
+      final snap = await tx.get(routeRef);
+
+      if (!snap.exists) {
+        throw Exception('Route not found.');
+      }
+
+      final data = snap.data() as Map<String, dynamic>;
+      final rawList = (data['scheduleSlots'] as List? ?? []);
+
+      final List<Map<String, dynamic>> scheduleSlots = rawList
+          .map((e) => Map<String, dynamic>.from(e as Map))
+          .toList();
+
+      final index = scheduleSlots.indexWhere((item) {
+        return (item['slotId'] ?? '').toString() == slot.slotId;
+      });
+
+      if (index == -1) {
+        throw Exception('Schedule slot not found.');
+      }
+
+      final Map<String, dynamic> currentMap = Map<String, dynamic>.from(
+        scheduleSlots[index],
+      );
+
+      final ScheduleSlot currentSlot = ScheduleSlot.fromMap(
+        slot.slotId,
+        currentMap,
+      );
+
+      final int availableSeats =
+          currentSlot.capacity - currentSlot.passengersIds.length;
+
+      if (seatsToBook > availableSeats) {
+        throw Exception(
+          'Only $availableSeats seat(s) are available for this schedule.',
+        );
+      }
+
+      final List<String> updatedPassengers = List<String>.from(
+        currentSlot.passengersIds,
+      );
+
+      for (int i = 0; i < seatsToBook; i++) {
+        updatedPassengers.add(uid);
+      }
+
+      currentMap['passengersIds'] = updatedPassengers;
+      currentMap['status'] = TripStatus.scheduled;
+
+      scheduleSlots[index] = currentMap;
+
+      tx.update(routeRef, {'scheduleSlots': scheduleSlots});
+    });
+  }
+
+  ScheduleSlot applyLocalBooking({
+    required ScheduleSlot slot,
+    required int seatsBooked,
+    required String? userId,
+  }) {
+    final uid = userId ?? currentUserId ?? '';
+
+    final updatedPassengers = List<String>.from(slot.passengersIds);
+    for (int i = 0; i < seatsBooked; i++) {
+      updatedPassengers.add(uid);
+    }
+
+    final updatedSlot = ScheduleSlot(
+      slotId: slot.slotId,
+      routeId: slot.routeId,
+      departureAt: slot.departureAt,
+      arrivalAt: slot.arrivalAt,
+      price: slot.price,
+      capacity: slot.capacity,
+      vehicleType: slot.vehicleType,
+      driverId: slot.driverId,
+      passengersIds: updatedPassengers,
+      frequencyMinutes: slot.frequencyMinutes,
+      status: slot.status,
+    );
+
+    _availableSeatsBySlotId[slot.slotId] =
+        updatedSlot.capacity - updatedSlot.passengersIds.length;
+
+    return updatedSlot;
+  }
+
+  String lineOf(ScheduleSlot slot) {
+    return _lineBySlotId[slot.slotId] ?? 'Route ${slot.routeId}';
+  }
+
+  String fromOf(ScheduleSlot slot) {
+    return _fromBySlotId[slot.slotId] ?? 'Unknown start';
+  }
+
+  String toOf(ScheduleSlot slot) {
+    return _toBySlotId[slot.slotId] ?? 'Unknown destination';
+  }
+
+  int availableSeatsOf(ScheduleSlot slot) {
+    return _availableSeatsBySlotId[slot.slotId] ??
+        (slot.capacity - slot.passengersIds.length);
+  }
+
+  String statusOf(ScheduleSlot slot) {
+    return _statusBySlotId[slot.slotId] ?? TripStatus.scheduled;
+  }
+
+  String priceTextOf(ScheduleSlot slot) {
+    if (slot.price == null) return 'N/A';
+    return '${slot.price!.toStringAsFixed(2)} NIS';
+  }
+
+  String vehicleTextOf(ScheduleSlot slot) {
+    return capitalize(slot.vehicleType);
+  }
+
+  String durationTextOf(ScheduleSlot slot) {
+    return formatDuration(slot.arrivalAt.difference(slot.departureAt));
+  }
+
+  static String capitalize(String value) {
+    if (value.isEmpty) return value;
+    return value[0].toUpperCase() + value.substring(1).toLowerCase();
+  }
+
+  static String formatDate(DateTime dt) {
+    const months = [
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
+    ];
+    return '${dt.day.toString().padLeft(2, '0')} ${months[dt.month - 1]} ${dt.year}';
+  }
+
+  static String formatTime(DateTime dt) {
+    final h = dt.hour.toString().padLeft(2, '0');
+    final m = dt.minute.toString().padLeft(2, '0');
+    return '$h:$m';
+  }
+
+  static String formatDuration(Duration d) {
+    final totalMinutes = d.inMinutes.abs();
+    final hours = totalMinutes ~/ 60;
+    final minutes = totalMinutes % 60;
+
+    if (hours > 0 && minutes > 0) {
+      return '${hours}h ${minutes}m';
+    } else if (hours > 0) {
+      return '${hours}h';
+    } else {
+      return '${minutes} min';
+    }
+  }
+}
