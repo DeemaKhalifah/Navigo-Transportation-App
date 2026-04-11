@@ -4,10 +4,9 @@ import '../models/driver_status.dart';
 import 'route_driver_queue_service.dart';
 import 'schedule_slot_repository.dart';
 
-/// Manually assign an [available] driver to a schedule slot (replaces prior driver if any).
 class ManualDriverAssignmentService {
   ManualDriverAssignmentService({FirebaseFirestore? firestore})
-      : _db = firestore ?? FirebaseFirestore.instance;
+    : _db = firestore ?? FirebaseFirestore.instance;
 
   final FirebaseFirestore _db;
 
@@ -57,10 +56,7 @@ class ManualDriverAssignmentService {
       final q = RouteDriverQueueService.parseIds(rData['driverQueueIds']);
       q.removeWhere((id) => id == newDriverId);
 
-      txn.update(routeRef, {
-        'scheduleSlots': list,
-        'driverQueueIds': q,
-      });
+      txn.update(routeRef, {'scheduleSlots': list, 'driverQueueIds': q});
       txn.update(newRef, {'status': DriverStatus.assigned});
     });
   }

@@ -46,9 +46,9 @@ class ReportModel {
   static UserModel _parseUser(Map<String, dynamic> map) {
     switch (map["role"]) {
       case "driver":
-        return DriverModel.fromMap(map);
+      //return DriverModel.fromMap(map);
       case "passenger":
-        return Passenger.fromMap(map);
+      //return Passenger.fromMap(map);
       case "route_manager":
         return RouteManagerModel.fromMap(map);
       default:

@@ -1,5 +1,8 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
+import '../../models/trip_driver_request.dart';
+import '../../services/trip_driver_request_service.dart';
 import '../../theme/app_theme.dart';
 import 'DriverBottomNavBar.dart';
 import 'DriverHomeScreen.dart';
@@ -12,71 +15,185 @@ class DriverRequestsScreen extends StatefulWidget {
 }
 
 class _DriverRequestsScreenState extends State<DriverRequestsScreen> {
-  String searchText = "";
-  bool nearbyOnly = false;
+  final TripDriverRequestService _requestService = TripDriverRequestService();
+  String _searchText = '';
+  final Set<String> _busyIds = {};
 
-  late List<Map<String, dynamic>> requests;
+  String? get _driverId => FirebaseAuth.instance.currentUser?.uid;
 
   @override
-  void initState() {
-    super.initState();
-    requests = [
-      {
-        "passenger": "Cileen",
-        "route": "Birzeit → Ramallah",
-        "pickup": "Birzeit - Main Gate",
-        "dropoff": "Ramallah - Al-Manara",
-        "isNearby": true,
-      },
-      {
-        "passenger": "Ahmad",
-        "route": "Al-Bireh → Ramallah",
-        "pickup": "Al-Bireh - Roundabout",
-        "dropoff": "Ramallah - Al-Manara",
-        "isNearby": true,
-      },
-      {
-        "passenger": "Rawan",
-        "route": "Birzeit → Nablus",
-        "pickup": "Birzeit - Campus Gate",
-        "dropoff": "Nablus - City Center",
-        "isNearby": false,
-      },
-    ];
+  Widget build(BuildContext context) {
+    final driverId = _driverId;
+
+    return Scaffold(
+      backgroundColor: NavigoColors.backgroundLight,
+      bottomNavigationBar: const DriverBottomNavBar(currentIndex: 2),
+      body: SafeArea(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            NavigoDecorations.topBar(
+              onBack: () => Navigator.pushReplacement(
+                context,
+                MaterialPageRoute(builder: (_) => const DriverHomeScreen()),
+              ),
+              context: context,
+            ),
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 20),
+              child: Text('Trip Requests', style: NavigoTextStyles.titleLarge),
+            ),
+            const SizedBox(height: 16),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: TextField(
+                decoration: NavigoDecorations.kInputDecoration.copyWith(
+                  hintText: 'Search requests...',
+                  prefixIcon: const Icon(
+                    Icons.search,
+                    color: NavigoColors.accentGreen,
+                  ),
+                  fillColor: NavigoColors.surfaceWhite,
+                ),
+                onChanged: (value) => setState(() => _searchText = value),
+              ),
+            ),
+            const SizedBox(height: 18),
+            Expanded(
+              child: driverId == null || driverId.isEmpty
+                  ? Center(
+                      child: Text(
+                        'Sign in to see requests.',
+                        style: NavigoTextStyles.bodySmall,
+                      ),
+                    )
+                  : StreamBuilder<List<TripDriverRequest>>(
+                      stream: _requestService.watchPendingForDriver(driverId),
+                      builder: (context, snapshot) {
+                        if (snapshot.connectionState == ConnectionState.waiting) {
+                          return const Center(
+                            child: CircularProgressIndicator(),
+                          );
+                        }
+                        if (snapshot.hasError) {
+                          return Center(
+                            child: Padding(
+                              padding: const EdgeInsets.all(20),
+                              child: Text(
+                                'Could not load requests.\n${snapshot.error}',
+                                textAlign: TextAlign.center,
+                                style: NavigoTextStyles.bodySmall,
+                              ),
+                            ),
+                          );
+                        }
+
+                        final all = snapshot.data ?? [];
+                        final q = _searchText.trim().toLowerCase();
+                        final filtered = q.isEmpty
+                            ? all
+                            : all.where((r) {
+                                final hay = [
+                                  r.lineLabel,
+                                  r.startPoint,
+                                  r.endPoint,
+                                  r.pickupDescription,
+                                  r.passengerId,
+                                ].join(' ').toLowerCase();
+                                return hay.contains(q);
+                              }).toList();
+
+                        if (filtered.isEmpty) {
+                          return Center(
+                            child: Text(
+                              all.isEmpty
+                                  ? 'No pending requests'
+                                  : 'No requests match your search',
+                              style: NavigoTextStyles.bodySmall,
+                            ),
+                          );
+                        }
+
+                        return ListView.separated(
+                          padding: const EdgeInsets.symmetric(horizontal: 16),
+                          itemCount: filtered.length,
+                          separatorBuilder: (_, _) => const SizedBox(height: 12),
+                          itemBuilder: (context, index) {
+                            return _RequestCard(
+                              request: filtered[index],
+                              busy: _busyIds.contains(filtered[index].requestId),
+                              onDecline: () => _respond(
+                                filtered[index].requestId,
+                                accept: false,
+                              ),
+                              onAccept: () => _respond(
+                                filtered[index].requestId,
+                                accept: true,
+                              ),
+                              nameFuture: _requestService.passengerDisplayName(
+                                filtered[index].passengerId,
+                              ),
+                            );
+                          },
+                        );
+                      },
+                    ),
+            ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
   }
 
-  List<Map<String, dynamic>> get filteredRequests {
-    return requests.where((request) {
-      final passenger = request["passenger"].toString().toLowerCase();
-      final pickup = request["pickup"].toString().toLowerCase();
-      final dropoff = request["dropoff"].toString().toLowerCase();
-      final route = request["route"].toString().toLowerCase();
-      final query = searchText.toLowerCase();
-
-      final matchesSearch =
-          query.isEmpty ||
-          passenger.contains(query) ||
-          pickup.contains(query) ||
-          dropoff.contains(query) ||
-          route.contains(query);
-
-      final matchesNearby = !nearbyOnly || request["isNearby"] == true;
-
-      return matchesSearch && matchesNearby;
-    }).toList();
+  Future<void> _respond(String requestId, {required bool accept}) async {
+    setState(() => _busyIds.add(requestId));
+    try {
+      if (accept) {
+        await _requestService.acceptRequest(requestId);
+      } else {
+        await _requestService.declineRequest(requestId);
+      }
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(accept ? 'Request accepted' : 'Request declined'),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            e.toString().replaceFirst('Exception: ', ''),
+          ),
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _busyIds.remove(requestId));
+      }
+    }
   }
+}
 
-  void _removeRequest(Map<String, dynamic> request, String actionText) {
-    setState(() {
-      requests.remove(request);
-    });
+class _RequestCard extends StatelessWidget {
+  const _RequestCard({
+    required this.request,
+    required this.busy,
+    required this.onDecline,
+    required this.onAccept,
+    required this.nameFuture,
+  });
 
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text("Request $actionText")));
-  }
+  final TripDriverRequest request;
+  final bool busy;
+  final VoidCallback onDecline;
+  final VoidCallback onAccept;
+  final Future<String?> nameFuture;
 
-  Widget buildRequestCard(Map<String, dynamic> request) {
+  @override
+  Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: NavigoDecorations.kCardDecoration,
@@ -91,185 +208,87 @@ class _DriverRequestsScreenState extends State<DriverRequestsScreen> {
                 size: 20,
               ),
               const SizedBox(width: 8),
-              Text(
-                request["passenger"],
-                style: NavigoTextStyles.bodyMedium.copyWith(
-                  fontWeight: FontWeight.w700,
-                  color: NavigoColors.textDark,
+              Expanded(
+                child: FutureBuilder<String?>(
+                  future: nameFuture,
+                  builder: (context, snap) {
+                    final name = snap.data;
+                    return Text(
+                      name == null || name.isEmpty
+                          ? 'Passenger ${request.passengerId.length > 6 ? request.passengerId.substring(0, 6) : request.passengerId}…'
+                          : name,
+                      style: NavigoTextStyles.bodyMedium.copyWith(
+                        fontWeight: FontWeight.w700,
+                        color: NavigoColors.textDark,
+                      ),
+                    );
+                  },
                 ),
               ),
             ],
           ),
-
           const SizedBox(height: 10),
-
           Text(
-            request["route"],
+            request.lineLabel.isNotEmpty
+                ? request.lineLabel
+                : '${request.startPoint} → ${request.endPoint}',
             style: NavigoTextStyles.bodyMedium.copyWith(
               fontWeight: FontWeight.w600,
               color: NavigoColors.textDark,
             ),
           ),
-
           const SizedBox(height: 6),
-
           Text(
-            "Pickup: ${request["pickup"]}",
+            'Pickup: ${request.pickupDescription.isEmpty ? '—' : request.pickupDescription}',
             style: NavigoTextStyles.bodySmall,
           ),
-
           const SizedBox(height: 4),
-
           Text(
-            "Drop-off: ${request["dropoff"]}",
+            'To: ${request.endPoint.isEmpty ? '—' : request.endPoint}',
             style: NavigoTextStyles.bodySmall,
           ),
-
+          const SizedBox(height: 4),
+          Text(
+            'Seats: ${request.seatsRequested}',
+            style: NavigoTextStyles.bodySmall,
+          ),
+          if (request.routeId.isNotEmpty)
+            Text(
+              'Route: ${request.routeId}',
+              style: NavigoTextStyles.bodySmall,
+            ),
+          if (request.scheduleId.isNotEmpty)
+            Text(
+              'Trip slot: ${request.scheduleId}',
+              style: NavigoTextStyles.bodySmall,
+            ),
           const SizedBox(height: 16),
-
           Row(
             children: [
               Expanded(
                 child: ElevatedButton(
-                  onPressed: () {
-                    _removeRequest(request, "Declined");
-                  },
-                  style: NavigoDecorations.coloredButton(
-                    NavigoColors.accentRed,
-                  ),
-                  child: const Text("Decline"),
+                  onPressed: busy ? null : onDecline,
+                  style: NavigoDecorations.coloredButton(NavigoColors.accentRed),
+                  child: const Text('Decline'),
                 ),
               ),
               const SizedBox(width: 10),
               Expanded(
                 child: ElevatedButton(
-                  onPressed: () {
-                    _removeRequest(request, "Accepted");
-                  },
+                  onPressed: busy ? null : onAccept,
                   style: NavigoDecorations.kPrimaryButtonLargeStyle,
-                  child: const Text("Accept"),
+                  child: busy
+                      ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Text('Accept'),
                 ),
               ),
             ],
           ),
         ],
-      ),
-    );
-  }
-
-  Widget buildNearbyButton() {
-    return GestureDetector(
-      onTap: () {
-        setState(() {
-          nearbyOnly = !nearbyOnly;
-        });
-      },
-      child: Container(
-        height: 45,
-        padding: const EdgeInsets.symmetric(horizontal: 14),
-        decoration: NavigoDecorations.selectorDecoration(
-          selected: nearbyOnly,
-        ).copyWith(color: nearbyOnly ? null : NavigoColors.lightorange),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              Icons.near_me,
-              size: 16,
-              color: nearbyOnly
-                  ? NavigoColors.textLight
-                  : NavigoColors.primaryOrange,
-            ),
-            const SizedBox(width: 5),
-            Text(
-              "Nearby",
-              style: NavigoTextStyles.chip.copyWith(
-                color: nearbyOnly
-                    ? NavigoColors.textLight
-                    : NavigoColors.primaryOrange,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: NavigoColors.backgroundLight,
-      bottomNavigationBar: const DriverBottomNavBar(currentIndex: 2),
-      body: SafeArea(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            NavigoDecorations.topBar(
-              onBack: () => Navigator.pushReplacement(
-                context,
-                MaterialPageRoute(builder: (_) => DriverHomeScreen()),
-              ),
-              context: context,
-            ),
-            const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 20),
-              child: Text("Trip Requests", style: NavigoTextStyles.titleLarge),
-            ),
-
-            const SizedBox(height: 16),
-
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: TextField(
-                      decoration: NavigoDecorations.kInputDecoration.copyWith(
-                        hintText: "Search requests...",
-                        prefixIcon: const Icon(
-                          Icons.search,
-                          color: NavigoColors.accentGreen,
-                        ),
-                        fillColor: NavigoColors.surfaceWhite,
-                      ),
-                      onChanged: (value) {
-                        setState(() {
-                          searchText = value;
-                        });
-                      },
-                    ),
-                  ),
-
-                  const SizedBox(width: 10),
-
-                  buildNearbyButton(),
-                ],
-              ),
-            ),
-
-            const SizedBox(height: 18),
-
-            Expanded(
-              child: filteredRequests.isEmpty
-                  ? Center(
-                      child: Text(
-                        "No requests found",
-                        style: NavigoTextStyles.bodySmall,
-                      ),
-                    )
-                  : ListView.separated(
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      itemCount: filteredRequests.length,
-                      separatorBuilder: (_, _) => const SizedBox(height: 12),
-                      itemBuilder: (_, index) {
-                        return buildRequestCard(filteredRequests[index]);
-                      },
-                    ),
-            ),
-
-            const SizedBox(height: 8),
-          ],
-        ),
       ),
     );
   }

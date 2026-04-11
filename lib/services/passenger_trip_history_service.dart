@@ -65,18 +65,12 @@ class PassengerTripHistoryService {
 
           if (!slot.passengersIds.contains(uid)) continue;
 
-          final rawStatus = TripStatus.normalize(
-            (map['status'] ?? '').toString(),
+          final String finalStatus = _resolvePassengerTripStatus(
+            rawStatus: map['status'],
+            departureAt: slot.departureAt,
+            arrivalAt: slot.arrivalAt,
+            now: now,
           );
-
-          String finalStatus;
-          if (rawStatus == TripStatus.cancelled) {
-            finalStatus = TripStatus.cancelled;
-          } else if (slot.departureAt.isAfter(now)) {
-            finalStatus = TripStatus.scheduled;
-          } else {
-            finalStatus = TripStatus.completed;
-          }
 
           final fixedSlot = ScheduleSlot(
             slotId: slot.slotId,
@@ -87,8 +81,9 @@ class PassengerTripHistoryService {
             capacity: slot.capacity,
             vehicleType: slot.vehicleType,
             driverId: slot.driverId,
-            passengersIds: slot.passengersIds,
+            passengersIds: List<String>.from(slot.passengersIds),
             frequencyMinutes: slot.frequencyMinutes,
+            status: finalStatus,
           );
 
           slots.add(fixedSlot);
@@ -111,6 +106,41 @@ class PassengerTripHistoryService {
     });
   }
 
+  String _resolvePassengerTripStatus({
+    required dynamic rawStatus,
+    required DateTime departureAt,
+    required DateTime arrivalAt,
+    required DateTime now,
+  }) {
+    final normalized = TripStatus.normalize(rawStatus?.toString());
+
+    if (normalized == TripStatus.cancelled) {
+      return TripStatus.cancelled;
+    }
+
+    if (normalized == TripStatus.onTrip) {
+      return TripStatus.onTrip;
+    }
+
+    if (normalized == TripStatus.completed) {
+      return TripStatus.completed;
+    }
+
+    if (normalized == TripStatus.scheduled) {
+      return TripStatus.scheduled;
+    }
+
+    if (now.isBefore(departureAt)) {
+      return TripStatus.scheduled;
+    }
+
+    if (now.isAfter(arrivalAt)) {
+      return TripStatus.completed;
+    }
+
+    return TripStatus.onTrip;
+  }
+
   String lineOf(ScheduleSlot slot) {
     return _lineBySlotId[slot.slotId] ?? 'Route ${slot.routeId}';
   }
@@ -124,7 +154,7 @@ class PassengerTripHistoryService {
   }
 
   String statusOf(ScheduleSlot slot) {
-    return _statusBySlotId[slot.slotId] ?? TripStatus.completed;
+    return _statusBySlotId[slot.slotId] ?? slot.status;
   }
 
   String priceTextOf(ScheduleSlot slot) {

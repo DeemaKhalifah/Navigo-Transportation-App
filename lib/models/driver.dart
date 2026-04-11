@@ -1,90 +1,93 @@
-import 'driver_status.dart';
-import 'user.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
-class DriverModel extends UserModel {
-  /// Same as [userId] for auth-backed drivers; document id is `drivers/{driverId}`.
+class Driver {
   final String driverId;
-  final String vehicleId;
-  final String routeId;
+  final String fullName;
+  final String phoneNumber;
 
-  /// `offline` | `available` | `assigned` | `onTrip` — see [DriverStatus].
   final String status;
- 
+  final bool isOnline;
   final bool isApproved;
 
-  DriverModel({
-    required super.userId,
-    required super.firstName,
-    required super.lastName,
-    required super.phone,
-    super.image,
-    required super.role,
-    required super.isVerified,
-    super.isOnline,
-    String? driverId,
-    required this.vehicleId,
-    required this.routeId,
-    required this.status,
-    required this.isApproved,
-  })  : driverId = driverId ?? userId;
+  // 🔹 LOCATION (stored on `drivers` collection only)
+  final double? latitude;
+  final double? longitude;
+  final DateTime? lastLocationUpdate;
 
-  @override
+  Driver({
+    required this.driverId,
+    required this.fullName,
+    required this.phoneNumber,
+    required this.status,
+    required this.isOnline,
+    required this.isApproved,
+    this.latitude,
+    this.longitude,
+    this.lastLocationUpdate,
+  });
+
+  // 🔹 TO MAP
   Map<String, dynamic> toMap() {
     return {
-      'userId': userId,
       'driverId': driverId,
-      'firstName': firstName,
-      'lastName': lastName,
-      'phone': phone,
-      'image': image,
-      'role': role,
-      'isVerified': isVerified,
+      'fullName': fullName,
+      'phoneNumber': phoneNumber,
+      'status': status,
       'isOnline': isOnline,
-      'vehicleId': vehicleId,
-      'routeId': routeId,
-      'status': status,
       'isApproved': isApproved,
+
+      // LOCATION
+      'latitude': latitude,
+      'longitude': longitude,
+      'location': latitude != null && longitude != null
+          ? {'lat': latitude, 'lng': longitude}
+          : null,
+      'lastLocationUpdate': lastLocationUpdate != null
+          ? Timestamp.fromDate(lastLocationUpdate!)
+          : null,
     };
   }
 
-  /// Fields stored under `drivers/{driverId}` (typically `driverId` == auth uid).
-  Map<String, dynamic> toDriverMap() {
-    return {
-      'userId': userId,
-      'routeId': routeId,
-      'vehicleId': vehicleId,
-      'status': status,
-      'isApproved': isApproved,
-    };
+  // 🔹 FROM MAP
+  factory Driver.fromMap(Map<String, dynamic> map) {
+    return Driver(
+      driverId: map['driverId'] ?? '',
+      fullName: map['fullName'] ?? '',
+      phoneNumber: map['phoneNumber'] ?? '',
+      status: map['status'] ?? 'offline',
+      isOnline: map['isOnline'] ?? false,
+      isApproved: map['isApproved'] ?? false,
+
+      latitude: _getLat(map),
+      longitude: _getLng(map),
+      lastLocationUpdate: _parseDate(map['lastLocationUpdate']),
+    );
   }
 
-  factory DriverModel.fromMap(Map<String, dynamic> map) {
-    final legacyVehicle = map['vehicle'] as String?;
-    final legacyRoute = map['route'] as String?;
-    final uid = map['userId'] ?? '';
-    final did = map['driverId'] as String? ?? uid;
+  // 🔹 HELPERS
+  static double? _getLat(Map<String, dynamic> map) {
+    if (map['latitude'] != null) return (map['latitude'] as num).toDouble();
 
-    final legacyAvailability = map['availability'];
-    final rawStatus = map['status'];
-    String resolvedStatus = DriverStatus.normalize(rawStatus as String?);
-    if (rawStatus == null && legacyAvailability == true) {
-      resolvedStatus = DriverStatus.available;
+    if (map['location'] is Map && map['location']['lat'] != null) {
+      return (map['location']['lat'] as num).toDouble();
     }
 
-    return DriverModel(
-      userId: uid,
-      firstName: map['firstName'] ?? '',
-      lastName: map['lastName'] ?? '',
-      phone: map['phone'] ?? '',
-      image: map['image'],
-      role: map['role'] ?? 'driver',
-      isVerified: map['isVerified'] ?? false,
-      isOnline: map['isOnline'] ?? false,
-      driverId: did,
-      vehicleId: map['vehicleId'] as String? ?? legacyVehicle ?? '',
-      routeId: map['routeId'] as String? ?? legacyRoute ?? '',
-      status: resolvedStatus,
-      isApproved: map['isApproved'] ?? false,
-    );
+    return null;
+  }
+
+  static double? _getLng(Map<String, dynamic> map) {
+    if (map['longitude'] != null) return (map['longitude'] as num).toDouble();
+
+    if (map['location'] is Map && map['location']['lng'] != null) {
+      return (map['location']['lng'] as num).toDouble();
+    }
+
+    return null;
+  }
+
+  static DateTime? _parseDate(dynamic value) {
+    if (value == null) return null;
+    if (value is Timestamp) return value.toDate();
+    return null;
   }
 }

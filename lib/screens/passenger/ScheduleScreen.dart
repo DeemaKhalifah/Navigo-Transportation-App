@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
 
 import '../../models/schedule_slot.dart';
 import '../../services/local_storage_service.dart';
 import '../../services/passenger_schedule_service.dart';
+import '../../services/passenger_trip_repository.dart';
 import '../../theme/app_theme.dart';
 import 'PassengerBottomNavBar.dart';
 import 'passengerHomeScreen.dart';
@@ -18,6 +20,9 @@ class ScheduleScreen extends StatefulWidget {
 
 class _ScheduleScreenState extends State<ScheduleScreen> {
   final PassengerScheduleService _scheduleService = PassengerScheduleService();
+  final PassengerTripRepository _tripRepository = PassengerTripRepository();
+  final TextEditingController _manualPickupController =
+      TextEditingController();
 
   String? _selectedLine;
   String? _vehicleType;
@@ -36,6 +41,12 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
     _bootstrapFromWidgetOrStorage();
   }
 
+  @override
+  void dispose() {
+    _manualPickupController.dispose();
+    super.dispose();
+  }
+
   Future<void> _bootstrapFromWidgetOrStorage() async {
     String? line = widget.selectedLine?.trim();
     _lineFilterFromNavigation = line != null && line.isNotEmpty;
@@ -46,6 +57,19 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
     if (!mounted) return;
     setState(() => _selectedLine = line);
     await _loadSchedules();
+    await _prefillPickupFromSavedMap();
+  }
+
+  Future<void> _prefillPickupFromSavedMap() async {
+    try {
+      final saved = await _tripRepository.getSavedPassengerLocation();
+      if (!mounted || saved == null) return;
+      final label =
+          '${saved.latitude.toStringAsFixed(6)}, ${saved.longitude.toStringAsFixed(6)}';
+      if (_manualPickupController.text.trim().isEmpty) {
+        setState(() => _manualPickupController.text = label);
+      }
+    } catch (_) {}
   }
 
   Future<void> _pickDate() async {
@@ -232,10 +256,31 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                                 if (sheetSeatCount > availableSeats) return;
                                 setSheetState(() => isConfirming = true);
                                 try {
+                                  final LatLng? pickupLatLng =
+                                      await _tripRepository
+                                          .getSavedPassengerLocation();
+                                  if (pickupLatLng == null) {
+                                    throw Exception(
+                                      'Set your pickup on the home map (tap the map or use My Location), then try again.',
+                                    );
+                                  }
+
                                   await _scheduleService.confirmSchedule(
                                     slot: slot,
                                     seatsToBook: sheetSeatCount,
                                   );
+
+                                  final pickupNote =
+                                      _manualPickupController.text.trim();
+                                  await _tripRepository
+                                      .syncPassengerDocumentLocation(
+                                        pickupLatLng,
+                                        pickupLocationDescription:
+                                            pickupNote.isEmpty
+                                            ? null
+                                            : pickupNote,
+                                      );
+
                                   final updated = _scheduleService
                                       .applyLocalBooking(
                                         slot: slot,
@@ -250,8 +295,9 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                                           s.slotId == updated.slotId &&
                                           s.routeId == updated.routeId,
                                     );
-                                    if (index != -1)
+                                    if (index != -1) {
                                       _schedules[index] = updated;
+                                    }
                                     _schedules = _schedules
                                         .where(
                                           (s) =>
@@ -284,8 +330,9 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                                     ),
                                   );
                                 } finally {
-                                  if (sheetContext.mounted)
+                                  if (sheetContext.mounted) {
                                     setSheetState(() => isConfirming = false);
+                                  }
                                 }
                               },
                         style: NavigoDecorations.kPrimaryButtonLargeStyle,
@@ -389,6 +436,26 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                           ),
                         );
                       }).toList(),
+                    ),
+                    const SizedBox(height: 20),
+                    Text('Pickup location', style: NavigoTextStyles.label),
+                    const SizedBox(height: 6),
+                    Text(
+                      'Defaults to the point selected on the home map. You can edit the text (e.g. street or landmark).',
+                      style: NavigoTextStyles.bodySmall.copyWith(
+                        color: NavigoColors.textMuted,
+                        fontSize: 12,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    TextField(
+                      controller: _manualPickupController,
+                      maxLines: 2,
+                      decoration: NavigoDecorations.kInputDecoration.copyWith(
+                        hintText: 'Pickup description',
+                        filled: true,
+                        fillColor: NavigoColors.surfaceWhite,
+                      ),
                     ),
                     const SizedBox(height: 20),
 

@@ -4,9 +4,14 @@ abstract class TripStatus {
   static const scheduled = 'scheduled';
   static const completed = 'completed';
   static const cancelled = 'cancelled';
+  static const onTrip = 'onTrip';
 
   static bool isValid(String? s) {
-    return s == all || s == scheduled || s == completed || s == cancelled;
+    return s == all ||
+        s == scheduled ||
+        s == completed ||
+        s == cancelled ||
+        s == onTrip;
   }
 
   /// Maps Firestore / legacy strings to canonical values.
@@ -22,6 +27,9 @@ abstract class TripStatus {
     if (s == 'scheduled') return scheduled;
     if (s == 'completed') return completed;
     if (s == 'cancelled') return cancelled;
+    if (s == 'ontrip') return onTrip;
+    if (s == 'ongoing') return onTrip;
+    if (s == 'inprogress') return onTrip;
 
     return scheduled;
   }
@@ -34,6 +42,8 @@ abstract class TripStatus {
         return 'Completed';
       case cancelled:
         return 'Cancelled';
+      case onTrip:
+        return 'On Trip';
       case all:
         return 'All';
       default:

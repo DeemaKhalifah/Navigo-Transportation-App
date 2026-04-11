@@ -6,6 +6,7 @@ import '../../services/passenger_trip_history_service.dart';
 import '../../theme/app_theme.dart';
 import '../passenger/PassengerHomeScreen.dart';
 import 'PassengerBottomNavBar.dart';
+import 'PassengerLiveTrackScreen.dart';
 
 class TripHistoryScreen extends StatefulWidget {
   const TripHistoryScreen({super.key});
@@ -34,6 +35,8 @@ class _TripHistoryScreenState extends State<TripHistoryScreen> {
         return NavigoColors.accentGreen;
       case TripStatus.cancelled:
         return NavigoColors.accentRed;
+      case TripStatus.onTrip:
+        return NavigoColors.accentBlue;
       case TripStatus.scheduled:
         return NavigoColors.primaryOrange;
       default:
@@ -47,6 +50,8 @@ class _TripHistoryScreenState extends State<TripHistoryScreen> {
         return Icons.check_circle_outline;
       case TripStatus.cancelled:
         return Icons.cancel_outlined;
+      case TripStatus.onTrip:
+        return Icons.directions_bus;
       case TripStatus.scheduled:
         return Icons.schedule;
       default:
@@ -107,6 +112,8 @@ class _TripHistoryScreenState extends State<TripHistoryScreen> {
                       label: 'Scheduled',
                       value: TripStatus.scheduled,
                     ),
+                    const SizedBox(width: 7),
+                    _filterChip(label: 'On Trip', value: TripStatus.onTrip),
                     const SizedBox(width: 7),
                     _filterChip(
                       label: 'Completed',
@@ -261,6 +268,8 @@ class _TripHistoryDetailsSheet extends StatelessWidget {
         return NavigoColors.accentGreen;
       case TripStatus.cancelled:
         return NavigoColors.accentRed;
+      case TripStatus.onTrip:
+        return NavigoColors.accentBlue;
       case TripStatus.scheduled:
         return NavigoColors.primaryOrange;
       default:
@@ -344,14 +353,35 @@ class _TripHistoryDetailsSheet extends StatelessWidget {
             slot.driverId.isEmpty ? 'Not assigned' : slot.driverId,
           ),
           const SizedBox(height: 20),
-          if (status == TripStatus.scheduled)
+          if (status == TripStatus.scheduled || status == TripStatus.onTrip)
             SizedBox(
               width: double.infinity,
               height: 52,
               child: ElevatedButton.icon(
                 onPressed: () {
                   Navigator.pop(context);
-                  Navigator.push(
+                  if (status == TripStatus.onTrip) {
+                    if (slot.driverId.trim().isEmpty) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('No driver assigned for this trip yet.'),
+                        ),
+                      );
+                      return;
+                    }
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => PassengerLiveTrackScreen(
+                          driverId: slot.driverId.trim(),
+                          routeId: slot.routeId,
+                          slotId: slot.slotId,
+                        ),
+                      ),
+                    );
+                    return;
+                  }
+                  Navigator.pushReplacement(
                     context,
                     MaterialPageRoute(
                       builder: (_) => const PassengerHomeScreen(),
@@ -360,7 +390,12 @@ class _TripHistoryDetailsSheet extends StatelessWidget {
                 },
                 style: NavigoDecorations.kPrimaryButtonLargeStyle,
                 icon: const Icon(Icons.location_on, size: 20),
-                label: const Text('View Route', style: NavigoTextStyles.button),
+                label: Text(
+                  status == TripStatus.onTrip
+                      ? 'Track Live Trip'
+                      : 'View Route',
+                  style: NavigoTextStyles.button,
+                ),
               ),
             ),
         ],

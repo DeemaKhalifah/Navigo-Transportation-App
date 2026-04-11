@@ -1,84 +1,101 @@
-import 'user.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
-class Passenger extends UserModel {
-  /// Trip IDs — Firestore field is typically `TripHistory` (see [toPassengerMap]).
-  final List<String> tripHistory;
+class Passenger {
+  final String passengerId;
+  final String fullName;
+  final String phoneNumber;
 
-  /// Payment data — Firestore field is `paymentMethod` (list or single entry).
-  final List<dynamic> paymentMethod;
+  // 🔹 LOCATION
+  final double? latitude;
+  final double? longitude;
+  final DateTime? lastLocationUpdate;
+
+  /// Manual pickup label or address (e.g. from schedule screen).
+  final String? pickupLocationDescription;
 
   Passenger({
-    required super.userId,
-    required super.firstName,
-    required super.lastName,
-    required super.phone,
-    super.image,
-    required super.role,
-    required super.isVerified,
-    super.isOnline,
-    required this.tripHistory,
-    required this.paymentMethod,
+    required this.passengerId,
+    required this.fullName,
+    required this.phoneNumber,
+    this.latitude,
+    this.longitude,
+    this.lastLocationUpdate,
+    this.pickupLocationDescription,
   });
 
-  @override
+  // 🔹 TO MAP
   Map<String, dynamic> toMap() {
-    return {
-      'userId': userId,
-      'firstName': firstName,
-      'lastName': lastName,
-      'phone': phone,
-      'image': image,
-      'role': role,
-      'isVerified': isVerified,
-      'isOnline': isOnline,
+    final map = <String, dynamic>{
+      'passengerId': passengerId,
+      'fullName': fullName,
+      'phoneNumber': phoneNumber,
+
+      // LOCATION
+      'latitude': latitude,
+      'longitude': longitude,
+      'location': latitude != null && longitude != null
+          ? {'lat': latitude, 'lng': longitude}
+          : null,
+      'lastLocationUpdate': lastLocationUpdate != null
+          ? Timestamp.fromDate(lastLocationUpdate!)
+          : null,
     };
+
+    final pickup = pickupLocationDescription?.trim();
+    if (pickup != null && pickup.isNotEmpty) {
+      map['pickupLocationDescription'] = pickup;
+      map['pickup'] = pickup;
+    }
+
+    return map;
   }
 
-  /// Fields stored under `passengers/{uid}`.
-  Map<String, dynamic> toPassengerMap() {
-    return {
-      'TripHistory': tripHistory,
-      'paymentMethod': paymentMethod,
-    };
-  }
-
+  // 🔹 FROM MAP
   factory Passenger.fromMap(Map<String, dynamic> map) {
     return Passenger(
-      userId: map['userId'] ?? '',
-      firstName: map['firstName'] ?? '',
-      lastName: map['lastName'] ?? '',
-      phone: map['phone'] ?? '',
-      image: map['image'],
-      role: map['role'] ?? 'passenger',
-      isVerified: map['isVerified'] ?? false,
-      isOnline: map['isOnline'] ?? false,
-      tripHistory: _parseTripHistory(map),
-      paymentMethod: _parsePaymentMethod(map),
+      passengerId: map['passengerId'] ?? '',
+      fullName: map['fullName'] ?? '',
+      phoneNumber: map['phoneNumber'] ?? '',
+
+      latitude: _getLat(map),
+      longitude: _getLng(map),
+      lastLocationUpdate: _parseDate(map['lastLocationUpdate']),
+      pickupLocationDescription: _pickupDescription(map),
     );
   }
 
-  static List<String> _parseTripHistory(Map<String, dynamic> map) {
-    for (final key in ['TripHistory', 'tripHistory', 'tripIds']) {
-      final v = map[key];
-      if (v is List) {
-        return v.map((e) => e.toString()).toList();
-      }
-    }
-    return [];
+  static String? _pickupDescription(Map<String, dynamic> map) {
+    final direct = map['pickupLocationDescription']?.toString().trim();
+    if (direct != null && direct.isNotEmpty) return direct;
+    final pickup = map['pickup']?.toString().trim();
+    if (pickup != null && pickup.isNotEmpty) return pickup;
+    return null;
   }
 
-  static List<dynamic> _parsePaymentMethod(Map<String, dynamic> map) {
-    final single = map['paymentMethod'];
-    if (single is List) {
-      return List<dynamic>.from(single);
+  // 🔹 HELPERS
+  static double? _getLat(Map<String, dynamic> map) {
+    if (map['latitude'] != null) return (map['latitude'] as num).toDouble();
+
+    if (map['location'] is Map && map['location']['lat'] != null) {
+      return (map['location']['lat'] as num).toDouble();
     }
-    if (single != null) {
-      return [single];
+
+    return null;
+  }
+
+  static double? _getLng(Map<String, dynamic> map) {
+    if (map['longitude'] != null) return (map['longitude'] as num).toDouble();
+
+    if (map['location'] is Map && map['location']['lng'] != null) {
+      return (map['location']['lng'] as num).toDouble();
     }
-    final legacy = map['paymentMethods'];
-    if (legacy is List) {
-      return List<dynamic>.from(legacy);
-    }
-    return [];
+
+    return null;
+  }
+
+  static DateTime? _parseDate(dynamic value) {
+    if (value == null) return null;
+    if (value is Timestamp) return value.toDate();
+    return null;
   }
 }

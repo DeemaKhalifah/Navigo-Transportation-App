@@ -2,10 +2,9 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 
 import 'route_driver_queue_service.dart';
 
-/// Driver queue is stored on `route/{routeId}` as `driverQueueIds` (ordered uids).
 class DriverQueueRepository {
   DriverQueueRepository({FirebaseFirestore? firestore})
-      : _queueSvc = RouteDriverQueueService(firestore: firestore);
+    : _queueSvc = RouteDriverQueueService(firestore: firestore);
 
   final RouteDriverQueueService _queueSvc;
 

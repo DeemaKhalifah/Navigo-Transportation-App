@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:geolocator/geolocator.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
 
 import '../../theme/app_theme.dart';
+import '../../services/passenger_trip_repository.dart';
 import '../passenger/passengerHomeScreen.dart';
 import '../Driver/DriverHomeScreen.dart';
-import '../../models/driver.dart';
 import '../../models/driver_status.dart';
 import '../../models/Vehicle.dart';
 import '../../services/vehicle_seat_count.dart';
@@ -32,6 +34,9 @@ class OtpVerificationScreen extends StatefulWidget {
 }
 
 class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
+  final PassengerTripRepository _passengerTripRepository =
+      PassengerTripRepository();
+
   final List<TextEditingController> _otpControllers = List.generate(
     6,
     (_) => TextEditingController(),
@@ -39,6 +44,30 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
   final List<FocusNode> _focusNodes = List.generate(6, (_) => FocusNode());
 
   bool _isLoading = false;
+
+  Future<void> _capturePassengerLoginLocation() async {
+    try {
+      var permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+      }
+      if (permission == LocationPermission.denied ||
+          permission == LocationPermission.deniedForever) {
+        return;
+      }
+      if (!await Geolocator.isLocationServiceEnabled()) return;
+
+      final position = await Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.high,
+      );
+
+      await _passengerTripRepository.syncPassengerDocumentLocation(
+        LatLng(position.latitude, position.longitude),
+      );
+    } catch (e) {
+      debugPrint('Passenger login location: $e');
+    }
+  }
 
   @override
   void dispose() {
@@ -60,13 +89,24 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
     final fs = FirebaseFirestore.instance;
 
     String vehicleId = (driverInfo['vehicleId'] as String?)?.trim() ?? '';
+    final String plate = (driverInfo['plateNumber'] as String?)?.trim() ?? '';
+    final String vType =
+        (driverInfo['vehicleType'] as String?)?.trim() ?? 'Unknown';
+    final String license =
+        (driverInfo['licenseNumber'] as String?)?.trim() ?? '';
+    final String routeId =
+        (driverInfo['routeId'] as String?)?.trim() ??
+        (driverInfo['route'] as String?)?.trim() ??
+        '';
+    final String driverStatus =
+        (driverInfo['status'] as String?)?.trim().isNotEmpty == true
+        ? (driverInfo['status'] as String).trim()
+        : DriverStatus.offline;
+    final bool isApproved = driverInfo['isApproved'] == true;
 
     if (vehicleId.isEmpty) {
       final vehicleRef = fs.collection('vehicles').doc();
       vehicleId = vehicleRef.id;
-      final plate = driverInfo['plateNumber'] as String? ?? '';
-      final vType = driverInfo['vehicleType'] as String? ?? 'Unknown';
-      final license = driverInfo['licenseNumber'] as String? ?? '';
 
       final vehicle = Vehicle(
         vehicleId: vehicleId,
@@ -76,60 +116,57 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
         licenseNumber: license,
       );
 
-      final driver = DriverModel(
-        userId: uid,
-        firstName: firstName,
-        lastName: lastName,
-        phone: widget.phoneNumber,
-        image: null,
-        role: 'driver',
-        isVerified: true,
-        isOnline: false,
-        vehicleId: vehicleId,
-        routeId:
-            driverInfo['routeId'] as String? ??
-            driverInfo['route'] as String? ??
-            '',
-        status: driverInfo['status'] as String? ?? DriverStatus.offline,
-        isApproved: driverInfo['isApproved'] ?? false,
-      );
-
       final batch = fs.batch();
+
       batch.set(vehicleRef, {...vehicle.toMap(), 'driverId': uid});
-      batch.set(fs.collection('drivers').doc(uid), driver.toDriverMap());
+
+      batch.set(fs.collection('drivers').doc(uid), {
+        'userId': uid,
+        'firstName': firstName,
+        'lastName': lastName,
+        'phone': widget.phoneNumber,
+        'image': null,
+        'role': 'driver',
+        'isVerified': true,
+        'isOnline': false,
+        'vehicleId': vehicleId,
+        'routeId': routeId,
+        'status': driverStatus,
+        'isApproved': isApproved,
+        'latitude': null,
+        'longitude': null,
+        'location': null,
+        'lastLocationUpdate': null,
+      });
+
       await batch.commit();
     } else {
-      final driver = DriverModel(
-        userId: uid,
-        firstName: firstName,
-        lastName: lastName,
-        phone: widget.phoneNumber,
-        image: null,
-        role: 'driver',
-        isVerified: true,
-        isOnline: false,
-        vehicleId: vehicleId,
-        routeId:
-            driverInfo['routeId'] as String? ??
-            driverInfo['route'] as String? ??
-            '',
-        status: driverInfo['status'] as String? ?? DriverStatus.offline,
-        isApproved: driverInfo['isApproved'] ?? false,
-      );
-
-      await fs
-          .collection('drivers')
-          .doc(uid)
-          .set(driver.toDriverMap(), SetOptions(merge: true));
+      await fs.collection('drivers').doc(uid).set({
+        'userId': uid,
+        'firstName': firstName,
+        'lastName': lastName,
+        'phone': widget.phoneNumber,
+        'image': null,
+        'role': 'driver',
+        'isVerified': true,
+        'isOnline': false,
+        'vehicleId': vehicleId,
+        'routeId': routeId,
+        'status': driverStatus,
+        'isApproved': isApproved,
+        'latitude': null,
+        'longitude': null,
+        'location': null,
+        'lastLocationUpdate': null,
+      }, SetOptions(merge: true));
     }
 
     final driverDoc = await fs.collection('drivers').doc(uid).get();
-
-    final bool isApproved = driverDoc.data()?['isApproved'] ?? false;
+    final bool approved = driverDoc.data()?['isApproved'] == true;
 
     if (!mounted) return;
 
-    if (isApproved) {
+    if (approved) {
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(builder: (_) => const DriverHomeScreen()),
@@ -152,6 +189,13 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
       return;
     }
 
+    if (widget.verificationId.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Verification ID is missing.")),
+      );
+      return;
+    }
+
     setState(() => _isLoading = true);
 
     try {
@@ -164,32 +208,40 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
         credential,
       );
 
-      final uid = userCredential.user!.uid;
+      final user = userCredential.user;
+      if (user == null) {
+        throw Exception('User not found after verification.');
+      }
 
-      String firstName = "";
-      String lastName = "";
+      final uid = user.uid;
+
+      String firstName = '';
+      String lastName = '';
 
       if (widget.fullName != null && widget.fullName!.trim().isNotEmpty) {
-        final names = widget.fullName!.trim().split(" ");
-        firstName = names.isNotEmpty ? names.first : "";
-        lastName = names.length > 1 ? names.sublist(1).join(" ") : "";
+        final names = widget.fullName!.trim().split(RegExp(r'\s+'));
+        firstName = names.isNotEmpty ? names.first : '';
+        lastName = names.length > 1 ? names.sublist(1).join(' ') : '';
       }
 
       final Map<String, dynamic> userData = {
-        "userId": uid,
-        "phone": widget.phoneNumber,
-        "image": null,
-        "isVerified": true,
-        "isOnline": false,
+        'userId': uid,
+        'phone': widget.phoneNumber,
+        'image': null,
+        'isVerified': true,
+        'isOnline': false,
       };
 
-      if (widget.fullName != null && widget.fullName!.trim().isNotEmpty) {
-        userData["firstName"] = firstName;
-        userData["lastName"] = lastName;
+      if (firstName.isNotEmpty) {
+        userData['firstName'] = firstName;
       }
 
-      if (widget.role != null) {
-        userData["role"] = widget.role;
+      if (lastName.isNotEmpty) {
+        userData['lastName'] = lastName;
+      }
+
+      if (widget.role != null && widget.role!.trim().isNotEmpty) {
+        userData['role'] = widget.role!.trim();
       }
 
       await FirebaseFirestore.instance
@@ -197,11 +249,25 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
           .doc(uid)
           .set(userData, SetOptions(merge: true));
 
-      if (widget.role == "passenger") {
+      await FirebaseFirestore.instance.collection('users').doc(uid).update({
+        'latitude': FieldValue.delete(),
+        'longitude': FieldValue.delete(),
+        'location': FieldValue.delete(),
+        'lastLocationUpdate': FieldValue.delete(),
+      });
+
+      if (widget.role == 'passenger') {
         await FirebaseFirestore.instance.collection('passengers').doc(uid).set({
+          'userId': uid,
           'TripHistory': <String>[],
           'paymentMethod': <dynamic>[],
+          'latitude': null,
+          'longitude': null,
+          'location': null,
+          'lastLocationUpdate': null,
         }, SetOptions(merge: true));
+
+        await _capturePassengerLoginLocation();
 
         if (!mounted) return;
         Navigator.pushReplacement(
@@ -211,7 +277,7 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
         return;
       }
 
-      if (widget.role == "driver") {
+      if (widget.role == 'driver') {
         await _handleDriverFlow(
           uid: uid,
           firstName: firstName,
@@ -225,22 +291,24 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
           .doc(uid)
           .get();
 
-      final role = userDoc.data()?['role'];
+      final role = (userDoc.data()?['role'] ?? '').toString();
 
       if (!mounted) return;
 
-      if (role == "passenger") {
+      if (role == 'passenger') {
+        await _capturePassengerLoginLocation();
+        if (!mounted) return;
         Navigator.pushReplacement(
           context,
           MaterialPageRoute(builder: (_) => const PassengerHomeScreen()),
         );
-      } else if (role == "driver") {
+      } else if (role == 'driver') {
         final driverDoc = await FirebaseFirestore.instance
             .collection('drivers')
             .doc(uid)
             .get();
 
-        final bool isApproved = driverDoc.data()?['isApproved'] ?? false;
+        final bool isApproved = driverDoc.data()?['isApproved'] == true;
 
         if (!mounted) return;
 
@@ -261,14 +329,26 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
         ).showSnackBar(const SnackBar(content: Text("User role not found")));
       }
     } on FirebaseAuthException catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.message ?? "Verification failed")),
-      );
-    } catch (e) {
-      debugPrint("OTP verification error: $e");
+      String message = e.message ?? 'Verification failed';
+
+      if (e.code == 'invalid-verification-code') {
+        message = 'The OTP code is incorrect.';
+      } else if (e.code == 'session-expired') {
+        message = 'The OTP code has expired. Please request a new one.';
+      } else if (e.code == 'invalid-verification-id') {
+        message = 'Verification session is invalid. Please try again.';
+      }
+
+      if (!mounted) return;
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(SnackBar(content: Text("Error: $e")));
+      ).showSnackBar(SnackBar(content: Text(message)));
+    } catch (e) {
+      debugPrint('OTP verification error: $e');
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Error: $e')));
     } finally {
       if (mounted) {
         setState(() => _isLoading = false);
@@ -290,12 +370,12 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
         focusNode: _focusNodes[index],
         keyboardType: TextInputType.number,
         textAlign: TextAlign.center,
-        textAlignVertical: TextAlignVertical.center, // ← add this
+        textAlignVertical: TextAlignVertical.center,
         maxLength: 1,
         style: NavigoTextStyles.fieldText.copyWith(fontWeight: FontWeight.bold),
         decoration: InputDecoration(
           counterText: "",
-          contentPadding: EdgeInsets.zero, // ← add this
+          contentPadding: EdgeInsets.zero,
           filled: true,
           fillColor: NavigoColors.inputFill,
           border: OutlineInputBorder(

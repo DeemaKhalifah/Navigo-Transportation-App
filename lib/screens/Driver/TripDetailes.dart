@@ -1,6 +1,9 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
+import '../../models/route.dart';
+import '../../models/schedule_slot.dart';
+import '../../services/driver_trip_details_service.dart';
 import '../../services/trip_completion_service.dart';
 import '../../theme/app_theme.dart';
 import 'DriverBottomNavBar.dart';
@@ -13,11 +16,10 @@ class TripDetailes extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final passengers = [
-      {"name": "Ahmad Ali", "pickup": "Birzeit - Main Gate"},
-      {"name": "Lina Omar", "pickup": "Al-Bireh - Roundabout"},
-      {"name": "Celine Hanna", "pickup": "Ramallah - Clock Square"},
-    ];
+    final DriverTripDetailsService service = DriverTripDetailsService();
+
+    final String tripId = (trip['tripId'] ?? '').toString().trim();
+    final String? routeId = trip['routeId']?.toString();
 
     return Scaffold(
       backgroundColor: NavigoColors.backgroundLight,
@@ -26,12 +28,10 @@ class TripDetailes extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // ── TOP BAR ───────────────────────────────────────
             NavigoDecorations.topBar(
               onBack: () => Navigator.pop(context),
               context: context,
             ),
-            // ── HEADER ────────────────────────────────────────
             const Padding(
               padding: EdgeInsets.symmetric(horizontal: 20),
               child: Column(
@@ -46,139 +46,203 @@ class TripDetailes extends StatelessWidget {
                 ],
               ),
             ),
-
             const SizedBox(height: 16),
 
             Expanded(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: NavigoSizes.screenPadding,
+              child: FutureBuilder<Map<String, dynamic>?>(
+                future: service.getTripDetails(
+                  tripId: tripId,
+                  routeId: routeId,
                 ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // ── TRIP INFO CARD ─────────────────────────
-                    Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.all(14),
-                      decoration: NavigoDecorations.kCardDecoration,
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            trip["title"] ?? "Birzeit → Ramallah",
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: NavigoTextStyles.titleSmall.copyWith(
-                              fontSize: 14,
-                            ),
-                          ),
-                          const SizedBox(height: 6),
-                          Divider(
-                            color: NavigoColors.primaryOrange.withOpacity(0.3),
-                            height: 12,
-                          ),
-                          GridView.count(
-                            shrinkWrap: true,
-                            crossAxisCount: 2,
-                            childAspectRatio: 9,
-                            mainAxisSpacing: 4,
-                            crossAxisSpacing: 8,
-                            physics: const NeverScrollableScrollPhysics(),
+                builder: (context, snapshot) {
+                  if (snapshot.connectionState == ConnectionState.waiting) {
+                    return const Center(child: CircularProgressIndicator());
+                  }
+
+                  if (snapshot.hasError) {
+                    return Center(
+                      child: Padding(
+                        padding: const EdgeInsets.all(20),
+                        child: Text(
+                          'Failed to load trip details.\n${snapshot.error}',
+                          textAlign: TextAlign.center,
+                          style: NavigoTextStyles.bodySmall,
+                        ),
+                      ),
+                    );
+                  }
+
+                  final data = snapshot.data;
+                  if (data == null) {
+                    return Center(
+                      child: Text(
+                        'Trip not found.',
+                        style: NavigoTextStyles.bodySmall,
+                      ),
+                    );
+                  }
+
+                  final RouteModel route = data['route'] as RouteModel;
+                  final ScheduleSlot slot = data['slot'] as ScheduleSlot;
+                  final List<Map<String, dynamic>> passengers =
+                      List<Map<String, dynamic>>.from(
+                        data['passengers'] as List,
+                      );
+
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: NavigoSizes.screenPadding,
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.all(14),
+                          decoration: NavigoDecorations.kCardDecoration,
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              _InfoItem(
-                                title: "Trip ID",
-                                value: trip["tripId"] ?? "T001",
+                              Text(
+                                service.lineText(route),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: NavigoTextStyles.titleSmall.copyWith(
+                                  fontSize: 14,
+                                ),
                               ),
-                              _InfoItem(
-                                title: "Vehicle",
-                                value: trip["vehicle"] ?? "Bus",
+                              const SizedBox(height: 6),
+                              Divider(
+                                color: NavigoColors.primaryOrange.withOpacity(
+                                  0.3,
+                                ),
+                                height: 12,
                               ),
-                              _InfoItem(
-                                title: "Date",
-                                value: trip["date"] ?? "01 Apr 2026",
-                              ),
-                              _InfoItem(
-                                title: "Time",
-                                value: trip["time"] ?? "09:50",
-                              ),
-                              _InfoItem(
-                                title: "From",
-                                value: trip["from"] ?? "Birzeit",
-                              ),
-                              _InfoItem(
-                                title: "To",
-                                value: trip["to"] ?? "Ramallah",
+                              GridView.count(
+                                shrinkWrap: true,
+                                crossAxisCount: 2,
+                                childAspectRatio: 9,
+                                mainAxisSpacing: 4,
+                                crossAxisSpacing: 8,
+                                physics: const NeverScrollableScrollPhysics(),
+                                children: [
+                                  InfoItem(
+                                    title: "Trip ID",
+                                    value: slot.slotId,
+                                  ),
+                                  InfoItem(
+                                    title: "Vehicle",
+                                    value: service.vehicleText(slot),
+                                  ),
+                                  InfoItem(
+                                    title: "Date",
+                                    value: service.dateText(slot),
+                                  ),
+                                  InfoItem(
+                                    title: "Time",
+                                    value: service.timeText(slot),
+                                  ),
+                                  InfoItem(
+                                    title: "From",
+                                    value: route.startPoint,
+                                  ),
+                                  InfoItem(title: "To", value: route.endPoint),
+                                ],
                               ),
                             ],
                           ),
-                        ],
-                      ),
-                    ),
+                        ),
 
-                    const SizedBox(height: 16),
+                        const SizedBox(height: 16),
 
-                    Text("Passengers", style: NavigoTextStyles.titleSmall),
-                    const SizedBox(height: 10),
+                        Text("Passengers", style: NavigoTextStyles.titleSmall),
+                        const SizedBox(height: 10),
 
-                    // ── PASSENGER LIST ─────────────────────────
-                    Expanded(
-                      child: ListView.separated(
-                        itemCount: passengers.length,
-                        separatorBuilder: (_, _) =>
-                            const SizedBox(height: NavigoSizes.itemGap),
-                        itemBuilder: (context, index) {
-                          return _PassengerTile(
-                            passengerName: passengers[index]["name"]!,
-                            pickup: passengers[index]["pickup"]!,
-                          );
-                        },
-                      ),
-                    ),
+                        Expanded(
+                          child: passengers.isEmpty
+                              ? Center(
+                                  child: Text(
+                                    'No passengers assigned.',
+                                    style: NavigoTextStyles.bodySmall,
+                                  ),
+                                )
+                              : ListView.separated(
+                                  itemCount: passengers.length,
+                                  separatorBuilder: (_, _) => const SizedBox(
+                                    height: NavigoSizes.itemGap,
+                                  ),
+                                  itemBuilder: (context, index) {
+                                    final passenger = passengers[index];
+                                    return PassengerTile(
+                                      passengerName:
+                                          (passenger['name'] ?? 'Passenger')
+                                              .toString(),
+                                      pickup:
+                                          (passenger['pickup'] ??
+                                                  route.startPoint)
+                                              .toString(),
+                                    );
+                                  },
+                                ),
+                        ),
 
-                    const SizedBox(height: 10),
+                        const SizedBox(height: 10),
 
-                    // ── START TRIP BUTTON ──────────────────────
-                    SizedBox(
-                      width: double.infinity,
-                      height: NavigoSizes.buttonHeight,
-                      child: ElevatedButton(
-                        style: NavigoDecorations.kPrimaryButtonLargeStyle,
-                        onPressed: () async {
-                          final uid = FirebaseAuth.instance.currentUser?.uid;
-                          if (uid != null) {
-                            await TripCompletionService()
-                                .markDriverLiveTripStarted(driverId: uid);
-                          }
-                          if (!context.mounted) return;
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) => const DriverLiveTripScreen(),
+                        SizedBox(
+                          width: double.infinity,
+                          height: NavigoSizes.buttonHeight,
+                          child: ElevatedButton(
+                            style: NavigoDecorations.kPrimaryButtonLargeStyle,
+                            onPressed: () {
+                              final safeTripId = (trip['tripId'] ?? '')
+                                  .toString()
+                                  .trim();
+                              final safeRouteId = (trip['routeId'] ?? '')
+                                  .toString()
+                                  .trim();
+
+                              if (safeTripId.isEmpty) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text('Trip ID is missing'),
+                                  ),
+                                );
+                                return;
+                              }
+
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => DriverLiveTripScreen(
+                                    tripId: safeTripId,
+                                    routeId: safeRouteId,
+                                  ),
+                                ),
+                              );
+                            },
+                            child: const Text(
+                              "Start Trip",
+                              style: NavigoTextStyles.button,
                             ),
-                          );
-                        },
-                        child: const Text(
-                          "Start Trip",
-                          style: NavigoTextStyles.button,
+                          ),
                         ),
-                      ),
-                    ),
 
-                    const SizedBox(height: 8),
+                        const SizedBox(height: 8),
 
-                    Center(
-                      child: Text(
-                        "Starting the trip will share your live location",
-                        style: NavigoTextStyles.bodySmall.copyWith(
-                          fontSize: 12,
+                        Center(
+                          child: Text(
+                            "Starting the trip will share your live location",
+                            style: NavigoTextStyles.bodySmall.copyWith(
+                              fontSize: 12,
+                            ),
+                          ),
                         ),
-                      ),
-                    ),
 
-                    const SizedBox(height: NavigoSizes.itemGap),
-                  ],
-                ),
+                        const SizedBox(height: NavigoSizes.itemGap),
+                      ],
+                    ),
+                  );
+                },
               ),
             ),
           ],
@@ -188,11 +252,11 @@ class TripDetailes extends StatelessWidget {
   }
 }
 
-class _InfoItem extends StatelessWidget {
+class InfoItem extends StatelessWidget {
   final String title;
   final String value;
 
-  const _InfoItem({required this.title, required this.value});
+  const InfoItem({super.key, required this.title, required this.value});
 
   @override
   Widget build(BuildContext context) {
@@ -219,11 +283,15 @@ class _InfoItem extends StatelessWidget {
   }
 }
 
-class _PassengerTile extends StatelessWidget {
+class PassengerTile extends StatelessWidget {
   final String passengerName;
   final String pickup;
 
-  const _PassengerTile({required this.passengerName, required this.pickup});
+  const PassengerTile({
+    super.key,
+    required this.passengerName,
+    required this.pickup,
+  });
 
   @override
   Widget build(BuildContext context) {

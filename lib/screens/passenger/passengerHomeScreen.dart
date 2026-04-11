@@ -12,6 +12,7 @@ import '../NotificationsScreen.dart';
 import 'ScheduleScreen.dart';
 import '../../services/passenger_trip_repository.dart';
 import '../../services/local_storage_service.dart';
+import '../../services/trip_driver_request_service.dart';
 
 class PassengerHomeScreen extends StatefulWidget {
   const PassengerHomeScreen({super.key});
@@ -32,6 +33,8 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> {
   bool _isLoadingLines = false;
 
   final PassengerTripRepository _tripRepository = PassengerTripRepository();
+  final TripDriverRequestService _tripRequestService =
+      TripDriverRequestService();
 
   List<String> _lines = [];
   List<String> _filteredLines = [];
@@ -50,7 +53,6 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> {
     _loadSavedRoute();
     _loadCarMarker();
     _loadLinesFromFirestore();
-    _tripRepository.ensureManualDriverLocations();
     _loadInitialPassengerLocation();
   }
 
@@ -516,15 +518,44 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> {
                       width: double.infinity,
                       height: 52,
                       child: ElevatedButton(
-                        onPressed: () {
-                          Navigator.pop(context);
-                          ScaffoldMessenger.of(this.context).showSnackBar(
-                            SnackBar(
-                              content: Text(
-                                "Trip confirmed with ${driver['name']} for $_selectedSeatsCount seat(s) 🚀",
+                        onPressed: () async {
+                          final nav = Navigator.of(context);
+                          final messenger = ScaffoldMessenger.of(this.context);
+                          nav.pop();
+                          try {
+                            await _tripRequestService.createRequest(
+                              driverId: driver['id'] as String,
+                              routeId:
+                                  (driver['routeId'] as String?)?.trim() ?? '',
+                              scheduleId:
+                                  (driver['scheduleId'] as String?)?.trim() ??
+                                  (driver['slotId'] as String?)?.trim() ??
+                                  '',
+                              seatsRequested: _selectedSeatsCount,
+                              lineLabel: driver['line'] as String? ?? '',
+                              startPoint: driver['from'] as String? ?? '',
+                              endPoint: driver['to'] as String? ?? '',
+                              pickupDescription: _selectedLocation ?? '',
+                            );
+                            if (!this.context.mounted) return;
+                            messenger.showSnackBar(
+                              SnackBar(
+                                content: Text(
+                                  'Request sent to ${driver['name']}. '
+                                  'The driver can accept or decline in Requests.',
+                                ),
                               ),
-                            ),
-                          );
+                            );
+                          } catch (e) {
+                            if (!this.context.mounted) return;
+                            messenger.showSnackBar(
+                              SnackBar(
+                                content: Text(
+                                  e.toString().replaceFirst('Exception: ', ''),
+                                ),
+                              ),
+                            );
+                          }
                         },
                         style: NavigoDecorations.kPrimaryButtonLargeStyle,
                         child: const Text(
@@ -590,9 +621,7 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> {
     if (!mounted) return;
     Navigator.push(
       context,
-      MaterialPageRoute(
-        builder: (_) => ScheduleScreen(selectedLine: line),
-      ),
+      MaterialPageRoute(builder: (_) => ScheduleScreen(selectedLine: line)),
     );
   }
 
