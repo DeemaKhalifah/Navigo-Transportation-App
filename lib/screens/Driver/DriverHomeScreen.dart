@@ -147,48 +147,47 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
     _liveDataSub = _liveService
         .watchLiveTrip(routeId: slot.routeId, tripId: slot.slotId)
         .listen((data) {
-      if (!mounted || _isDisposed || data == null) return;
+          if (!mounted || _isDisposed || data == null) return;
 
-      final startLat = data['startLat'] as double?;
-      final startLng = data['startLng'] as double?;
-      final endLat = data['endLat'] as double?;
-      final endLng = data['endLng'] as double?;
+          final startLat = data['startLat'] as double?;
+          final startLng = data['startLng'] as double?;
+          final endLat = data['endLat'] as double?;
+          final endLng = data['endLng'] as double?;
 
-      // Draw route polyline
-      _polylines.clear();
-      if (startLat != null &&
-          startLng != null &&
-          endLat != null &&
-          endLng != null) {
-        _polylines.add(
-          Polyline(
-            polylineId: const PolylineId('trip_path'),
-            points: [LatLng(startLat, startLng), LatLng(endLat, endLng)],
-            width: 4,
-            color: NavigoColors.primaryOrange,
-          ),
-        );
-      }
+          // Draw route polyline
+          _polylines.clear();
+          if (startLat != null &&
+              startLng != null &&
+              endLat != null &&
+              endLng != null) {
+            _polylines.add(
+              Polyline(
+                polylineId: const PolylineId('trip_path'),
+                points: [LatLng(startLat, startLng), LatLng(endLat, endLng)],
+                width: 4,
+                color: NavigoColors.primaryOrange,
+              ),
+            );
+          }
 
-      // Driver location for ETA
-      final driverLoc = data['driverLocation'] as Map<String, double>?;
-      final eta = _liveService.etaText(
-        from: driverLoc,
-        toLat: endLat,
-        toLng: endLng,
-      );
-      if (mounted && !_isDisposed) setState(() => _etaText = eta);
-    });
+          // Driver location for ETA
+          final driverLoc = data['driverLocation'] as Map<String, double>?;
+          final eta = _liveService.etaText(
+            from: driverLoc,
+            toLat: endLat,
+            toLng: endLng,
+          );
+          if (mounted && !_isDisposed) setState(() => _etaText = eta);
+        });
 
     // Subscribe to live passenger pins
-    _passengersSub =
-        _liveService.watchAssignedPassengerPins(slot.passengersIds).listen(
-      (pins) {
-        if (!mounted || _isDisposed) return;
-        _passengerPins = pins;
-        _rebuildPassengerMarkers();
-      },
-    );
+    _passengersSub = _liveService
+        .watchAssignedPassengerPins(slot.passengersIds)
+        .listen((pins) {
+          if (!mounted || _isDisposed) return;
+          _passengerPins = pins;
+          _rebuildPassengerMarkers();
+        });
   }
 
   void _stopLiveTracking() {
@@ -223,7 +222,9 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
         perm = await Geolocator.requestPermission();
       }
       if (perm == LocationPermission.denied ||
-          perm == LocationPermission.deniedForever) return;
+          perm == LocationPermission.deniedForever) {
+        return;
+      }
       if (!await Geolocator.isLocationServiceEnabled()) return;
 
       final current = await Geolocator.getCurrentPosition(
@@ -239,20 +240,21 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
       _updateDriverMarker(LatLng(current.latitude, current.longitude));
 
       _locationSub?.cancel();
-      _locationSub = Geolocator.getPositionStream(
-        locationSettings: const LocationSettings(
-          accuracy: LocationAccuracy.high,
-          distanceFilter: 10,
-        ),
-      ).listen((pos) async {
-        if (_isDisposed) return;
-        await _liveService.updateDriverLocation(
-          driverId: driverId,
-          latitude: pos.latitude,
-          longitude: pos.longitude,
-        );
-        _updateDriverMarker(LatLng(pos.latitude, pos.longitude));
-      });
+      _locationSub =
+          Geolocator.getPositionStream(
+            locationSettings: const LocationSettings(
+              accuracy: LocationAccuracy.high,
+              distanceFilter: 10,
+            ),
+          ).listen((pos) async {
+            if (_isDisposed) return;
+            await _liveService.updateDriverLocation(
+              driverId: driverId,
+              latitude: pos.latitude,
+              longitude: pos.longitude,
+            );
+            _updateDriverMarker(LatLng(pos.latitude, pos.longitude));
+          });
     } catch (e) {
       debugPrint('GPS publish error: $e');
     } finally {
@@ -268,7 +270,9 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
         perm = await Geolocator.requestPermission();
       }
       if (perm == LocationPermission.denied ||
-          perm == LocationPermission.deniedForever) return;
+          perm == LocationPermission.deniedForever) {
+        return;
+      }
       if (!await Geolocator.isLocationServiceEnabled()) return;
 
       final pos = await Geolocator.getCurrentPosition(
@@ -303,9 +307,7 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
     if (_isDisposed || !mounted) return;
 
     // Remove old passenger markers
-    _markers.removeWhere(
-      (m) => m.markerId.value.startsWith('passenger_'),
-    );
+    _markers.removeWhere((m) => m.markerId.value.startsWith('passenger_'));
 
     int onMapCount = 0;
     for (final p in _passengerPins) {
@@ -363,17 +365,17 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
       );
 
       if (!mounted || _isDisposed) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Trip ended successfully')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Trip ended successfully')));
 
       _stopLiveTracking();
       setState(() {});
     } catch (e) {
       if (!mounted || _isDisposed) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to end trip: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Failed to end trip: $e')));
     } finally {
       if (mounted && !_isDisposed) setState(() => _isEndingTrip = false);
     }
@@ -712,10 +714,7 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
             ),
             Text(
               label,
-              style: TextStyle(
-                fontSize: 11,
-                color: color.withOpacity(0.8),
-              ),
+              style: TextStyle(fontSize: 11, color: color.withOpacity(0.8)),
             ),
           ],
         ),

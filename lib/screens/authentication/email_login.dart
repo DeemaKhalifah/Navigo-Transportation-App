@@ -57,14 +57,13 @@ class _EmailLoginScreenState extends State<EmailLoginScreen> {
         // Navigate to Route Manager main screen
         Navigator.pushReplacement(
           context,
-          MaterialPageRoute(
-            builder: (_) => const RouteSchedule(),
-          ),
+          MaterialPageRoute(builder: (_) => const RouteSchedule()),
         );
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-              content: Text("You are not authorized as a Route Manager")),
+            content: Text("You are not authorized as a Route Manager"),
+          ),
         );
       }
     } on FirebaseAuthException catch (e) {
@@ -74,11 +73,13 @@ class _EmailLoginScreenState extends State<EmailLoginScreen> {
       } else if (e.code == 'wrong-password') {
         message = "Incorrect password.";
       }
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(message)));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(message)));
     } catch (e) {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text("Error: $e")));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text("Error: $e")));
     } finally {
       if (mounted) {
         setState(() {
@@ -138,16 +139,16 @@ class _EmailLoginScreenState extends State<EmailLoginScreen> {
                             style: NavigoTextStyles.fieldText,
                             decoration: NavigoDecorations.kInputDecoration
                                 .copyWith(
-                              hintText: "RouteManager@navigo.com",
-                              prefixIcon: const Icon(
-                                Icons.email_outlined,
-                                color: NavigoColors.accentGreen,
-                              ),
-                              suffixIcon: IconButton(
-                                icon: const Icon(Icons.clear),
-                                onPressed: () => _emailController.clear(),
-                              ),
-                            ),
+                                  hintText: "RouteManager@navigo.com",
+                                  prefixIcon: const Icon(
+                                    Icons.email_outlined,
+                                    color: NavigoColors.accentGreen,
+                                  ),
+                                  suffixIcon: IconButton(
+                                    icon: const Icon(Icons.clear),
+                                    onPressed: () => _emailController.clear(),
+                                  ),
+                                ),
                           ),
                           const SizedBox(height: 16),
 
@@ -160,23 +161,23 @@ class _EmailLoginScreenState extends State<EmailLoginScreen> {
                             style: NavigoTextStyles.fieldText,
                             decoration: NavigoDecorations.kInputDecoration
                                 .copyWith(
-                              prefixIcon: const Icon(
-                                Icons.lock_outline,
-                                color: NavigoColors.accentGreen,
-                              ),
-                              suffixIcon: IconButton(
-                                icon: Icon(
-                                  _obscurePassword
-                                      ? Icons.visibility_off
-                                      : Icons.visibility,
+                                  prefixIcon: const Icon(
+                                    Icons.lock_outline,
+                                    color: NavigoColors.accentGreen,
+                                  ),
+                                  suffixIcon: IconButton(
+                                    icon: Icon(
+                                      _obscurePassword
+                                          ? Icons.visibility_off
+                                          : Icons.visibility,
+                                    ),
+                                    onPressed: () {
+                                      setState(() {
+                                        _obscurePassword = !_obscurePassword;
+                                      });
+                                    },
+                                  ),
                                 ),
-                                onPressed: () {
-                                  setState(() {
-                                    _obscurePassword = !_obscurePassword;
-                                  });
-                                },
-                              ),
-                            ),
                           ),
                           const SizedBox(height: 25),
 

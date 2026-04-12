@@ -8,7 +8,6 @@ import '../../services/driver_live_trip_service.dart';
 import '../../theme/app_theme.dart';
 import 'DriverHomeScreen.dart';
 import 'DriverBottomNavBar.dart';
-import 'DriverLiveTripScreen.dart';
 import 'DriverTripsScreen.dart';
 
 class TripDetailes extends StatefulWidget {
@@ -33,9 +32,9 @@ class _TripDetailesState extends State<TripDetailes> {
     final routeId = (widget.trip['routeId'] ?? '').toString().trim();
 
     if (tripId.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Trip ID is missing')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Trip ID is missing')));
       return;
     }
 
@@ -54,7 +53,9 @@ class _TripDetailesState extends State<TripDetailes> {
           ),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
-            style: TextButton.styleFrom(foregroundColor: NavigoColors.accentRed),
+            style: TextButton.styleFrom(
+              foregroundColor: NavigoColors.accentRed,
+            ),
             child: const Text('Yes, Cancel'),
           ),
         ],
@@ -82,9 +83,9 @@ class _TripDetailesState extends State<TripDetailes> {
       );
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to cancel: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Failed to cancel: $e')));
     } finally {
       if (mounted) setState(() => _isCancelling = false);
     }
@@ -275,7 +276,8 @@ class _TripDetailesState extends State<TripDetailes> {
                               final safeRouteId = (widget.trip['routeId'] ?? '')
                                   .toString()
                                   .trim();
-                              final driverId = FirebaseAuth.instance.currentUser?.uid ?? '';
+                              final driverId =
+                                  FirebaseAuth.instance.currentUser?.uid ?? '';
 
                               if (safeTripId.isEmpty) {
                                 ScaffoldMessenger.of(context).showSnackBar(
@@ -295,7 +297,9 @@ class _TripDetailesState extends State<TripDetailes> {
                               } catch (e) {
                                 if (!context.mounted) return;
                                 ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(content: Text('Could not start: $e')),
+                                  SnackBar(
+                                    content: Text('Could not start: $e'),
+                                  ),
                                 );
                                 return;
                               }
@@ -326,10 +330,9 @@ class _TripDetailesState extends State<TripDetailes> {
                             onPressed: _isCancelling ? null : _cancelTrip,
                             style: NavigoDecorations.kPrimaryButtonLargeStyle
                                 .copyWith(
-                                  backgroundColor:
-                                      const WidgetStatePropertyAll(
-                                        NavigoColors.accentRed,
-                                      ),
+                                  backgroundColor: const WidgetStatePropertyAll(
+                                    NavigoColors.accentRed,
+                                  ),
                                 ),
                             child: _isCancelling
                                 ? const SizedBox(

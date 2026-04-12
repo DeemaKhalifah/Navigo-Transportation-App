@@ -6,7 +6,6 @@ import '../../services/driver_trips_service.dart';
 import '../../theme/app_theme.dart';
 import 'DriverBottomNavBar.dart';
 import 'DriverHomeScreen.dart';
-import 'DriverLiveTripScreen.dart';
 import 'TripDetailes.dart';
 
 class DriverTripsScreen extends StatefulWidget {

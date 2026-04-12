@@ -3,7 +3,6 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/schedule_slot.dart';
 import '../models/trip_status.dart';
 
-/// Embedded or subcollection `scheduleSlots` updates on `route/{routeId}`.
 class RouteSlotBookingService {
   RouteSlotBookingService({FirebaseFirestore? firestore})
     : _db = firestore ?? FirebaseFirestore.instance;
@@ -12,7 +11,6 @@ class RouteSlotBookingService {
 
   static const String routesCollection = 'route';
 
-  /// Appends [passengerId] to the slot’s `passengersIds` [seatsToAdd] times.
   Future<void> appendPassengerSeatsToSlot({
     required String routeId,
     required String slotId,
@@ -31,8 +29,6 @@ class RouteSlotBookingService {
     });
   }
 
-  /// Same rules as [appendPassengerSeatsToSlot] but uses an existing [Transaction]
-  /// (e.g. together with updating `tripDriverRequests`).
   static Future<void> appendPassengerSeatsWithTransaction(
     Transaction tx,
     FirebaseFirestore db, {
@@ -137,9 +133,7 @@ class RouteSlotBookingService {
   }) {
     final available = current.capacity - current.passengersIds.length;
     if (seatsToAdd > available) {
-      throw Exception(
-        'Not enough seats on this trip (only $available left).',
-      );
+      throw Exception('Not enough seats on this trip (only $available left).');
     }
 
     final existingCount = current.passengersIds

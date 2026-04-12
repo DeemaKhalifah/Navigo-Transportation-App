@@ -16,7 +16,6 @@ class TripDriverRequestService {
 
   String? get _uid => _auth.currentUser?.uid;
 
-  /// Creates a pending request for the **Now** flow with the exact `routeId` and slot id from the map offer.
   Future<String> createRequest({
     required String driverId,
     required String routeId,
@@ -81,7 +80,9 @@ class TripDriverRequestService {
         .where('status', isEqualTo: TripDriverRequest.pending)
         .snapshots()
         .map((snap) {
-          final list = snap.docs.map((d) => TripDriverRequest.fromDoc(d)).toList();
+          final list = snap.docs
+              .map((d) => TripDriverRequest.fromDoc(d))
+              .toList();
           list.sort((a, b) {
             final ta = a.createdAt ?? DateTime.fromMillisecondsSinceEpoch(0);
             final tb = b.createdAt ?? DateTime.fromMillisecondsSinceEpoch(0);
@@ -91,7 +92,6 @@ class TripDriverRequestService {
         });
   }
 
-  /// Books the passenger onto `route/{routeId}` → `scheduleSlots` slot and marks the request accepted (single transaction).
   Future<void> acceptRequest(String requestId) async {
     final uid = _uid;
     if (uid == null || uid.isEmpty) {
@@ -123,8 +123,9 @@ class TripDriverRequestService {
       }
 
       final routeId = (map['routeId'] ?? '').toString().trim();
-      final slotId =
-          (map['scheduleId'] ?? map['slotId'] ?? '').toString().trim();
+      final slotId = (map['scheduleId'] ?? map['slotId'] ?? '')
+          .toString()
+          .trim();
       final passengerId = (map['passengerId'] ?? '').toString().trim();
       final seats = (map['seatsRequested'] as num?)?.toInt() ?? 1;
 

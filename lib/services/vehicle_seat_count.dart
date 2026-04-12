@@ -1,4 +1,3 @@
-/// Default seat counts by signup / UI vehicle type label.
 int defaultSeatCountForVehicleType(String? type) {
   switch (type?.trim()) {
     case 'Bus':

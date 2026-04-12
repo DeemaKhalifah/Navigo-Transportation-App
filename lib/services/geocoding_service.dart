@@ -2,9 +2,6 @@ import 'package:geocoding/geocoding.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 
 class GeocodingService {
-  /// Reverse-geocode a [LatLng] into a human-readable area / street name.
-  ///
-  /// Falls back to `"lat, lng"` if geocoding fails or returns nothing useful.
   static Future<String> reverseGeocodeLabel(LatLng location) async {
     try {
       final placemarks = await placemarkFromCoordinates(
@@ -25,16 +22,11 @@ class GeocodingService {
 
         if (parts.isNotEmpty) return parts.join(', ');
       }
-    } catch (_) {
-      // Geocoding failed – fall back to coordinates
-    }
+    } catch (_) {}
 
     return '${location.latitude.toStringAsFixed(6)}, ${location.longitude.toStringAsFixed(6)}';
   }
 
-  /// Geocode a text address into a [LatLng].
-  ///
-  /// Returns `null` if geocoding fails.
   static Future<LatLng?> geocodeAddress(String address) async {
     if (address.trim().isEmpty) return null;
 
@@ -43,9 +35,7 @@ class GeocodingService {
       if (locations.isNotEmpty) {
         return LatLng(locations.first.latitude, locations.first.longitude);
       }
-    } catch (_) {
-      // Geocoding failed
-    }
+    } catch (_) {}
     return null;
   }
 }

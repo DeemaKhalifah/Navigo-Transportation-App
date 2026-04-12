@@ -2,13 +2,9 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../models/schedule_slot.dart';
 
-/// Schedule slots are stored **on the route document**:
-/// `route/{routeId}` → field `scheduleSlots`: `[ { slotId, routeId, departureAt, ... }, ... ]`
-///
-/// The [routeId] on the manager profile (`users` / `route_manager`) selects this document.
 class ScheduleSlotRepository {
   ScheduleSlotRepository({FirebaseFirestore? firestore})
-      : _db = firestore ?? FirebaseFirestore.instance;
+    : _db = firestore ?? FirebaseFirestore.instance;
 
   final FirebaseFirestore _db;
 
@@ -23,9 +19,9 @@ class ScheduleSlotRepository {
     final list = <Map<String, dynamic>>[];
     for (final e in raw) {
       if (e is Map) {
-        list.add(Map<String, dynamic>.from(
-          e.map((k, v) => MapEntry(k.toString(), v)),
-        ));
+        list.add(
+          Map<String, dynamic>.from(e.map((k, v) => MapEntry(k.toString(), v))),
+        );
       }
     }
     return list;
@@ -46,7 +42,6 @@ class ScheduleSlotRepository {
     });
   }
 
-  /// Appends a slot to `route.scheduleSlots`. Returns generated [slotId].
   Future<String> addSlot(ScheduleSlot slot) async {
     final routeId = slot.routeId;
     final routeRef = _routeRef(routeId);
@@ -81,9 +76,7 @@ class ScheduleSlotRepository {
       m['slotId'] = slot.slotId;
       m['routeId'] = slot.routeId;
 
-      final idx = list.indexWhere(
-        (e) => e['slotId'] == slot.slotId,
-      );
+      final idx = list.indexWhere((e) => e['slotId'] == slot.slotId);
       if (idx >= 0) {
         list[idx] = m;
       } else {

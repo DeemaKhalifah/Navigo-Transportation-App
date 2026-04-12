@@ -173,7 +173,6 @@ class PassengerTripHistoryService {
     return formatDuration(slot.arrivalAt.difference(slot.departureAt));
   }
 
-  /// Fetch driver's vehicle plate number and phone number from Firestore.
   Future<Map<String, String>> getDriverInfo(String driverId) async {
     String plateNumber = 'N/A';
     String phone = 'N/A';
@@ -183,37 +182,39 @@ class PassengerTripHistoryService {
     }
 
     try {
-      final driverSnap =
-          await _db.collection(_driversCollection).doc(driverId).get();
+      final driverSnap = await _db
+          .collection(_driversCollection)
+          .doc(driverId)
+          .get();
       final driverData = driverSnap.data();
       if (driverData != null) {
-        // Get vehicle plate number
         final vehicleId = (driverData['vehicleId'] ?? '').toString().trim();
         if (vehicleId.isNotEmpty) {
-          final vehicleSnap =
-              await _db.collection(_vehiclesCollection).doc(vehicleId).get();
+          final vehicleSnap = await _db
+              .collection(_vehiclesCollection)
+              .doc(vehicleId)
+              .get();
           final vehicleData = vehicleSnap.data();
           if (vehicleData != null) {
-            plateNumber =
-                (vehicleData['plateNumber'] ?? 'N/A').toString().trim();
+            plateNumber = (vehicleData['plateNumber'] ?? 'N/A')
+                .toString()
+                .trim();
           }
         }
 
-        // Get driver phone number
-        final userId =
-            (driverData['userId'] ?? driverId).toString().trim();
+        final userId = (driverData['userId'] ?? driverId).toString().trim();
         if (userId.isNotEmpty) {
-          final userSnap =
-              await _db.collection(_usersCollection).doc(userId).get();
+          final userSnap = await _db
+              .collection(_usersCollection)
+              .doc(userId)
+              .get();
           final userData = userSnap.data();
           if (userData != null) {
             phone = (userData['phone'] ?? 'N/A').toString().trim();
           }
         }
       }
-    } catch (_) {
-      // Silently handle errors – return N/A values
-    }
+    } catch (_) {}
 
     return {'plateNumber': plateNumber, 'phone': phone};
   }

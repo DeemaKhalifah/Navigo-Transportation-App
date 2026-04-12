@@ -2,10 +2,9 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../models/driver_status.dart';
 
-/// Ordered driver queue on `route/{routeId}` field `driverQueueIds` (array of uids).
 class RouteDriverQueueService {
   RouteDriverQueueService({FirebaseFirestore? firestore})
-      : _db = firestore ?? FirebaseFirestore.instance;
+    : _db = firestore ?? FirebaseFirestore.instance;
 
   final FirebaseFirestore _db;
 
@@ -21,21 +20,19 @@ class RouteDriverQueueService {
   }
 
   Stream<List<String>> watchQueueIds(String routeId) {
-    return _routeRef(routeId).snapshots().map((s) => parseIds(s.data()?['driverQueueIds']));
+    return _routeRef(
+      routeId,
+    ).snapshots().map((s) => parseIds(s.data()?['driverQueueIds']));
   }
 
   Future<void> clearQueue(String routeId) async {
     await _routeRef(routeId).update({'driverQueueIds': <String>[]});
   }
 
-  /// Replaces the entire queue (e.g. “queue all available” sorted).
   Future<void> setQueue(String routeId, List<String> driverIds) async {
-    await _routeRef(routeId).update({
-      'driverQueueIds': driverIds,
-    });
+    await _routeRef(routeId).update({'driverQueueIds': driverIds});
   }
 
-  /// Appends [driverId] if not already present (custom RM order).
   Future<void> appendDriver(String routeId, String driverId) async {
     if (driverId.isEmpty) return;
     await _db.runTransaction((txn) async {
@@ -49,7 +46,6 @@ class RouteDriverQueueService {
     });
   }
 
-  /// Removes one id from the queue (optional UI).
   Future<void> removeDriver(String routeId, String driverId) async {
     await _db.runTransaction((txn) async {
       final ref = _routeRef(routeId);
@@ -61,8 +57,6 @@ class RouteDriverQueueService {
     });
   }
 
-  /// After a trip, driver goes to **end** of queue and status available.
-  /// Replaces the queue with all **available** drivers on this route, A→Z by display name.
   Future<void> queueAllAvailableDriversSorted(String routeId) async {
     final snap = await _db
         .collection('drivers')
@@ -94,10 +88,7 @@ class RouteDriverQueueService {
       return na.toLowerCase().compareTo(nb.toLowerCase());
     });
 
-    await setQueue(
-      routeId,
-      candidates.map((c) => c.driverDocId).toList(),
-    );
+    await setQueue(routeId, candidates.map((c) => c.driverDocId).toList());
   }
 
   Future<void> completeTripAndRequeueEnd({

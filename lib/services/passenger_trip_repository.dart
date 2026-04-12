@@ -96,7 +96,6 @@ class PassengerTripRepository {
 
       final status = TripStatus.normalize(slot.status);
 
-      // Only active/live trip offers
       if (status != TripStatus.onTrip && status != TripStatus.scheduled) {
         continue;
       }

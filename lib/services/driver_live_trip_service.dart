@@ -89,7 +89,10 @@ class DriverLiveTripService {
       if (startLatitude != null && startLongitude != null) {
         driverUpdate['latitude'] = startLatitude;
         driverUpdate['longitude'] = startLongitude;
-        driverUpdate['location'] = {'lat': startLatitude, 'lng': startLongitude};
+        driverUpdate['location'] = {
+          'lat': startLatitude,
+          'lng': startLongitude,
+        };
         driverUpdate['lastLocationUpdate'] = FieldValue.serverTimestamp();
       }
 
@@ -406,7 +409,6 @@ class DriverLiveTripService {
     return null;
   }
 
-  /// Live driver position from `drivers/{driverId}`.
   Stream<Map<String, double>?> watchDriverDocumentLocation(String driverId) {
     final id = driverId.trim();
     if (id.isEmpty) return Stream.value(null);
@@ -416,7 +418,6 @@ class DriverLiveTripService {
     });
   }
 
-  /// Live updates for each assigned passenger (`passengers` docs — same ids as slot queue).
   Stream<List<Map<String, dynamic>>> watchAssignedPassengerPins(
     List<String> passengerIds,
   ) {
@@ -450,19 +451,17 @@ class DriverLiveTripService {
 
     for (final id in ids) {
       subs.add(
-        _db
-            .collection(_passengersCollection)
-            .doc(id)
-            .snapshots()
-            .listen((snap) async {
-              final passengerData = snap.data() ?? <String, dynamic>{};
-              final row = await _passengerPinRow(
-                passengerId: id,
-                passengerData: passengerData,
-              );
-              cache[id] = row;
-              emit();
-            }),
+        _db.collection(_passengersCollection).doc(id).snapshots().listen((
+          snap,
+        ) async {
+          final passengerData = snap.data() ?? <String, dynamic>{};
+          final row = await _passengerPinRow(
+            passengerId: id,
+            passengerData: passengerData,
+          );
+          cache[id] = row;
+          emit();
+        }),
       );
     }
 
