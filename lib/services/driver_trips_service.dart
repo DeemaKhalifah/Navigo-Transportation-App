@@ -48,7 +48,7 @@ class DriverTripsService {
           final raw = rawSlots[i];
           if (raw is! Map) continue;
 
-          final slotMap = Map<String, dynamic>.from(raw as Map);
+          final slotMap = Map<String, dynamic>.from(raw);
           final slot = ScheduleSlot.fromMap('slot_$i', slotMap);
 
           if (slot.driverId.trim() != driverId.trim()) continue;
@@ -220,7 +220,7 @@ class DriverTripsService {
     } else if (hours > 0) {
       return '${hours}h';
     } else {
-      return '${minutes} min';
+      return '$minutes min';
     }
   }
 }

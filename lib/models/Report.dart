@@ -1,6 +1,4 @@
 import 'user.dart';
-import 'driver.dart';
-import 'passenger.dart';
 import 'route_manager.dart';
 
 class ReportModel {

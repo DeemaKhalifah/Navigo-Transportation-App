@@ -252,16 +252,6 @@ class _RequestCard extends StatelessWidget {
             'Seats: ${request.seatsRequested}',
             style: NavigoTextStyles.bodySmall,
           ),
-          if (request.routeId.isNotEmpty)
-            Text(
-              'Route: ${request.routeId}',
-              style: NavigoTextStyles.bodySmall,
-            ),
-          if (request.scheduleId.isNotEmpty)
-            Text(
-              'Trip slot: ${request.scheduleId}',
-              style: NavigoTextStyles.bodySmall,
-            ),
           const SizedBox(height: 16),
           Row(
             children: [

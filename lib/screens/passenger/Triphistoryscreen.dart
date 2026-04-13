@@ -6,7 +6,6 @@ import '../../services/passenger_trip_history_service.dart';
 import '../../theme/app_theme.dart';
 import '../passenger/PassengerHomeScreen.dart';
 import 'PassengerBottomNavBar.dart';
-import 'PassengerLiveTrackScreen.dart';
 
 class TripHistoryScreen extends StatefulWidget {
   const TripHistoryScreen({super.key});
@@ -253,7 +252,8 @@ class _TripHistoryScreenState extends State<TripHistoryScreen> {
   }
 }
 
-class _TripHistoryDetailsSheet extends StatelessWidget {
+// ── Simplified Trip Details Bottom Sheet ─────────────────────────────────────
+class _TripHistoryDetailsSheet extends StatefulWidget {
   const _TripHistoryDetailsSheet({
     required this.slot,
     required this.historyService,
@@ -261,6 +261,34 @@ class _TripHistoryDetailsSheet extends StatelessWidget {
 
   final ScheduleSlot slot;
   final PassengerTripHistoryService historyService;
+
+  @override
+  State<_TripHistoryDetailsSheet> createState() =>
+      _TripHistoryDetailsSheetState();
+}
+
+class _TripHistoryDetailsSheetState extends State<_TripHistoryDetailsSheet> {
+  String _plateNumber = '...';
+  String _driverPhone = '...';
+  bool _loadingDriverInfo = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchDriverInfo();
+  }
+
+  Future<void> _fetchDriverInfo() async {
+    final info = await widget.historyService.getDriverInfo(
+      widget.slot.driverId,
+    );
+    if (!mounted) return;
+    setState(() {
+      _plateNumber = info['plateNumber'] ?? 'N/A';
+      _driverPhone = info['phone'] ?? 'N/A';
+      _loadingDriverInfo = false;
+    });
+  }
 
   Color _statusColor(String status) {
     switch (TripStatus.normalize(status)) {
@@ -284,7 +312,7 @@ class _TripHistoryDetailsSheet extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           SizedBox(
-            width: 110,
+            width: 130,
             child: Text(label, style: NavigoTextStyles.label),
           ),
           Expanded(
@@ -303,7 +331,7 @@ class _TripHistoryDetailsSheet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final status = historyService.statusOf(slot);
+    final status = widget.historyService.statusOf(widget.slot);
 
     return Container(
       decoration: NavigoDecorations.kBottomSheetDecoration,
@@ -327,56 +355,65 @@ class _TripHistoryDetailsSheet extends StatelessWidget {
           const SizedBox(height: 16),
           Divider(color: NavigoColors.primaryOrange.withOpacity(0.3)),
           const SizedBox(height: 8),
-          _row('Slot ID', slot.slotId),
-          _row('Route ID', slot.routeId),
-          _row('Line', historyService.lineOf(slot)),
-          _row('From', historyService.fromOf(slot)),
-          _row('To', historyService.toOf(slot)),
+
+          // Only show: Line, Date, Departure, Arrival, Vehicle, Plate Number, Driver Phone
+          _row('Line', widget.historyService.lineOf(widget.slot)),
           _row(
             'Date',
-            PassengerTripHistoryService.formatDate(slot.departureAt),
+            PassengerTripHistoryService.formatDate(widget.slot.departureAt),
           ),
           _row(
             'Departure',
-            PassengerTripHistoryService.formatTime(slot.departureAt),
+            PassengerTripHistoryService.formatTime(widget.slot.departureAt),
           ),
           _row(
             'Arrival',
-            PassengerTripHistoryService.formatTime(slot.arrivalAt),
+            PassengerTripHistoryService.formatTime(widget.slot.arrivalAt),
           ),
-          _row('Duration', historyService.durationTextOf(slot)),
-          _row('Price', historyService.priceTextOf(slot)),
-          _row('Seats', slot.capacity.toString()),
-          _row('Vehicle', historyService.vehicleTypeTextOf(slot)),
-          _row(
-            'Driver ID',
-            slot.driverId.isEmpty ? 'Not assigned' : slot.driverId,
-          ),
+          _row('Vehicle', widget.historyService.vehicleTypeTextOf(widget.slot)),
+          _row('Vehicle Plate No.', _loadingDriverInfo ? '...' : _plateNumber),
+          _row('Driver Phone', _loadingDriverInfo ? '...' : _driverPhone),
+
           const SizedBox(height: 20),
-          if (status == TripStatus.scheduled || status == TripStatus.onTrip)
+
+          // "View Route" button for scheduled trips
+          if (status == TripStatus.scheduled)
             SizedBox(
               width: double.infinity,
               height: 52,
               child: ElevatedButton.icon(
                 onPressed: () {
                   Navigator.pop(context);
-                  if (status == TripStatus.onTrip) {
-                    if (slot.driverId.trim().isEmpty) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text('No driver assigned for this trip yet.'),
-                        ),
-                      );
-                      return;
-                    }
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => PassengerLiveTrackScreen(
-                          driverId: slot.driverId.trim(),
-                          routeId: slot.routeId,
-                          slotId: slot.slotId,
-                        ),
+                  final startPoint = widget.historyService.fromOf(widget.slot);
+                  final endPoint = widget.historyService.toOf(widget.slot);
+                  Navigator.pushReplacement(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => PassengerHomeScreen(
+                        routeStartPoint: startPoint,
+                        routeEndPoint: endPoint,
+                      ),
+                    ),
+                  );
+                },
+                style: NavigoDecorations.kPrimaryButtonLargeStyle,
+                icon: const Icon(Icons.route, size: 20),
+                label: const Text('View Route', style: NavigoTextStyles.button),
+              ),
+            ),
+
+          // "Track Live Trip" button for on-trip trips
+          if (status == TripStatus.onTrip)
+            SizedBox(
+              width: double.infinity,
+              height: 52,
+              child: ElevatedButton.icon(
+                onPressed: () {
+                  Navigator.pop(context);
+                  if (widget.slot.driverId.trim().isEmpty) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('No driver assigned for this trip yet.'),
                       ),
                     );
                     return;
@@ -384,16 +421,16 @@ class _TripHistoryDetailsSheet extends StatelessWidget {
                   Navigator.pushReplacement(
                     context,
                     MaterialPageRoute(
-                      builder: (_) => const PassengerHomeScreen(),
+                      builder: (_) => PassengerHomeScreen(
+                        trackDriverId: widget.slot.driverId.trim(),
+                      ),
                     ),
                   );
                 },
                 style: NavigoDecorations.kPrimaryButtonLargeStyle,
-                icon: const Icon(Icons.location_on, size: 20),
-                label: Text(
-                  status == TripStatus.onTrip
-                      ? 'Track Live Trip'
-                      : 'View Route',
+                icon: const Icon(Icons.gps_fixed, size: 20),
+                label: const Text(
+                  'Track Live Trip',
                   style: NavigoTextStyles.button,
                 ),
               ),

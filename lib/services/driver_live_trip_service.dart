@@ -168,6 +168,67 @@ class DriverLiveTripService {
     }
   }
 
+  /// Cancel a scheduled trip: sets slot status to 'cancelled' and driver to 'available'.
+  Future<void> cancelTrip({
+    required String routeId,
+    required String tripId,
+    required String driverId,
+  }) async {
+    final safeTripId = tripId.trim();
+    final safeDriverId = driverId.trim();
+
+    if (safeTripId.isEmpty) {
+      throw Exception('Trip ID is missing.');
+    }
+
+    if (safeDriverId.isEmpty) {
+      throw Exception('Driver ID is missing.');
+    }
+
+    final resolvedRouteId = await _resolveRouteId(
+      routeId: routeId,
+      tripId: safeTripId,
+    );
+
+    if (resolvedRouteId.isEmpty) {
+      throw Exception('Route ID is missing or trip was not found.');
+    }
+
+    final routeRef = _db.collection(_routesCollection).doc(resolvedRouteId);
+    final driverRef = _db.collection(_driversCollection).doc(safeDriverId);
+
+    await _db.runTransaction((tx) async {
+      final routeSnap = await tx.get(routeRef);
+      if (!routeSnap.exists) {
+        throw Exception('Route not found.');
+      }
+
+      final data = routeSnap.data() as Map<String, dynamic>;
+      final rawSlots = List<Map<String, dynamic>>.from(
+        (data['scheduleSlots'] as List? ?? []).map(
+          (e) => Map<String, dynamic>.from(e as Map),
+        ),
+      );
+
+      final index = rawSlots.indexWhere(
+        (e) => (e['slotId'] ?? '').toString().trim() == safeTripId,
+      );
+
+      if (index == -1) {
+        throw Exception('Trip slot not found.');
+      }
+
+      rawSlots[index]['status'] = 'cancelled';
+
+      tx.update(routeRef, {'scheduleSlots': rawSlots});
+
+      tx.set(driverRef, {
+        'status': DriverStatus.available,
+        'updatedAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+    });
+  }
+
   Future<void> updateDriverLocation({
     required String driverId,
     required double latitude,

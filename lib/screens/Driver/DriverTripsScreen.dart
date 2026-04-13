@@ -142,31 +142,7 @@ class _DriverTripsScreenState extends State<DriverTripsScreen> {
               const SizedBox(height: 20),
 
               if (status == TripStatus.onTrip)
-                SizedBox(
-                  width: double.infinity,
-                  height: 52,
-                  child: ElevatedButton.icon(
-                    onPressed: () {
-                      Navigator.pop(context);
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => DriverLiveTripScreen(
-                            tripId: trip.slotId,
-                            routeId: trip.routeId,
-                            resumeExistingTrip: true,
-                          ),
-                        ),
-                      );
-                    },
-                    style: NavigoDecorations.kPrimaryButtonLargeStyle,
-                    icon: const Icon(Icons.location_on, size: 20),
-                    label: const Text(
-                      'Open Live Trip',
-                      style: NavigoTextStyles.button,
-                    ),
-                  ),
-                ),
+                SizedBox(width: double.infinity, height: 52),
             ],
           ),
         );
@@ -233,10 +209,7 @@ class _DriverTripsScreenState extends State<DriverTripsScreen> {
                       value: TripStatus.scheduled,
                     ),
                     const SizedBox(width: 7),
-                    _filterChip(
-                      label: 'On Trip',
-                      value: TripStatus.onTrip,
-                    ),
+                    _filterChip(label: 'On Trip', value: TripStatus.onTrip),
                     const SizedBox(width: 7),
                     _filterChip(
                       label: 'Completed',

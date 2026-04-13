@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:geolocator/geolocator.dart';
@@ -13,9 +15,22 @@ import 'ScheduleScreen.dart';
 import '../../services/passenger_trip_repository.dart';
 import '../../services/local_storage_service.dart';
 import '../../services/trip_driver_request_service.dart';
+import '../../services/geocoding_service.dart';
 
 class PassengerHomeScreen extends StatefulWidget {
-  const PassengerHomeScreen({super.key});
+  const PassengerHomeScreen({
+    super.key,
+    this.routeStartPoint,
+    this.routeEndPoint,
+    this.trackDriverId,
+  });
+
+  /// When provided, a polyline is drawn between these two points (View Route).
+  final String? routeStartPoint;
+  final String? routeEndPoint;
+
+  /// When provided, live-track this driver on the map.
+  final String? trackDriverId;
 
   @override
   State<PassengerHomeScreen> createState() => _PassengerHomeScreenState();
@@ -42,9 +57,15 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> {
   String _userName = "Loading...";
 
   final Set<Marker> _markers = {};
+  final Set<Polyline> _polylines = {};
   BitmapDescriptor? _carIcon;
 
   int _selectedSeatsCount = 1;
+
+  // ── Live tracking state ──────────────────────────────────────────────────
+  StreamSubscription<DocumentSnapshot>? _liveDriverSub;
+  bool _isLiveTracking = false;
+  String? _trackingDriverId;
 
   @override
   void initState() {
@@ -54,15 +75,182 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> {
     _loadCarMarker();
     _loadLinesFromFirestore();
     _loadInitialPassengerLocation();
+
+    // Handle View Route if parameters are set
+    if (widget.routeStartPoint != null && widget.routeEndPoint != null) {
+      _drawRoutePolyline(widget.routeStartPoint!, widget.routeEndPoint!);
+    }
+
+    // Handle Track Live Trip if driverId is set
+    if (widget.trackDriverId != null &&
+        widget.trackDriverId!.trim().isNotEmpty) {
+      _startLiveTracking(widget.trackDriverId!);
+    }
   }
 
   @override
   void dispose() {
     _searchController.dispose();
     _mapController?.dispose();
+    _liveDriverSub?.cancel();
     super.dispose();
   }
 
+  // ── Draw Route Polyline ──────────────────────────────────────────────────
+  Future<void> _drawRoutePolyline(String startPoint, String endPoint) async {
+    final startLatLng = await GeocodingService.geocodeAddress(startPoint);
+    final endLatLng = await GeocodingService.geocodeAddress(endPoint);
+
+    if (!mounted) return;
+
+    if (startLatLng == null || endLatLng == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Could not geocode route points')),
+      );
+      return;
+    }
+
+    setState(() {
+      _polylines.clear();
+      _polylines.add(
+        Polyline(
+          polylineId: const PolylineId('route_line'),
+          points: [startLatLng, endLatLng],
+          color: NavigoColors.primaryOrange,
+          width: 4,
+          patterns: [PatternItem.dash(20), PatternItem.gap(10)],
+        ),
+      );
+
+      // Add start and end markers
+      _markers.removeWhere(
+        (m) =>
+            m.markerId.value == 'route_start' ||
+            m.markerId.value == 'route_end',
+      );
+      _markers.add(
+        Marker(
+          markerId: const MarkerId('route_start'),
+          position: startLatLng,
+          infoWindow: InfoWindow(title: 'Start', snippet: startPoint),
+          icon: BitmapDescriptor.defaultMarkerWithHue(
+            BitmapDescriptor.hueGreen,
+          ),
+        ),
+      );
+      _markers.add(
+        Marker(
+          markerId: const MarkerId('route_end'),
+          position: endLatLng,
+          infoWindow: InfoWindow(title: 'End', snippet: endPoint),
+          icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRed),
+        ),
+      );
+    });
+
+    // Zoom to fit both points
+    _fitBounds(startLatLng, endLatLng);
+  }
+
+  void _fitBounds(LatLng a, LatLng b) {
+    final c = _mapController;
+    if (c == null) return;
+
+    final south =
+        a.latitude < b.latitude ? a.latitude : b.latitude;
+    final north =
+        a.latitude > b.latitude ? a.latitude : b.latitude;
+    final west =
+        a.longitude < b.longitude ? a.longitude : b.longitude;
+    final east =
+        a.longitude > b.longitude ? a.longitude : b.longitude;
+
+    c.animateCamera(
+      CameraUpdate.newLatLngBounds(
+        LatLngBounds(
+          southwest: LatLng(south, west),
+          northeast: LatLng(north, east),
+        ),
+        80,
+      ),
+    );
+  }
+
+  // ── Live Tracking ────────────────────────────────────────────────────────
+  void _startLiveTracking(String driverId) {
+    _liveDriverSub?.cancel();
+    final db = FirebaseFirestore.instance;
+
+    setState(() {
+      _isLiveTracking = true;
+      _trackingDriverId = driverId;
+    });
+
+    _liveDriverSub = db
+        .collection('drivers')
+        .doc(driverId)
+        .snapshots()
+        .listen((snap) {
+          if (!mounted) return;
+          final data = snap.data();
+          if (data == null) return;
+
+          final lat = (data['latitude'] as num?)?.toDouble();
+          final lng = (data['longitude'] as num?)?.toDouble();
+          LatLng? driverPos;
+
+          if (lat != null && lng != null) {
+            driverPos = LatLng(lat, lng);
+          } else {
+            final loc = data['location'];
+            if (loc is Map) {
+              final la = (loc['lat'] as num?)?.toDouble();
+              final lo = (loc['lng'] as num?)?.toDouble();
+              if (la != null && lo != null) {
+                driverPos = LatLng(la, lo);
+              }
+            }
+          }
+
+          if (driverPos == null) return;
+
+          setState(() {
+            _markers.removeWhere((m) => m.markerId.value == 'live_driver');
+            _markers.add(
+              Marker(
+                markerId: const MarkerId('live_driver'),
+                position: driverPos!,
+                infoWindow: const InfoWindow(
+                  title: 'Driver',
+                  snippet: 'Live location',
+                ),
+                icon: BitmapDescriptor.defaultMarkerWithHue(
+                  BitmapDescriptor.hueOrange,
+                ),
+              ),
+            );
+          });
+
+          _mapController?.animateCamera(
+            CameraUpdate.newCameraPosition(
+              CameraPosition(target: driverPos, zoom: 14.5),
+            ),
+          );
+        });
+  }
+
+  void _stopLiveTracking() {
+    _liveDriverSub?.cancel();
+    _liveDriverSub = null;
+    if (!mounted) return;
+    setState(() {
+      _isLiveTracking = false;
+      _trackingDriverId = null;
+      _markers.removeWhere((m) => m.markerId.value == 'live_driver');
+    });
+  }
+
+  // ── Existing methods ─────────────────────────────────────────────────────
   Future<void> _loadUserData() async {
     try {
       final user = FirebaseAuth.instance.currentUser;
@@ -240,11 +428,13 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> {
 
       final newPosition = LatLng(position.latitude, position.longitude);
 
+      // Reverse-geocode to area name
+      final areaName = await GeocodingService.reverseGeocodeLabel(newPosition);
+
       if (!mounted) return;
       setState(() {
         _initialPosition = newPosition;
-        _selectedLocation =
-            "${position.latitude.toStringAsFixed(6)}, ${position.longitude.toStringAsFixed(6)}";
+        _selectedLocation = areaName;
 
         _markers.removeWhere((m) => m.markerId.value == "current_location");
         _markers.add(
@@ -281,8 +471,8 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> {
 
     setState(() {
       _initialPosition = location;
-      _selectedLocation =
-          "${location.latitude.toStringAsFixed(6)}, ${location.longitude.toStringAsFixed(6)}";
+      // Show loading text while geocoding
+      _selectedLocation = 'Loading area name...';
 
       _markers.removeWhere((m) => m.markerId.value == "current_location");
       _markers.add(
@@ -292,6 +482,12 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> {
           infoWindow: const InfoWindow(title: "My Location"),
         ),
       );
+    });
+
+    // Reverse-geocode asynchronously
+    GeocodingService.reverseGeocodeLabel(location).then((areaName) {
+      if (!mounted) return;
+      setState(() => _selectedLocation = areaName);
     });
 
     _mapController?.animateCamera(
@@ -641,7 +837,21 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> {
             myLocationButtonEnabled: false,
             zoomControlsEnabled: false,
             markers: _markers,
-            onMapCreated: (controller) => _mapController = controller,
+            polylines: _polylines,
+            onMapCreated: (controller) {
+              _mapController = controller;
+              // If we have route points, fit bounds after map is created
+              if (widget.routeStartPoint != null &&
+                  widget.routeEndPoint != null &&
+                  _polylines.isNotEmpty) {
+                final points = _polylines.first.points;
+                if (points.length >= 2) {
+                  WidgetsBinding.instance.addPostFrameCallback((_) {
+                    _fitBounds(points.first, points.last);
+                  });
+                }
+              }
+            },
             onTap: (latLng) => _setSelectedLocation(latLng),
           ),
           SafeArea(
@@ -800,6 +1010,138 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> {
               ),
             ),
           ),
+
+          // ── Live tracking banner ──────────────────────────────────────────
+          if (_isLiveTracking)
+            Positioned(
+              top: 180,
+              left: 16,
+              right: 16,
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 10,
+                ),
+                decoration: BoxDecoration(
+                  color: NavigoColors.accentGreen,
+                  borderRadius: BorderRadius.circular(16),
+                  boxShadow: const [
+                    BoxShadow(color: Colors.black26, blurRadius: 8),
+                  ],
+                ),
+                child: Row(
+                  children: [
+                    const Icon(
+                      Icons.gps_fixed,
+                      color: Colors.white,
+                      size: 20,
+                    ),
+                    const SizedBox(width: 10),
+                    const Expanded(
+                      child: Text(
+                        'Tracking driver live…',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w600,
+                          fontSize: 14,
+                        ),
+                      ),
+                    ),
+                    GestureDetector(
+                      onTap: _stopLiveTracking,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 6,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.white24,
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: const Text(
+                          'Stop',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 13,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+
+          // ── Route view banner ─────────────────────────────────────────────
+          if (_polylines.isNotEmpty && !_isLiveTracking)
+            Positioned(
+              top: 180,
+              left: 16,
+              right: 16,
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 10,
+                ),
+                decoration: BoxDecoration(
+                  color: NavigoColors.primaryOrange,
+                  borderRadius: BorderRadius.circular(16),
+                  boxShadow: const [
+                    BoxShadow(color: Colors.black26, blurRadius: 8),
+                  ],
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.route, color: Colors.white, size: 20),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        '${widget.routeStartPoint ?? ''} → ${widget.routeEndPoint ?? ''}',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w600,
+                          fontSize: 13,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    GestureDetector(
+                      onTap: () {
+                        setState(() {
+                          _polylines.clear();
+                          _markers.removeWhere(
+                            (m) =>
+                                m.markerId.value == 'route_start' ||
+                                m.markerId.value == 'route_end',
+                          );
+                        });
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 6,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.white24,
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: const Text(
+                          'Close',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 13,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+
           Positioned(
             bottom: 20,
             left: 0,
@@ -843,7 +1185,7 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> {
                         child: Text(
                           "Line: ${_selectedLine ?? 'Not selected'}",
                           style: NavigoTextStyles.bodyMedium.copyWith(
-                            color: NavigoColors.textMuted,
+                            color: NavigoColors.textDark,
                             fontSize: 15,
                           ),
                         ),
@@ -864,7 +1206,7 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> {
                         child: Text(
                           "Location: ${_selectedLocation ?? 'Not selected'}",
                           style: NavigoTextStyles.bodyMedium.copyWith(
-                            color: NavigoColors.textMuted,
+                            color: NavigoColors.textDark,
                             fontSize: 15,
                           ),
                         ),

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 
 import '../../models/schedule_slot.dart';
+import '../../services/geocoding_service.dart';
 import '../../services/local_storage_service.dart';
 import '../../services/passenger_schedule_service.dart';
 import '../../services/passenger_trip_repository.dart';
@@ -64,8 +65,8 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
     try {
       final saved = await _tripRepository.getSavedPassengerLocation();
       if (!mounted || saved == null) return;
-      final label =
-          '${saved.latitude.toStringAsFixed(6)}, ${saved.longitude.toStringAsFixed(6)}';
+      final label = await GeocodingService.reverseGeocodeLabel(saved);
+      if (!mounted) return;
       if (_manualPickupController.text.trim().isEmpty) {
         setState(() => _manualPickupController.text = label);
       }
@@ -451,6 +452,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                     TextField(
                       controller: _manualPickupController,
                       maxLines: 2,
+                      style: const TextStyle(color: NavigoColors.textDark),
                       decoration: NavigoDecorations.kInputDecoration.copyWith(
                         hintText: 'Pickup description',
                         filled: true,

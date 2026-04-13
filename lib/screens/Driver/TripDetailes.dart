@@ -4,22 +4,96 @@ import 'package:flutter/material.dart';
 import '../../models/route.dart';
 import '../../models/schedule_slot.dart';
 import '../../services/driver_trip_details_service.dart';
-import '../../services/trip_completion_service.dart';
+import '../../services/driver_live_trip_service.dart';
 import '../../theme/app_theme.dart';
+import 'DriverHomeScreen.dart';
 import 'DriverBottomNavBar.dart';
 import 'DriverLiveTripScreen.dart';
+import 'DriverTripsScreen.dart';
 
-class TripDetailes extends StatelessWidget {
+class TripDetailes extends StatefulWidget {
   final Map<String, dynamic> trip;
 
   const TripDetailes({super.key, required this.trip});
 
   @override
-  Widget build(BuildContext context) {
-    final DriverTripDetailsService service = DriverTripDetailsService();
+  State<TripDetailes> createState() => _TripDetailesState();
+}
 
-    final String tripId = (trip['tripId'] ?? '').toString().trim();
-    final String? routeId = trip['routeId']?.toString();
+class _TripDetailesState extends State<TripDetailes> {
+  final DriverTripDetailsService service = DriverTripDetailsService();
+  final DriverLiveTripService _liveTripService = DriverLiveTripService();
+  bool _isCancelling = false;
+
+  Future<void> _cancelTrip() async {
+    final driverId = FirebaseAuth.instance.currentUser?.uid;
+    if (driverId == null || driverId.trim().isEmpty) return;
+
+    final tripId = (widget.trip['tripId'] ?? '').toString().trim();
+    final routeId = (widget.trip['routeId'] ?? '').toString().trim();
+
+    if (tripId.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Trip ID is missing')),
+      );
+      return;
+    }
+
+    // Confirm with the user
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Cancel Trip'),
+        content: const Text(
+          'Are you sure you want to cancel this trip? This action cannot be undone.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('No'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: TextButton.styleFrom(foregroundColor: NavigoColors.accentRed),
+            child: const Text('Yes, Cancel'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true || !mounted) return;
+
+    setState(() => _isCancelling = true);
+
+    try {
+      await _liveTripService.cancelTrip(
+        routeId: routeId,
+        tripId: tripId,
+        driverId: driverId,
+      );
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Trip cancelled successfully')),
+      );
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (_) => const DriverTripsScreen()),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to cancel: $e')),
+      );
+    } finally {
+      if (mounted) setState(() => _isCancelling = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final String tripId = (widget.trip['tripId'] ?? '').toString().trim();
+    final String? routeId = widget.trip['routeId']?.toString();
 
     return Scaffold(
       backgroundColor: NavigoColors.backgroundLight,
@@ -168,7 +242,7 @@ class TripDetailes extends StatelessWidget {
                                 )
                               : ListView.separated(
                                   itemCount: passengers.length,
-                                  separatorBuilder: (_, _) => const SizedBox(
+                                  separatorBuilder: (_, __) => const SizedBox(
                                     height: NavigoSizes.itemGap,
                                   ),
                                   itemBuilder: (context, index) {
@@ -188,18 +262,20 @@ class TripDetailes extends StatelessWidget {
 
                         const SizedBox(height: 10),
 
+                        // Start Trip button
                         SizedBox(
                           width: double.infinity,
                           height: NavigoSizes.buttonHeight,
                           child: ElevatedButton(
                             style: NavigoDecorations.kPrimaryButtonLargeStyle,
-                            onPressed: () {
-                              final safeTripId = (trip['tripId'] ?? '')
+                            onPressed: () async {
+                              final safeTripId = (widget.trip['tripId'] ?? '')
                                   .toString()
                                   .trim();
-                              final safeRouteId = (trip['routeId'] ?? '')
+                              final safeRouteId = (widget.trip['routeId'] ?? '')
                                   .toString()
                                   .trim();
+                              final driverId = FirebaseAuth.instance.currentUser?.uid ?? '';
 
                               if (safeTripId.isEmpty) {
                                 ScaffoldMessenger.of(context).showSnackBar(
@@ -210,20 +286,64 @@ class TripDetailes extends StatelessWidget {
                                 return;
                               }
 
-                              Navigator.push(
+                              try {
+                                await _liveTripService.startTrip(
+                                  routeId: safeRouteId,
+                                  tripId: safeTripId,
+                                  driverId: driverId,
+                                );
+                              } catch (e) {
+                                if (!context.mounted) return;
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(content: Text('Could not start: $e')),
+                                );
+                                return;
+                              }
+
+                              if (!context.mounted) return;
+                              Navigator.pushAndRemoveUntil(
                                 context,
                                 MaterialPageRoute(
-                                  builder: (_) => DriverLiveTripScreen(
-                                    tripId: safeTripId,
-                                    routeId: safeRouteId,
-                                  ),
+                                  builder: (_) => const DriverHomeScreen(),
                                 ),
+                                (route) => false,
                               );
                             },
                             child: const Text(
                               "Start Trip",
                               style: NavigoTextStyles.button,
                             ),
+                          ),
+                        ),
+
+                        const SizedBox(height: 8),
+
+                        // Cancel Trip button (red)
+                        SizedBox(
+                          width: double.infinity,
+                          height: NavigoSizes.buttonHeight,
+                          child: ElevatedButton(
+                            onPressed: _isCancelling ? null : _cancelTrip,
+                            style: NavigoDecorations.kPrimaryButtonLargeStyle
+                                .copyWith(
+                                  backgroundColor:
+                                      const WidgetStatePropertyAll(
+                                        NavigoColors.accentRed,
+                                      ),
+                                ),
+                            child: _isCancelling
+                                ? const SizedBox(
+                                    width: 22,
+                                    height: 22,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      color: NavigoColors.textLight,
+                                    ),
+                                  )
+                                : const Text(
+                                    "Cancel Trip",
+                                    style: NavigoTextStyles.button,
+                                  ),
                           ),
                         ),
 
