@@ -1,10 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../theme/app_theme.dart';
 import 'role.dart';
-import '../authentication/PhoneNumberScreen.dart';
-import '../passenger/passengerhomescreen.dart';
-import 'package:navigo/screens/route_manager/RouteSchedule.dart';
-import 'package:navigo/screens/Driver/DriverHomeScreen.dart';
+import '../authentication/phone_number_screen.dart';
 
 class OnboardingScreen extends StatelessWidget {
   const OnboardingScreen({super.key});
@@ -90,67 +87,10 @@ class OnboardingScreen extends StatelessWidget {
                 MaterialPageRoute(builder: (context) => PhoneNumberScreen()),
               );
             },
-            child: Text(
-              "Sign in",
-              style: NavigoTextStyles.actionLink,
-            ),
+            child: Text("Sign in", style: NavigoTextStyles.actionLink),
           ),
 
           const SizedBox(height: 8),
-
-          /// Continue as passenger (Guest)
-          GestureDetector(
-            onTap: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => const PassengerHomeScreen(),
-                ),
-              );
-            },
-            child: Text(
-              "Continue as guest",
-              style: NavigoTextStyles.bodySmall.copyWith(
-                decoration: TextDecoration.underline,
-              ),
-            ),
-          ),
-
-          const SizedBox(height: 4),
-
-          /// Continue as driver (Guest)
-          GestureDetector(
-            onTap: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (context) => const DriverHomeScreen()),
-              );
-            },
-            child: Text(
-              "Continue as driver (guest)",
-              style: NavigoTextStyles.bodySmall.copyWith(
-                decoration: TextDecoration.underline,
-              ),
-            ),
-          ),
-
-          const SizedBox(height: 4),
-
-          /// Continue as route manager (Guest)
-          GestureDetector(
-            onTap: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (context) => const RouteSchedule()),
-              );
-            },
-            child: Text(
-              "Continue as manager (guest)",
-              style: NavigoTextStyles.bodySmall.copyWith(
-                decoration: TextDecoration.underline,
-              ),
-            ),
-          ),
 
           const SizedBox(height: 12),
         ],

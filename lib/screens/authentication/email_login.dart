@@ -1,9 +1,9 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 
 import 'package:navigo/controllers/app_controller_scope.dart';
 import '../../theme/app_theme.dart';
-import 'PhoneNumberScreen.dart';
-import '../route_manager/RouteSchedule.dart';
+import 'phone_number_screen.dart';
+import '../route_manager/route_schedule.dart';
 
 class EmailLoginScreen extends StatefulWidget {
   const EmailLoginScreen({super.key});
@@ -15,7 +15,9 @@ class EmailLoginScreen extends StatefulWidget {
 class _EmailLoginScreenState extends State<EmailLoginScreen> {
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
+
   bool _obscurePassword = true;
+  bool _localLoading = false;
 
   @override
   void dispose() {
@@ -25,54 +27,43 @@ class _EmailLoginScreenState extends State<EmailLoginScreen> {
   }
 
   Future<void> _signIn() async {
+    if (_localLoading) return;
+
     final auth = AppControllerScope.of(context).authController;
-    String email = _emailController.text.trim();
-    String password = _passwordController.text.trim();
+
+    final email = _emailController.text.trim();
+    final password = _passwordController.text.trim();
 
     if (email.isEmpty || password.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Please enter email and password")),
+        const SnackBar(content: Text('Please enter email and password')),
       );
       return;
     }
 
+    setState(() => _localLoading = true);
+
     final role = await auth.signInWithEmail(email, password);
+
     if (!mounted) return;
+
+    setState(() => _localLoading = false);
 
     if (role == 'route_manager') {
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(builder: (_) => const RouteSchedule()),
       );
-      return;
+    } else {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(auth.error ?? 'Login failed')));
     }
-
-    if (role == null) {
-      final code = auth.errorCode;
-      String message = "Login failed";
-      if (code == 'user-not-found') {
-        message = "No user found for this email.";
-      } else if (code == 'wrong-password' ||
-          code == 'invalid-credential' ||
-          code == 'INVALID_LOGIN_CREDENTIALS') {
-        message = "Incorrect password.";
-      } else if (auth.error != null && auth.error!.isNotEmpty) {
-        message = auth.error!;
-      }
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(message)));
-      return;
-    }
-
-    // Signed in, but not a route manager.
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text("You are not authorized as a Route Manager")),
-    );
   }
 
   @override
   Widget build(BuildContext context) {
-    final auth = AppControllerScope.of(context).authController;
+    final isLoading = _localLoading;
 
     return Scaffold(
       backgroundColor: NavigoColors.backgroundLight,
@@ -80,8 +71,10 @@ class _EmailLoginScreenState extends State<EmailLoginScreen> {
       body: SafeArea(
         child: Column(
           children: [
-            NavigoDecorations.topBar(onBack: () => Navigator.pop(context)),
-
+            NavigoDecorations.topBar(
+              onBack: () => Navigator.pop(context),
+              context: context,
+            ),
             Expanded(
               child: Center(
                 child: SingleChildScrollView(
@@ -96,47 +89,44 @@ class _EmailLoginScreenState extends State<EmailLoginScreen> {
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           Text(
-                            "Route Manager Login",
+                            'Route Manager Login',
                             style: NavigoTextStyles.titleLarge,
                           ),
                           const SizedBox(height: 8),
                           Text(
-                            "Sign in using your administrator email and password.",
+                            'Sign in using your route manager email and password.',
                             style: NavigoTextStyles.bodyMedium,
-                          ),
-                          const SizedBox(height: 10),
-
-                          NavigoDecorations.statusChip(
-                            label: "Route Manager only",
-                            color: NavigoColors.accentGreen,
                           ),
                           const SizedBox(height: 20),
 
-                          Text("Email", style: NavigoTextStyles.label),
+                          Text('Email', style: NavigoTextStyles.label),
                           const SizedBox(height: 8),
                           TextField(
                             controller: _emailController,
+                            keyboardType: TextInputType.emailAddress,
+                            textInputAction: TextInputAction.next,
+                            enabled: !isLoading,
                             style: NavigoTextStyles.fieldText,
                             decoration: NavigoDecorations.kInputDecoration
                                 .copyWith(
-                                  hintText: "RouteManager@navigo.com",
+                                  hintText: 'RouteManager@navigo.com',
                                   prefixIcon: const Icon(
                                     Icons.email_outlined,
                                     color: NavigoColors.accentGreen,
                                   ),
-                                  suffixIcon: IconButton(
-                                    icon: const Icon(Icons.clear),
-                                    onPressed: () => _emailController.clear(),
-                                  ),
                                 ),
                           ),
+
                           const SizedBox(height: 16),
 
-                          Text("Password", style: NavigoTextStyles.label),
+                          Text('Password', style: NavigoTextStyles.label),
                           const SizedBox(height: 8),
                           TextField(
                             controller: _passwordController,
                             obscureText: _obscurePassword,
+                            textInputAction: TextInputAction.done,
+                            enabled: !isLoading,
+                            onSubmitted: (_) => _signIn(),
                             style: NavigoTextStyles.fieldText,
                             decoration: NavigoDecorations.kInputDecoration
                                 .copyWith(
@@ -150,14 +140,18 @@ class _EmailLoginScreenState extends State<EmailLoginScreen> {
                                           ? Icons.visibility_off
                                           : Icons.visibility,
                                     ),
-                                    onPressed: () {
-                                      setState(() {
-                                        _obscurePassword = !_obscurePassword;
-                                      });
-                                    },
+                                    onPressed: isLoading
+                                        ? null
+                                        : () {
+                                            setState(() {
+                                              _obscurePassword =
+                                                  !_obscurePassword;
+                                            });
+                                          },
                                   ),
                                 ),
                           ),
+
                           const SizedBox(height: 25),
 
                           SizedBox(
@@ -165,17 +159,22 @@ class _EmailLoginScreenState extends State<EmailLoginScreen> {
                             height: NavigoSizes.buttonHeightLarge,
                             child: ElevatedButton(
                               style: NavigoDecorations.kPrimaryButtonLargeStyle,
-                              onPressed: auth.isLoading ? null : _signIn,
-                              child: auth.isLoading
-                                  ? const CircularProgressIndicator(
-                                      color: NavigoColors.textLight,
+                              onPressed: isLoading ? null : _signIn,
+                              child: isLoading
+                                  ? const SizedBox(
+                                      width: 22,
+                                      height: 22,
+                                      child: CircularProgressIndicator(
+                                        color: NavigoColors.textLight,
+                                        strokeWidth: 2,
+                                      ),
                                     )
                                   : Row(
                                       mainAxisAlignment:
                                           MainAxisAlignment.center,
                                       children: [
                                         Text(
-                                          "Sign In",
+                                          'Sign In',
                                           style: NavigoTextStyles.button,
                                         ),
                                         const SizedBox(width: 10),
@@ -184,21 +183,24 @@ class _EmailLoginScreenState extends State<EmailLoginScreen> {
                                     ),
                             ),
                           ),
+
                           const SizedBox(height: 12),
 
                           Center(
                             child: TextButton(
-                              onPressed: () {
-                                Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (context) =>
-                                        const PhoneNumberScreen(),
-                                  ),
-                                );
-                              },
+                              onPressed: isLoading
+                                  ? null
+                                  : () {
+                                      Navigator.push(
+                                        context,
+                                        MaterialPageRoute(
+                                          builder: (_) =>
+                                              const PhoneNumberScreen(),
+                                        ),
+                                      );
+                                    },
                               child: Text(
-                                "Back to user login",
+                                'Back to user login',
                                 style: NavigoTextStyles.actionLink,
                               ),
                             ),

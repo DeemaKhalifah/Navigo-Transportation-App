@@ -1,5 +1,5 @@
-import 'package:flutter/material.dart';
-import 'package:navigo/screens/NotificationsScreen.dart';
+﻿import 'package:flutter/material.dart';
+import 'package:navigo/screens/notifications_screen.dart';
 
 class NavigoColors {
   static const Color primaryOrange = Color(0xFFFF9800);

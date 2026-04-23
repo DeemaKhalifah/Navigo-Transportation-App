@@ -2,151 +2,129 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
-import '../services/api_config.dart';
-import '../services/auth_api_service.dart';
-
-/// Handles authentication state, login/signup logic, and role-based navigation.
 class AuthController extends ChangeNotifier {
-  final FirebaseAuth _auth;
-  final FirebaseFirestore _db;
-  final AuthApiService _apiService = AuthApiService();
+  final FirebaseAuth _auth = FirebaseAuth.instance;
+  final FirebaseFirestore _db = FirebaseFirestore.instance;
 
-  bool _isLoading = false;
-  String? _error;
-  String? _errorCode;
+  bool isLoading = false;
+  String? error;
+  String? errorCode;
 
-  bool get isLoading => _isLoading;
-  String? get error => _error;
-  String? get errorCode => _errorCode;
   User? get currentUser => _auth.currentUser;
 
-  AuthController({FirebaseAuth? auth, FirebaseFirestore? firestore})
-      : _auth = auth ?? FirebaseAuth.instance,
-        _db = firestore ?? FirebaseFirestore.instance;
+  void _update({
+    bool? loading,
+    String? newError,
+    String? newErrorCode,
+    bool clearError = false,
+  }) {
+    if (loading != null) isLoading = loading;
 
-  void _setLoading(bool value) {
-    _isLoading = value;
+    if (clearError) {
+      error = null;
+      errorCode = null;
+    } else {
+      if (newError != null) error = newError;
+      if (newErrorCode != null) errorCode = newErrorCode;
+    }
+
     notifyListeners();
   }
 
-  void _setError(String? value) {
-    _error = value;
-    notifyListeners();
+  String _normalizeRole(String? role) {
+    final value = (role ?? '').trim().toLowerCase();
+
+    if (value == 'route_manager' ||
+        value == 'route manager' ||
+        value == 'routemanager' ||
+        value == 'manager') {
+      return 'route_manager';
+    }
+
+    if (value == 'driver') return 'driver';
+    if (value == 'passenger') return 'passenger';
+
+    return value;
   }
 
-  void _setErrorCode(String? value) {
-    _errorCode = value;
-    notifyListeners();
-  }
-
-  void clearError() => _setError(null);
-
-  /// Sign in with email and password (Route Manager flow).
-  ///
-  /// Returns the user's role (e.g. `route_manager`) when available.
   Future<String?> signInWithEmail(String email, String password) async {
-    _setLoading(true);
-    _setError(null);
-    _setErrorCode(null);
+    _update(loading: true, clearError: true);
 
     try {
-      if (ApiConfig.useBackend) {
-        await _auth.signInWithEmailAndPassword(email: email, password: password);
-        final result = await _apiService.loginWithToken();
-        _setLoading(false);
-        return result?['role'] as String?;
+      final credential = await _auth.signInWithEmailAndPassword(
+        email: email.trim(),
+        password: password.trim(),
+      );
+
+      final uid = credential.user?.uid;
+
+      if (uid == null) {
+        _update(
+          loading: false,
+          newError: 'Login failed. No user found.',
+          newErrorCode: 'no-user',
+        );
+        return null;
       }
 
-      final userCredential =
-          await _auth.signInWithEmailAndPassword(email: email, password: password);
-      final uid = userCredential.user!.uid;
       final userDoc = await _db.collection('users').doc(uid).get();
-      _setLoading(false);
 
-      if (userDoc.exists) {
-        return userDoc.get('role') as String?;
+      if (!userDoc.exists) {
+        await _auth.signOut();
+
+        _update(
+          loading: false,
+          newError: 'User profile was not found in Firestore.',
+          newErrorCode: 'user-doc-not-found',
+        );
+
+        return null;
       }
-      return null;
+
+      final data = userDoc.data() ?? {};
+      final role = _normalizeRole(data['role']?.toString());
+
+      if (role != 'route_manager') {
+        await _auth.signOut();
+
+        _update(
+          loading: false,
+          newError: 'You are not authorized as a Route Manager.',
+          newErrorCode: 'not-route-manager',
+        );
+
+        return null;
+      }
+
+      _update(loading: false);
+      return role;
     } on FirebaseAuthException catch (e) {
-      _setErrorCode(e.code);
-      _setError(e.message);
-      _setLoading(false);
+      String message = 'Login failed.';
+
+      if (e.code == 'user-not-found') {
+        message = 'No user found for this email.';
+      } else if (e.code == 'wrong-password' ||
+          e.code == 'invalid-credential' ||
+          e.code == 'INVALID_LOGIN_CREDENTIALS') {
+        message = 'Incorrect email or password.';
+      } else if (e.message != null) {
+        message = e.message!;
+      }
+
+      _update(loading: false, newError: message, newErrorCode: e.code);
+
       return null;
     } catch (e) {
-      _setErrorCode('unknown');
-      _setError(e.toString());
-      _setLoading(false);
-      return null;
-    }
-  }
-
-  /// Send OTP to the given phone number.
-  Future<void> sendOtp({
-    required String phoneNumber,
-    required void Function(String verificationId) onCodeSent,
-    required void Function(String error) onError,
-  }) async {
-    _setLoading(true);
-    _setError(null);
-    _setErrorCode(null);
-
-    try {
-      await _auth.verifyPhoneNumber(
-        phoneNumber: phoneNumber,
-        verificationCompleted: (PhoneAuthCredential credential) async {},
-        verificationFailed: (FirebaseAuthException e) {
-          _setLoading(false);
-          _setErrorCode(e.code);
-          _setError(e.message);
-          onError(e.message ?? 'Verification failed');
-        },
-        codeSent: (String verificationId, int? resendToken) {
-          _setLoading(false);
-          onCodeSent(verificationId);
-        },
-        codeAutoRetrievalTimeout: (String verificationId) {
-          _setLoading(false);
-        },
+      _update(
+        loading: false,
+        newError: 'Login failed: $e',
+        newErrorCode: 'unknown',
       );
-    } catch (e) {
-      _setLoading(false);
-      _setErrorCode('unknown');
-      _setError(e.toString());
-      onError("Failed to send OTP: $e");
-    }
-  }
 
-  /// Verify OTP and return the signed-in user ID.
-  Future<String?> verifyOtp({
-    required String verificationId,
-    required String smsCode,
-  }) async {
-    _setLoading(true);
-    _setError(null);
-    _setErrorCode(null);
-
-    try {
-      final credential = PhoneAuthProvider.credential(
-        verificationId: verificationId,
-        smsCode: smsCode,
-      );
-      final userCredential = await _auth.signInWithCredential(credential);
-      _setLoading(false);
-      return userCredential.user?.uid;
-    } on FirebaseAuthException catch (e) {
-      _setErrorCode(e.code);
-      _setError(e.message);
-      _setLoading(false);
-      return null;
-    } catch (e) {
-      _setErrorCode('unknown');
-      _setError(e.toString());
-      _setLoading(false);
       return null;
     }
   }
 
-  /// Logout.
   Future<void> logout() async {
     await _auth.signOut();
     notifyListeners();

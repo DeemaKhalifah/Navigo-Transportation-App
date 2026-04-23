@@ -2,48 +2,49 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../services/local_storage_service.dart';
+import '../services/user_api_service.dart';
 
-/// Manages profile editing state, data loading, saving, logout, and image picking.
-/// Shared between passenger and driver profile screens.
+/// Manages passenger profile editing state and operations.
+/// All data operations delegate to [UserApiService] → backend API.
 class ProfileController extends ChangeNotifier {
   final TextEditingController nameController = TextEditingController();
   final TextEditingController phoneController = TextEditingController();
   final ImagePicker _picker = ImagePicker();
+  final UserApiService _userApi = UserApiService();
 
   File? image;
   bool isEditing = false;
   bool isSaving = false;
+  bool isLoading = false;
 
-  User? currentUser;
-  DocumentReference? userDocRef;
+  User? get currentUser => FirebaseAuth.instance.currentUser;
 
   void init() {
-    currentUser = FirebaseAuth.instance.currentUser;
     if (currentUser != null) {
-      userDocRef = FirebaseFirestore.instance
-          .collection('users')
-          .doc(currentUser!.uid);
       loadUserData();
     }
   }
 
   Future<void> loadUserData() async {
-    if (userDocRef == null) return;
+    if (currentUser == null) return;
+    isLoading = true;
+    notifyListeners();
+
     try {
-      DocumentSnapshot snapshot = await userDocRef!.get();
-      if (snapshot.exists) {
-        final data = snapshot.data() as Map<String, dynamic>;
+      final data = await _userApi.getProfile();
+      if (data != null) {
         nameController.text =
             "${data['firstName'] ?? ''} ${data['lastName'] ?? ''}".trim();
         phoneController.text = data['phone'] ?? '';
-        notifyListeners();
       }
     } catch (e) {
       debugPrint("Error loading user data: $e");
     }
+
+    isLoading = false;
+    notifyListeners();
   }
 
   void toggleEdit() {
@@ -60,7 +61,7 @@ class ProfileController extends ChangeNotifier {
   }
 
   Future<String?> saveProfile() async {
-    if (currentUser == null || userDocRef == null) return 'No user';
+    if (currentUser == null) return 'No user';
 
     isSaving = true;
     isEditing = false;
@@ -71,15 +72,15 @@ class ProfileController extends ChangeNotifier {
       final firstName = names.isNotEmpty ? names[0] : "";
       final lastName = names.length > 1 ? names.sublist(1).join(" ") : "";
 
-      await userDocRef!.update({
-        "firstName": firstName,
-        "lastName": lastName,
-        "phone": phoneController.text.trim(),
-      });
+      final success = await _userApi.updateProfile(
+        firstName: firstName,
+        lastName: lastName,
+        phone: phoneController.text.trim(),
+      );
 
       isSaving = false;
       notifyListeners();
-      return null; // success
+      return success ? null : 'Failed to update profile';
     } catch (e) {
       isSaving = false;
       notifyListeners();

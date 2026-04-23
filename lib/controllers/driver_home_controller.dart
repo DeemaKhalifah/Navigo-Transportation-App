@@ -1,18 +1,22 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../models/schedule_slot.dart';
 import '../models/trip_status.dart';
 import '../services/driver_live_trip_service.dart';
 import '../services/driver_trips_service.dart';
+import '../services/drivers_api_service.dart';
 
 /// Manages driver home screen business logic:
 /// trip watching, live tracking, GPS publishing, and trip ending.
+///
+/// Driver name fetched via backend API.
+/// No direct Firestore access for data operations.
 class DriverHomeController extends ChangeNotifier {
   final DriverTripsService _tripsService = DriverTripsService();
   final DriverLiveTripService _liveService = DriverLiveTripService();
+  final DriversApiService _driversApi = DriversApiService();
 
   String driverName = 'Driver';
   int assignedTripsCount = 0;
@@ -33,13 +37,9 @@ class DriverHomeController extends ChangeNotifier {
     final uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid == null) return;
     try {
-      final doc = await FirebaseFirestore.instance
-          .collection('users')
-          .doc(uid)
-          .get();
-      final first = (doc.data()?['firstName'] ?? '').toString().trim();
-      final last = (doc.data()?['lastName'] ?? '').toString().trim();
-      final name = '$first $last'.trim();
+      // Fetch driver profile from backend API
+      final profile = await _driversApi.getDriverProfile();
+      final name = (profile['fullName'] ?? '').toString().trim();
       driverName = name.isNotEmpty ? name : 'Driver';
       notifyListeners();
     } catch (_) {}
@@ -92,6 +92,7 @@ class DriverHomeController extends ChangeNotifier {
   @override
   void dispose() {
     _tripsSub?.cancel();
+    _driversApi.dispose();
     super.dispose();
   }
 }

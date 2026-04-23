@@ -1,17 +1,23 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../services/passenger_trip_repository.dart';
 import '../services/local_storage_service.dart';
 import '../services/trip_driver_request_service.dart';
+import '../services/user_api_service.dart';
+import '../services/routes_api_service.dart';
 
 /// Manages passenger home screen business logic:
 /// user data, line filtering, driver discovery, and trip requests.
+///
+/// All data operations delegate to API services.
+/// No direct Firestore access.
 class PassengerHomeController extends ChangeNotifier {
   final PassengerTripRepository _tripRepository = PassengerTripRepository();
   final TripDriverRequestService _tripRequestService =
       TripDriverRequestService();
+  final UserApiService _userApi = UserApiService();
+  final RoutesApiService _routesApi = RoutesApiService();
 
   String userName = "Loading...";
   String? selectedLine;
@@ -31,14 +37,11 @@ class PassengerHomeController extends ChangeNotifier {
         return;
       }
 
-      final doc = await FirebaseFirestore.instance
-          .collection('users')
-          .doc(user.uid)
-          .get();
-
-      if (doc.exists) {
+      // Fetch user data from backend API
+      final data = await _userApi.getProfile();
+      if (data != null) {
         userName =
-            "${doc['firstName'] ?? ''} ${doc['lastName'] ?? ''}".trim();
+            "${data['firstName'] ?? ''} ${data['lastName'] ?? ''}".trim();
         if (userName.isEmpty) userName = "Guest";
       } else {
         userName = "Guest";
@@ -56,9 +59,15 @@ class PassengerHomeController extends ChangeNotifier {
     notifyListeners();
 
     try {
-      final routes = await _tripRepository.fetchRoutes();
+      // Fetch routes from backend API
+      final routes = await _routesApi.fetchRoutes();
       final linesList = routes
-          .map(PassengerTripRepository.buildLineLabel)
+          .map((r) {
+            final start = (r['startPoint'] ?? '').toString().trim();
+            final end = (r['endPoint'] ?? '').toString().trim();
+            if (start.isEmpty || end.isEmpty) return '';
+            return '$start <-----> $end';
+          })
           .where((line) => line.trim().isNotEmpty)
           .toSet()
           .toList()
@@ -102,9 +111,10 @@ class PassengerHomeController extends ChangeNotifier {
   Future<List<Map<String, dynamic>>> getDriversForDisplay() async {
     final hasLine = selectedLine != null && selectedLine!.trim().isNotEmpty;
     if (hasLine) {
-      return await _tripRepository.getDriversForLine(selectedLine!);
+      // Use backend API for driver discovery
+      return await _routesApi.fetchDriversForLine(selectedLine!);
     } else {
-      return await _tripRepository.getAllDrivers();
+      return await _routesApi.fetchDriversForLine('');
     }
   }
 

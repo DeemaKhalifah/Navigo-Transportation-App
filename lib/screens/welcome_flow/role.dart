@@ -1,10 +1,10 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import '../../theme/app_theme.dart';
-import '../authentication/PhoneNumberScreen.dart';
+import '../authentication/phone_number_screen.dart';
 
 // Import signup screens
-import '../authentication/Passenger_Sign Up.dart';
-import '../authentication/Driver_Signup.dart';
+import '../authentication/passenger_sign_up.dart';
+import '../authentication/driver_signup.dart';
 
 class RoleSelectionScreen extends StatelessWidget {
   const RoleSelectionScreen({super.key});

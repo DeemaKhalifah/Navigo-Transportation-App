@@ -1,11 +1,45 @@
-import 'api_client.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
-/// API service for user profile and settings endpoints.
+import 'api_client.dart';
+import 'api_config.dart';
+
 class UserApiService {
   final ApiClient _client = ApiClient();
+  final FirebaseFirestore _db = FirebaseFirestore.instance;
+  final FirebaseAuth _auth = FirebaseAuth.instance;
 
-  /// Get the current user's profile.
   Future<Map<String, dynamic>?> getProfile() async {
+    final user = _auth.currentUser;
+    if (user == null) return null;
+
+    if (!ApiConfig.useBackend) {
+      final doc = await _db.collection('users').doc(user.uid).get();
+
+      if (!doc.exists) {
+        return {
+          'uid': user.uid,
+          'email': user.email ?? '',
+          'firstName': '',
+          'lastName': '',
+          'phone': user.phoneNumber ?? '',
+          'role': '',
+        };
+      }
+
+      final data = doc.data() ?? {};
+
+      return {
+        'uid': user.uid,
+        'email': data['email'] ?? user.email ?? '',
+        'firstName': data['firstName'] ?? '',
+        'lastName': data['lastName'] ?? '',
+        'phone': data['phone'] ?? user.phoneNumber ?? '',
+        'role': data['role'] ?? '',
+        'image': data['image'] ?? '',
+      };
+    }
+
     try {
       final response = await _client.get('/users/profile');
       if (response['success'] == true) {
@@ -17,30 +51,53 @@ class UserApiService {
     }
   }
 
-  /// Update the current user's profile.
   Future<bool> updateProfile({
     required String firstName,
     required String lastName,
     required String phone,
   }) async {
-    try {
-      final response = await _client.put('/users/profile', body: {
+    final user = _auth.currentUser;
+    if (user == null) return false;
+
+    if (!ApiConfig.useBackend) {
+      await _db.collection('users').doc(user.uid).set({
         'firstName': firstName,
         'lastName': lastName,
         'phone': phone,
-      });
+        'email': user.email ?? '',
+        'updatedAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+
+      return true;
+    }
+
+    try {
+      final response = await _client.put(
+        '/users/profile',
+        body: {'firstName': firstName, 'lastName': lastName, 'phone': phone},
+      );
       return response['success'] == true;
     } catch (e) {
       return false;
     }
   }
 
-  /// Save user language preference to the backend.
   Future<bool> updateLanguagePreference(String languageCode) async {
-    try {
-      final response = await _client.put('/users/settings/language', body: {
+    final user = _auth.currentUser;
+    if (user == null) return false;
+
+    if (!ApiConfig.useBackend) {
+      await _db.collection('users').doc(user.uid).set({
         'language': languageCode,
-      });
+      }, SetOptions(merge: true));
+      return true;
+    }
+
+    try {
+      final response = await _client.put(
+        '/users/settings/language',
+        body: {'language': languageCode},
+      );
       return response['success'] == true;
     } catch (e) {
       return false;
