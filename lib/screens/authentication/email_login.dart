@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
+
+import 'package:navigo/controllers/app_controller_scope.dart';
 import '../../theme/app_theme.dart';
 import 'PhoneNumberScreen.dart';
-import '../route_manager/RouteSchedule.dart'; // <-- your main screen
+import '../route_manager/RouteSchedule.dart';
 
 class EmailLoginScreen extends StatefulWidget {
   const EmailLoginScreen({super.key});
@@ -16,7 +16,6 @@ class _EmailLoginScreenState extends State<EmailLoginScreen> {
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
   bool _obscurePassword = true;
-  bool _isLoading = false;
 
   @override
   void dispose() {
@@ -26,6 +25,7 @@ class _EmailLoginScreenState extends State<EmailLoginScreen> {
   }
 
   Future<void> _signIn() async {
+    final auth = AppControllerScope.of(context).authController;
     String email = _emailController.text.trim();
     String password = _passwordController.text.trim();
 
@@ -36,68 +36,50 @@ class _EmailLoginScreenState extends State<EmailLoginScreen> {
       return;
     }
 
-    setState(() {
-      _isLoading = true;
-    });
+    final role = await auth.signInWithEmail(email, password);
+    if (!mounted) return;
 
-    try {
-      // Firebase Auth sign-in
-      UserCredential userCredential = await FirebaseAuth.instance
-          .signInWithEmailAndPassword(email: email, password: password);
-
-      String uid = userCredential.user!.uid;
-
-      // Check role in Firestore
-      DocumentSnapshot userDoc = await FirebaseFirestore.instance
-          .collection('users')
-          .doc(uid)
-          .get();
-
-      if (userDoc.exists && userDoc.get('role') == 'route_manager') {
-        // Navigate to Route Manager main screen
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(builder: (_) => const RouteSchedule()),
-        );
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text("You are not authorized as a Route Manager"),
-          ),
-        );
-      }
-    } on FirebaseAuthException catch (e) {
-      String message = "Login failed";
-      if (e.code == 'user-not-found') {
-        message = "No user found for this email.";
-      } else if (e.code == 'wrong-password') {
-        message = "Incorrect password.";
-      }
-      ScaffoldMessenger.of(
+    if (role == 'route_manager') {
+      Navigator.pushReplacement(
         context,
-      ).showSnackBar(SnackBar(content: Text(message)));
-    } catch (e) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text("Error: $e")));
-    } finally {
-      if (mounted) {
-        setState(() {
-          _isLoading = false;
-        });
-      }
+        MaterialPageRoute(builder: (_) => const RouteSchedule()),
+      );
+      return;
     }
+
+    if (role == null) {
+      final code = auth.errorCode;
+      String message = "Login failed";
+      if (code == 'user-not-found') {
+        message = "No user found for this email.";
+      } else if (code == 'wrong-password' ||
+          code == 'invalid-credential' ||
+          code == 'INVALID_LOGIN_CREDENTIALS') {
+        message = "Incorrect password.";
+      } else if (auth.error != null && auth.error!.isNotEmpty) {
+        message = auth.error!;
+      }
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(message)));
+      return;
+    }
+
+    // Signed in, but not a route manager.
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text("You are not authorized as a Route Manager")),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
+    final auth = AppControllerScope.of(context).authController;
+
     return Scaffold(
       backgroundColor: NavigoColors.backgroundLight,
       resizeToAvoidBottomInset: true,
       body: SafeArea(
         child: Column(
           children: [
-            // Top Bar
             NavigoDecorations.topBar(onBack: () => Navigator.pop(context)),
 
             Expanded(
@@ -113,26 +95,24 @@ class _EmailLoginScreenState extends State<EmailLoginScreen> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          const Text(
+                          Text(
                             "Route Manager Login",
                             style: NavigoTextStyles.titleLarge,
                           ),
                           const SizedBox(height: 8),
-                          const Text(
+                          Text(
                             "Sign in using your administrator email and password.",
                             style: NavigoTextStyles.bodyMedium,
                           ),
                           const SizedBox(height: 10),
 
-                          // Badge
                           NavigoDecorations.statusChip(
                             label: "Route Manager only",
                             color: NavigoColors.accentGreen,
                           ),
                           const SizedBox(height: 20),
 
-                          // Email Field
-                          const Text("Email", style: NavigoTextStyles.label),
+                          Text("Email", style: NavigoTextStyles.label),
                           const SizedBox(height: 8),
                           TextField(
                             controller: _emailController,
@@ -152,8 +132,7 @@ class _EmailLoginScreenState extends State<EmailLoginScreen> {
                           ),
                           const SizedBox(height: 16),
 
-                          // Password Field
-                          const Text("Password", style: NavigoTextStyles.label),
+                          Text("Password", style: NavigoTextStyles.label),
                           const SizedBox(height: 8),
                           TextField(
                             controller: _passwordController,
@@ -181,34 +160,32 @@ class _EmailLoginScreenState extends State<EmailLoginScreen> {
                           ),
                           const SizedBox(height: 25),
 
-                          // Sign In Button
                           SizedBox(
                             width: double.infinity,
                             height: NavigoSizes.buttonHeightLarge,
                             child: ElevatedButton(
                               style: NavigoDecorations.kPrimaryButtonLargeStyle,
-                              onPressed: _isLoading ? null : _signIn,
-                              child: _isLoading
+                              onPressed: auth.isLoading ? null : _signIn,
+                              child: auth.isLoading
                                   ? const CircularProgressIndicator(
                                       color: NavigoColors.textLight,
                                     )
                                   : Row(
                                       mainAxisAlignment:
                                           MainAxisAlignment.center,
-                                      children: const [
+                                      children: [
                                         Text(
                                           "Sign In",
                                           style: NavigoTextStyles.button,
                                         ),
-                                        SizedBox(width: 10),
-                                        Icon(Icons.arrow_forward),
+                                        const SizedBox(width: 10),
+                                        const Icon(Icons.arrow_forward),
                                       ],
                                     ),
                             ),
                           ),
                           const SizedBox(height: 12),
 
-                          // Back to user login
                           Center(
                             child: TextButton(
                               onPressed: () {

@@ -2,14 +2,14 @@ import 'package:flutter/material.dart';
 import '../../theme/app_theme.dart';
 import '../authentication/PhoneNumberScreen.dart';
 
-// 👇 Import your signup screens
+// Import signup screens
 import '../authentication/Passenger_Sign Up.dart';
 import '../authentication/Driver_Signup.dart';
 
 class RoleSelectionScreen extends StatelessWidget {
   const RoleSelectionScreen({super.key});
 
-  // ✅ Handle role selection + navigation
+  // Handle role selection + navigation
   void _onRoleSelected(BuildContext context, String role) {
     if (role == 'passenger') {
       Navigator.push(
@@ -44,7 +44,6 @@ class RoleSelectionScreen extends StatelessWidget {
               decoration: BoxDecoration(
                 color: NavigoColors.surfaceWhite,
                 borderRadius: BorderRadius.circular(12),
-                //border: Border.all(color: NavigoColors.accentGreen, width: 2),
               ),
               child: Icon(icon, color: NavigoColors.accentGreen, size: 24),
             ),
@@ -82,41 +81,41 @@ class RoleSelectionScreen extends StatelessWidget {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Text(
+                    Text(
                       "Create Your Account",
                       style: NavigoTextStyles.titleLarge,
                     ),
                     const SizedBox(height: 10),
-                    const Text(
+                    Text(
                       "Choose your role to continue",
                       textAlign: TextAlign.center,
                       style: NavigoTextStyles.bodySmall,
                     ),
                     const SizedBox(height: 24),
 
-                    // ✅ Passenger
+                    // Passenger
                     _buildRoleButton(
                       context,
-                      'Passenger',
-                      'Browse routes and request trips',
+                      "Passenger",
+                      "Browse routes and request trips",
                       Icons.person_outline,
                       'passenger',
                     ),
 
                     const SizedBox(height: 16),
 
-                    // ✅ Driver
+                    // Driver
                     _buildRoleButton(
                       context,
-                      'Driver',
-                      'Accept trips and manage availability',
+                      "Driver",
+                      "Accept trips and manage availability",
                       Icons.drive_eta,
                       'driver',
                     ),
 
                     const SizedBox(height: 24),
 
-                    const Text(
+                    Text(
                       "Already have an account?",
                       style: NavigoTextStyles.bodySmall,
                     ),

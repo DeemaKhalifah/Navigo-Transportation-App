@@ -55,7 +55,7 @@ class OnboardingScreen extends StatelessWidget {
       child: Column(
         children: [
           Text(
-            'Browse routes, track vehicles, and request trips.',
+            "Browse routes, track vehicles, and request trips.",
             textAlign: TextAlign.center,
             style: NavigoTextStyles.bodySmall.copyWith(height: 1.4),
           ),
@@ -69,12 +69,12 @@ class OnboardingScreen extends StatelessWidget {
             child: ElevatedButton(
               style: NavigoDecorations.kPrimaryButtonLargeStyle,
               onPressed: () => _onGetStartedPressed(context),
-              child: const Row(
+              child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Text('Get Started'),
-                  SizedBox(width: 12),
-                  Icon(Icons.arrow_forward),
+                  const Text("Get Started"),
+                  const SizedBox(width: 12),
+                  const Icon(Icons.arrow_forward),
                 ],
               ),
             ),
@@ -91,14 +91,14 @@ class OnboardingScreen extends StatelessWidget {
               );
             },
             child: Text(
-              'Sign in',
+              "Sign in",
               style: NavigoTextStyles.actionLink,
             ),
           ),
 
           const SizedBox(height: 8),
 
-          /// ✨ Continue as passenger (Guest)
+          /// Continue as passenger (Guest)
           GestureDetector(
             onTap: () {
               Navigator.push(
@@ -109,14 +109,16 @@ class OnboardingScreen extends StatelessWidget {
               );
             },
             child: Text(
-              'Continue as guest',
+              "Continue as guest",
               style: NavigoTextStyles.bodySmall.copyWith(
                 decoration: TextDecoration.underline,
               ),
             ),
           ),
 
-          /// ✨ Continue as driver (Guest)
+          const SizedBox(height: 4),
+
+          /// Continue as driver (Guest)
           GestureDetector(
             onTap: () {
               Navigator.push(
@@ -125,15 +127,16 @@ class OnboardingScreen extends StatelessWidget {
               );
             },
             child: Text(
-              'Continue as guest',
+              "Continue as driver (guest)",
               style: NavigoTextStyles.bodySmall.copyWith(
                 decoration: TextDecoration.underline,
               ),
             ),
           ),
 
+          const SizedBox(height: 4),
 
-          /// ✨ Continue as route manager (Guest)
+          /// Continue as route manager (Guest)
           GestureDetector(
             onTap: () {
               Navigator.push(
@@ -142,12 +145,14 @@ class OnboardingScreen extends StatelessWidget {
               );
             },
             child: Text(
-              'Continue as guest',
+              "Continue as manager (guest)",
               style: NavigoTextStyles.bodySmall.copyWith(
                 decoration: TextDecoration.underline,
               ),
             ),
           ),
+
+          const SizedBox(height: 12),
         ],
       ),
     );
@@ -157,9 +162,5 @@ class OnboardingScreen extends StatelessWidget {
     Navigator.of(context).push(
       MaterialPageRoute(builder: (context) => const RoleSelectionScreen()),
     );
-  }
-
-  void _onSignInTap() {
-    // TODO: Implement sign in navigation
   }
 }

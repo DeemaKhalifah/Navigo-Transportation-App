@@ -46,8 +46,8 @@ class _HelpSupportScreenState extends State<HelpSupportScreen> {
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
               child: Row(
-                children: const [
-                  Text("Help & Support", style: NavigoTextStyles.titleLarge),
+                children: [
+                  const Text("Help & Support", style: NavigoTextStyles.titleLarge),
                 ],
               ),
             ),
@@ -62,29 +62,20 @@ class _HelpSupportScreenState extends State<HelpSupportScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      /// LABEL
-                      const Text(
+                      Text(
                         "Having an issue? Send us your complaint.",
                         style: NavigoTextStyles.titleSmall,
                       ),
-
                       const SizedBox(height: 10),
-
-                      /// TEXT FIELD
                       TextField(
                         controller: _controller,
                         maxLines: 6,
-
                         style: NavigoTextStyles.titleMedium,
-
                         decoration: NavigoDecorations.kInputDecoration.copyWith(
                           hintText: "Write your complaint here...",
                         ),
                       ),
-
                       const SizedBox(height: 20),
-
-                      /// BUTTON
                       SizedBox(
                         width: double.infinity,
                         child: ElevatedButton(

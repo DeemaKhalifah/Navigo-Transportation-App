@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-
 import '../../theme/app_theme.dart';
 import 'OtpVerificationScreen.dart';
 import 'email_login.dart';
@@ -40,15 +39,13 @@ class _PhoneNumberScreenState extends State<PhoneNumberScreen> {
     try {
       await FirebaseAuth.instance.verifyPhoneNumber(
         phoneNumber: phoneNumber,
-        verificationCompleted: (PhoneAuthCredential credential) async {
-          // Leave empty to keep one clear flow through OTP screen.
-        },
+        verificationCompleted: (PhoneAuthCredential credential) async {},
         verificationFailed: (FirebaseAuthException e) {
           if (!mounted) return;
           setState(() => _isSending = false);
           ScaffoldMessenger.of(
             context,
-          ).showSnackBar(SnackBar(content: Text("Error: ${e.message}")));
+          ).showSnackBar(SnackBar(content: Text("Error: ${e.message ?? ''}")));
         },
         codeSent: (String verificationId, int? resendToken) {
           if (!mounted) return;
@@ -111,17 +108,17 @@ class _PhoneNumberScreenState extends State<PhoneNumberScreen> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            const Text(
+                            Text(
                               "Enter your phone number",
                               style: NavigoTextStyles.titleLarge,
                             ),
                             const SizedBox(height: 8),
-                            const Text(
+                            Text(
                               "We'll send you a one-time code (OTP) to verify your number.",
                               style: NavigoTextStyles.bodyMedium,
                             ),
                             const SizedBox(height: 20),
-                            const Text(
+                            Text(
                               "Phone number",
                               style: NavigoTextStyles.label,
                             ),
@@ -163,13 +160,13 @@ class _PhoneNumberScreenState extends State<PhoneNumberScreen> {
                                     : Row(
                                         mainAxisAlignment:
                                             MainAxisAlignment.center,
-                                        children: const [
+                                        children: [
                                           Text(
                                             "Send Verification Code",
                                             style: NavigoTextStyles.button,
                                           ),
-                                          SizedBox(width: 10),
-                                          Icon(Icons.arrow_forward),
+                                          const SizedBox(width: 10),
+                                          const Icon(Icons.arrow_forward),
                                         ],
                                       ),
                               ),

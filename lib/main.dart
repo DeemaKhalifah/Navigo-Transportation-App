@@ -1,35 +1,68 @@
-import 'dart:async';
-import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:flutter/material.dart';
+
+import 'controllers/app_controller_scope.dart';
+import 'controllers/auth_controller.dart';
+import 'firebase_options.dart';
 import 'screens/welcome_flow/welcome.dart';
 import 'theme/app_theme.dart';
-import 'firebase_options.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Initialize Firebase in the background
-  Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform)
-      .then((_) {
-        print("Firebase initialized successfully");
-      })
-      .catchError((e) {
-        print("Firebase initialization failed: $e");
-      });
+  // Initialize Firebase "in the background" (runApp immediately),
+  // but DO NOT build any Firebase-dependent screens until it completes.
+  final firebaseInit = Firebase.initializeApp(
+    options: DefaultFirebaseOptions.currentPlatform,
+  )
+      .then((_) => debugPrint('Firebase initialized successfully'))
+      .catchError((e) => debugPrint('Firebase initialization failed: $e'));
 
-  // Run the app immediately
-  runApp(const MyApp());
+  runApp(
+    MyApp(
+      firebaseInit: firebaseInit,
+    ),
+  );
 }
 
-class MyApp extends StatelessWidget {
-  const MyApp({super.key});
+class MyApp extends StatefulWidget {
+  final Future<void> firebaseInit;
+
+  const MyApp({
+    super.key,
+    required this.firebaseInit,
+  });
 
   @override
+  State<MyApp> createState() => _MyAppState();
+}
+
+class _MyAppState extends State<MyApp> {
+  @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      theme: appTheme,
-      debugShowCheckedModeBanner: false,
-      home: const SplashScreen(),
+    return FutureBuilder<void>(
+      future: widget.firebaseInit,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState != ConnectionState.done ||
+            snapshot.error != null) {
+          return const MaterialApp(
+            debugShowCheckedModeBanner: false,
+            home: Scaffold(body: Center(child: CircularProgressIndicator())),
+          );
+        }
+
+        // IMPORTANT: create Firebase-dependent controllers only AFTER init.
+        final authController = AuthController();
+
+        return AppControllerScope(
+          authController: authController,
+          child: MaterialApp(
+            theme: appTheme,
+            debugShowCheckedModeBanner: false,
+            home: const SplashScreen(),
+          ),
+        );
+      },
     );
   }
 }
@@ -49,13 +82,8 @@ class _SplashScreenState extends State<SplashScreen> {
   }
 
   Future<void> startApp() async {
-    // Show splash for 3 seconds
     await Future.delayed(const Duration(seconds: 3));
-
-    // Ensure the widget is still mounted
     if (!mounted) return;
-
-    // Navigate to OnboardingScreen
     Navigator.pushReplacement(
       context,
       MaterialPageRoute(builder: (context) => const OnboardingScreen()),
@@ -89,10 +117,8 @@ class _SplashScreenState extends State<SplashScreen> {
                   ),
                 ),
                 const SizedBox(height: 8),
-                Text(
-                  "Smart Transportation Platform",
-                  style: NavigoTextStyles.bodyMedium,
-                ),
+                Text("Smart Transportation Platform",
+                    style: NavigoTextStyles.bodyMedium),
               ],
             ),
           ),

@@ -14,6 +14,7 @@ dependencies:
 
   cupertino_icons: ^1.0.8
   image_picker: ^1.0.7
+  http: ^1.2.0
 
   firebase_core: ^4.6.0
   firebase_auth: ^6.3.0
@@ -36,4 +37,3 @@ flutter:
   assets:
     - assets/images/welcome.png
     - assets/images/logo.png
-    

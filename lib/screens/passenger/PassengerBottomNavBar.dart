@@ -3,7 +3,6 @@ import 'package:navigo/screens/passenger/Triphistoryscreen.dart';
 import '../../theme/app_theme.dart';
 import 'passengerHomeScreen.dart';
 import 'ScheduleScreen.dart';
-//import 'RouteDetailsScreen.dart';
 import 'ProfileScreen.dart';
 
 class PassengerBottomNavBar extends StatelessWidget {
@@ -25,7 +24,6 @@ class PassengerBottomNavBar extends StatelessWidget {
         break;
       case 2:
         screen = const TripHistoryScreen();
-        //screen = const RouteDetailsScreen();
         break;
       case 3:
         screen = const ProfileScreen();

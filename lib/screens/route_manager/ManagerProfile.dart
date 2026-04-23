@@ -3,7 +3,6 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
-
 import '../../theme/app_theme.dart';
 import '../authentication/email_login.dart';
 import 'RouteManagerNavBar.dart';
@@ -196,9 +195,7 @@ class _ManagerProfileState extends State<ManagerProfile> {
                   if (!mounted) return;
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(
-                      content: Text(
-                        "New password must be at least 6 characters",
-                      ),
+                      content: Text("New password must be at least 6 characters"),
                     ),
                   );
                   return;
@@ -230,9 +227,7 @@ class _ManagerProfileState extends State<ManagerProfile> {
                   if (!mounted) return;
 
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text("Password changed successfully"),
-                    ),
+                    const SnackBar(content: Text("Password changed successfully")),
                   );
 
                   await FirebaseAuth.instance.signOut();
@@ -297,10 +292,8 @@ class _ManagerProfileState extends State<ManagerProfile> {
                       ),
                     ),
                     const SizedBox(width: 12),
-                    const Text(
-                      "Change Password",
-                      style: NavigoTextStyles.titleSmall,
-                    ),
+                    const Text("Change Password",
+                        style: NavigoTextStyles.titleSmall),
                   ],
                 ),
                 content: SingleChildScrollView(

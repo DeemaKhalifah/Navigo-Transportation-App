@@ -40,12 +40,13 @@ class SignupApprovalScreen extends StatelessWidget {
 
                   const SizedBox(height: 20),
 
-                  // Title
-                  Text("Request received", style: NavigoTextStyles.titleMedium),
+                  Text(
+                    "Request received",
+                    style: NavigoTextStyles.titleMedium,
+                  ),
 
                   const SizedBox(height: 10),
 
-                  // Subtitle
                   Text(
                     "Your account is pending approval.\nWe'll notify you once it's verified.",
                     textAlign: TextAlign.center,
@@ -54,7 +55,6 @@ class SignupApprovalScreen extends StatelessWidget {
 
                   const SizedBox(height: 30),
 
-                  // Button
                   SizedBox(
                     width: double.infinity,
                     height: NavigoSizes.buttonHeightLarge,
