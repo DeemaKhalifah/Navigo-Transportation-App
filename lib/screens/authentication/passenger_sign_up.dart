@@ -1,6 +1,7 @@
 ﻿import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../theme/app_theme.dart';
 import 'otp_verification_screen.dart';
 
@@ -37,6 +38,33 @@ class _PassengerSignupScreenState extends State<PassengerSignupScreen> {
 
     setState(() => _isLoading = true);
     final formattedPhone = _formatPhoneNumber(phone);
+
+    try {
+      final exists = await FirebaseFirestore.instance
+          .collection('users')
+          .where('phone', isEqualTo: formattedPhone)
+          .limit(1)
+          .get();
+      if (exists.docs.isNotEmpty) {
+        if (!mounted) return;
+        setState(() => _isLoading = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              "This phone number is already used. Please use another number.",
+            ),
+          ),
+        );
+        return;
+      }
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _isLoading = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Could not verify phone number: $e")),
+      );
+      return;
+    }
 
     await FirebaseAuth.instance.verifyPhoneNumber(
       phoneNumber: formattedPhone,

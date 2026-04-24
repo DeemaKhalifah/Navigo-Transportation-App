@@ -30,10 +30,11 @@ class DriverProfileController extends ChangeNotifier {
 
   User? currentUser;
   DocumentReference<Map<String, dynamic>>? userDocRef;
+  DocumentReference<Map<String, dynamic>>? driverDocRef;
 
   StreamSubscription<DocumentSnapshot<Map<String, dynamic>>>? _driverDocSub;
 
-  void init() {
+  Future<void> init() async {
     currentUser = FirebaseAuth.instance.currentUser;
 
     if (currentUser == null) {
@@ -46,29 +47,43 @@ class DriverProfileController extends ChangeNotifier {
         .collection('users')
         .doc(currentUser!.uid);
 
-    _driverDocSub = FirebaseFirestore.instance
+    // Drivers can be stored either as `drivers/{uid}` or as an auto-id document
+    // with `userId == uid`. Resolve the correct driver doc reference once.
+    driverDocRef = FirebaseFirestore.instance
         .collection('drivers')
-        .doc(currentUser!.uid)
-        .snapshots()
-        .listen((snap) {
-          if (!snap.exists) return;
+        .doc(currentUser!.uid);
 
-          final data = snap.data() ?? {};
+    final directSnap = await driverDocRef!.get();
+    if (!directSnap.exists) {
+      final q = await FirebaseFirestore.instance
+          .collection('drivers')
+          .where('userId', isEqualTo: currentUser!.uid)
+          .limit(1)
+          .get();
+      if (q.docs.isNotEmpty) {
+        driverDocRef = q.docs.first.reference;
+      }
+    }
 
-          driverStatus = DriverStatus.normalize(
-            data['status']?.toString() ?? DriverStatus.offline,
-          );
+    _driverDocSub = driverDocRef!.snapshots().listen((snap) {
+      if (!snap.exists) return;
 
-          assignedRouteId = data['routeId']?.toString();
+      final data = snap.data() ?? {};
 
-          notifyListeners();
-        });
+      driverStatus = DriverStatus.normalize(
+        data['status']?.toString() ?? DriverStatus.offline,
+      );
 
-    loadUserData();
+      assignedRouteId = data['routeId']?.toString();
+
+      notifyListeners();
+    });
+
+    await loadUserData();
   }
 
   Future<void> loadUserData() async {
-    if (currentUser == null || userDocRef == null) {
+    if (currentUser == null || userDocRef == null || driverDocRef == null) {
       isLoading = false;
       notifyListeners();
       return;
@@ -88,10 +103,7 @@ class DriverProfileController extends ChangeNotifier {
         imageUrl = data['image']?.toString();
       }
 
-      final driverSnap = await FirebaseFirestore.instance
-          .collection('drivers')
-          .doc(currentUser!.uid)
-          .get();
+      final driverSnap = await driverDocRef!.get();
 
       if (driverSnap.exists) {
         final data = driverSnap.data() ?? {};
@@ -137,7 +149,7 @@ class DriverProfileController extends ChangeNotifier {
   }
 
   Future<String?> saveProfile() async {
-    if (currentUser == null || userDocRef == null) {
+    if (currentUser == null || userDocRef == null || driverDocRef == null) {
       return 'No logged in user';
     }
 
@@ -164,10 +176,7 @@ class DriverProfileController extends ChangeNotifier {
         'updatedAt': FieldValue.serverTimestamp(),
       }, SetOptions(merge: true));
 
-      await FirebaseFirestore.instance
-          .collection('drivers')
-          .doc(currentUser!.uid)
-          .set({
+      await driverDocRef!.set({
             'firstName': firstName,
             'lastName': lastName,
             'phone': phoneController.text.trim(),
@@ -209,6 +218,7 @@ class DriverProfileController extends ChangeNotifier {
 
   Future<String?> goOnline() async {
     if (currentUser == null || blocksAvailabilityToggle) return null;
+    if (driverDocRef == null) return 'Driver profile not found';
 
     final routeId = assignedRouteId?.trim();
 
@@ -219,16 +229,12 @@ class DriverProfileController extends ChangeNotifier {
     statusBusy = true;
     notifyListeners();
 
-    final driverRef = FirebaseFirestore.instance
-        .collection('drivers')
-        .doc(currentUser!.uid);
-
     final userRef = FirebaseFirestore.instance
         .collection('users')
         .doc(currentUser!.uid);
 
     try {
-      await driverRef.set({
+      await driverDocRef!.set({
         'status': DriverStatus.available,
         'isOnline': true,
         'updatedAt': FieldValue.serverTimestamp(),
@@ -245,7 +251,7 @@ class DriverProfileController extends ChangeNotifier {
       return null;
     } catch (e) {
       try {
-        await driverRef.set({
+        await driverDocRef!.set({
           'status': DriverStatus.offline,
           'isOnline': false,
           'updatedAt': FieldValue.serverTimestamp(),
@@ -267,6 +273,7 @@ class DriverProfileController extends ChangeNotifier {
 
   Future<String?> goOffline() async {
     if (currentUser == null || blocksAvailabilityToggle) return null;
+    if (driverDocRef == null) return 'Driver profile not found';
 
     final routeId = assignedRouteId?.trim();
 
@@ -274,14 +281,11 @@ class DriverProfileController extends ChangeNotifier {
     notifyListeners();
 
     try {
-      await FirebaseFirestore.instance
-          .collection('drivers')
-          .doc(currentUser!.uid)
-          .set({
-            'status': DriverStatus.offline,
-            'isOnline': false,
-            'updatedAt': FieldValue.serverTimestamp(),
-          }, SetOptions(merge: true));
+      await driverDocRef!.set({
+        'status': DriverStatus.offline,
+        'isOnline': false,
+        'updatedAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
 
       await FirebaseFirestore.instance
           .collection('users')
@@ -311,10 +315,9 @@ class DriverProfileController extends ChangeNotifier {
 
     if (uid != null) {
       try {
-        final driverSnap = await FirebaseFirestore.instance
-            .collection('drivers')
-            .doc(uid)
-            .get();
+        final ref =
+            driverDocRef ?? FirebaseFirestore.instance.collection('drivers').doc(uid);
+        final driverSnap = await ref.get();
 
         final routeId = driverSnap.data()?['routeId']?.toString();
 
@@ -322,7 +325,7 @@ class DriverProfileController extends ChangeNotifier {
           await _queueRepo.leaveQueue(routeId, uid);
         }
 
-        await FirebaseFirestore.instance.collection('drivers').doc(uid).set({
+        await ref.set({
           'status': DriverStatus.offline,
           'isOnline': false,
           'updatedAt': FieldValue.serverTimestamp(),

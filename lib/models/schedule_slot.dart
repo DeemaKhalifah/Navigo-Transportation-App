@@ -62,12 +62,19 @@ class ScheduleSlot {
     Map<String, dynamic> map,
   ) {
     final id = map['slotId'] as String? ?? fallbackSlotId;
+    final now = DateTime.now();
+    final parsedDeparture = _parseDate(map['departureAt']);
+    final departureAt =
+        parsedDeparture ?? now.add(const Duration(days: 3650)); // ~10 years
+
+    final parsedArrival = _parseDate(map['arrivalAt']);
+    final arrivalAt = parsedArrival ?? departureAt.add(const Duration(hours: 1));
 
     return ScheduleSlot(
       slotId: id,
       routeId: map['routeId'] as String? ?? '',
-      departureAt: _parseDate(map['departureAt']) ?? DateTime.now(),
-      arrivalAt: _parseDate(map['arrivalAt']) ?? DateTime.now(),
+      departureAt: departureAt,
+      arrivalAt: arrivalAt,
       price: (map['price'] as num?)?.toDouble(),
       capacity: (map['capacity'] as num?)?.toInt() ?? 0,
       vehicleType: map['vehicleType'] as String? ?? 'bus',

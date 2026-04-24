@@ -1,7 +1,8 @@
 ﻿import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
-import 'phone_number_screen.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import '../../theme/app_theme.dart';
+import 'otp_verification_screen.dart';
 
 class DriverSignupScreen extends StatefulWidget {
   const DriverSignupScreen({super.key});
@@ -14,6 +15,7 @@ class _DriverSignupScreenState extends State<DriverSignupScreen> {
   final _formKey = GlobalKey<FormState>();
 
   final TextEditingController _nameController = TextEditingController();
+  final TextEditingController _phoneController = TextEditingController();
   final TextEditingController _carNumberController = TextEditingController();
   final TextEditingController _licenseController = TextEditingController();
 
@@ -22,6 +24,7 @@ class _DriverSignupScreenState extends State<DriverSignupScreen> {
 
   static const List<String> _carTypes = ['Bus', 'Mini Bus', 'Van'];
 
+  bool _isLoading = false;
   bool _routesLoading = true;
   String? _routesError;
   List<DropdownMenuItem<String>> _routeItems = [];
@@ -70,12 +73,31 @@ class _DriverSignupScreenState extends State<DriverSignupScreen> {
   @override
   void dispose() {
     _nameController.dispose();
+    _phoneController.dispose();
     _carNumberController.dispose();
     _licenseController.dispose();
     super.dispose();
   }
 
-  void _submit() {
+  String _formatPhoneNumber(String phone) {
+    final cleaned = phone.replaceAll(RegExp(r'\s+'), '');
+
+    if (cleaned.startsWith('+970') || cleaned.startsWith('+972')) {
+      return cleaned;
+    }
+
+    if (cleaned.startsWith('0')) {
+      return '+970${cleaned.substring(1)}';
+    }
+
+    if (cleaned.startsWith('5')) {
+      return '+970$cleaned';
+    }
+
+    return cleaned;
+  }
+
+  Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
     if (_selectedRouteId == null || _selectedRouteId!.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -90,21 +112,76 @@ class _DriverSignupScreenState extends State<DriverSignupScreen> {
       return;
     }
 
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => PhoneNumberScreen(
-          role: 'driver',
-          fullName: _nameController.text.trim(),
-          driverData: {
-            'routeId': _selectedRouteId,
-            'plateNumber': _carNumberController.text.trim(),
-            'vehicleType': _selectedCarType,
-            'licenseNumber': _licenseController.text.trim(),
-          },
-        ),
-      ),
-    );
+    final name = _nameController.text.trim();
+    final formattedPhone = _formatPhoneNumber(_phoneController.text.trim());
+
+    setState(() => _isLoading = true);
+
+    try {
+      final exists = await FirebaseFirestore.instance
+          .collection('users')
+          .where('phone', isEqualTo: formattedPhone)
+          .limit(1)
+          .get();
+      if (exists.docs.isNotEmpty) {
+        if (!mounted) return;
+        setState(() => _isLoading = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              "This phone number is already used. Please use another number.",
+            ),
+          ),
+        );
+        return;
+      }
+
+      await FirebaseAuth.instance.verifyPhoneNumber(
+        phoneNumber: formattedPhone,
+        timeout: const Duration(seconds: 60),
+        verificationCompleted: (PhoneAuthCredential credential) async {
+          await FirebaseAuth.instance.signInWithCredential(credential);
+        },
+        verificationFailed: (FirebaseAuthException e) {
+          if (!mounted) return;
+          setState(() => _isLoading = false);
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text("Error: ${e.message}")),
+          );
+        },
+        codeSent: (String verificationId, int? resendToken) {
+          if (!mounted) return;
+          setState(() => _isLoading = false);
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => OtpVerificationScreen(
+                phoneNumber: formattedPhone,
+                verificationId: verificationId,
+                fullName: name,
+                role: "driver",
+                driverData: {
+                  'routeId': _selectedRouteId,
+                  'plateNumber': _carNumberController.text.trim(),
+                  'vehicleType': _selectedCarType,
+                  'licenseNumber': _licenseController.text.trim(),
+                },
+              ),
+            ),
+          );
+        },
+        codeAutoRetrievalTimeout: (String verificationId) {
+          if (!mounted) return;
+          setState(() => _isLoading = false);
+        },
+      );
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _isLoading = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Could not verify phone number: $e")),
+      );
+    }
   }
 
   @override
@@ -141,6 +218,14 @@ class _DriverSignupScreenState extends State<DriverSignupScreen> {
                               controller: _nameController,
                               hint: 'e.g., Ahmad Saleh',
                               prefixIcon: Icons.person_outline,
+                            ),
+                            const SizedBox(height: 16),
+                            _label('Phone number'),
+                            _inputField(
+                              controller: _phoneController,
+                              hint: '+97059 000 0000',
+                              prefixIcon: Icons.phone_outlined,
+                              keyboard: TextInputType.phone,
                             ),
                             const SizedBox(height: 16),
                             _label('Route (from Firestore)'),
@@ -203,21 +288,33 @@ class _DriverSignupScreenState extends State<DriverSignupScreen> {
                               width: double.infinity,
                               height: 55,
                               child: ElevatedButton(
-                                onPressed: _routesLoading || _routeItems.isEmpty
+                                onPressed: _isLoading ||
+                                        _routesLoading ||
+                                        _routeItems.isEmpty
                                     ? null
                                     : _submit,
                                 style: NavigoDecorations.kPrimaryButtonLargeStyle,
-                                child: const Row(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    Text(
-                                      'Continue to verify phone',
-                                      style: NavigoTextStyles.button,
-                                    ),
-                                    SizedBox(width: 10),
-                                    Icon(Icons.arrow_forward),
-                                  ],
-                                ),
+                                child: _isLoading
+                                    ? const SizedBox(
+                                        width: 22,
+                                        height: 22,
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                          color: NavigoColors.textLight,
+                                        ),
+                                      )
+                                    : const Row(
+                                        mainAxisAlignment:
+                                            MainAxisAlignment.center,
+                                        children: [
+                                          Text(
+                                            'Continue to verify phone',
+                                            style: NavigoTextStyles.button,
+                                          ),
+                                          SizedBox(width: 10),
+                                          Icon(Icons.arrow_forward),
+                                        ],
+                                      ),
                               ),
                             ),
                             const SizedBox(height: 10),

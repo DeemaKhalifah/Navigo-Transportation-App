@@ -1,4 +1,6 @@
-﻿import 'package:firebase_auth/firebase_auth.dart';
+﻿import 'dart:async';
+
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 import '../../models/route.dart';
@@ -23,6 +25,23 @@ class _TripDetailesState extends State<TripDetailes> {
   final DriverTripDetailsService service = DriverTripDetailsService();
   final DriverLiveTripService _liveTripService = DriverLiveTripService();
   bool _isCancelling = false;
+  Timer? _clockTick;
+
+  @override
+  void initState() {
+    super.initState();
+    // Refresh UI so the "Start Trip" button enables itself
+    // when the allowed window is reached.
+    _clockTick = Timer.periodic(const Duration(seconds: 30), (_) {
+      if (mounted) setState(() {});
+    });
+  }
+
+  @override
+  void dispose() {
+    _clockTick?.cancel();
+    super.dispose();
+  }
 
   Future<void> _cancelTrip() async {
     final driverId = FirebaseAuth.instance.currentUser?.uid;
@@ -164,6 +183,15 @@ class _TripDetailesState extends State<TripDetailes> {
                         data['passengers'] as List,
                       );
 
+                  final now = DateTime.now();
+                  final startWindow =
+                      slot.departureAt.subtract(const Duration(minutes: 30));
+                  final isSameDate =
+                      now.year == slot.departureAt.year &&
+                      now.month == slot.departureAt.month &&
+                      now.day == slot.departureAt.day;
+                  final canStartTrip = isSameDate && !now.isBefore(startWindow);
+
                   return Padding(
                     padding: const EdgeInsets.symmetric(
                       horizontal: NavigoSizes.screenPadding,
@@ -269,7 +297,8 @@ class _TripDetailesState extends State<TripDetailes> {
                           height: NavigoSizes.buttonHeight,
                           child: ElevatedButton(
                             style: NavigoDecorations.kPrimaryButtonLargeStyle,
-                            onPressed: () async {
+                            onPressed: canStartTrip
+                                ? () async {
                               final safeTripId = (widget.trip['tripId'] ?? '')
                                   .toString()
                                   .trim();
@@ -312,13 +341,27 @@ class _TripDetailesState extends State<TripDetailes> {
                                 ),
                                 (route) => false,
                               );
-                            },
+                            }
+                                : null,
                             child: const Text(
                               "Start Trip",
                               style: NavigoTextStyles.button,
                             ),
                           ),
                         ),
+
+                        if (!canStartTrip) ...[
+                          const SizedBox(height: 8),
+                          Center(
+                            child: Text(
+                              "You can start this trip 30 minutes before departure.",
+                              textAlign: TextAlign.center,
+                              style: NavigoTextStyles.bodySmall.copyWith(
+                                fontSize: 12,
+                              ),
+                            ),
+                          ),
+                        ],
 
                         const SizedBox(height: 8),
 

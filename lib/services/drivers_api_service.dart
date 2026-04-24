@@ -68,7 +68,7 @@ class DriversApiService {
         'firstName': firstName,
         'lastName': lastName,
         'phone': phone,
-        if (imageUrl != null) 'image': imageUrl,
+        'image': ?imageUrl,
         'updatedAt': FieldValue.serverTimestamp(),
       }, SetOptions(merge: true));
 
@@ -89,7 +89,7 @@ class DriversApiService {
         'firstName': firstName,
         'lastName': lastName,
         'phone': phone,
-        if (imageUrl != null) 'image': imageUrl,
+        'image': ?imageUrl,
       },
     );
   }

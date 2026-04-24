@@ -8,6 +8,7 @@ import 'package:google_maps_flutter/google_maps_flutter.dart';
 
 import '../../models/schedule_slot.dart';
 import '../../models/trip_status.dart';
+import '../../models/driver_status.dart';
 import '../../services/driver_live_trip_service.dart';
 import '../../services/driver_trips_service.dart';
 import '../../theme/app_theme.dart';
@@ -32,8 +33,9 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
   // ── Driver info ──────────────────────────────────────────────────────────────
   String _driverName = 'Driver';
   int _assignedTripsCount = 0;
-  int _onTripCount = 0;
   int _passengersOnMap = 0;
+  String _driverStatus = DriverStatus.offline;
+  DocumentReference<Map<String, dynamic>>? _driverDocRef;
 
   // ── Services ─────────────────────────────────────────────────────────────────
   final DriverTripsService _tripsService = DriverTripsService();
@@ -61,6 +63,7 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
   void initState() {
     super.initState();
     _loadDriverName();
+    _watchDriverStatus();
     _getUserLocation();
     _watchTrips();
   }
@@ -77,6 +80,43 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
       _mapController?.dispose();
     } catch (_) {}
     super.dispose();
+  }
+
+  Future<void> _watchDriverStatus() async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return;
+
+    // Resolve the correct driver document:
+    // - Prefer `drivers/{uid}`
+    // - Otherwise, fallback to first doc where `userId == uid`
+    _driverDocRef = FirebaseFirestore.instance.collection('drivers').doc(uid);
+    try {
+      final direct = await _driverDocRef!.get();
+      if (!direct.exists) {
+        final q = await FirebaseFirestore.instance
+            .collection('drivers')
+            .where('userId', isEqualTo: uid)
+            .limit(1)
+            .get();
+        if (q.docs.isNotEmpty) {
+          _driverDocRef = q.docs.first.reference;
+        }
+      }
+    } catch (_) {
+      // If resolving fails, keep defaults; UI will still render.
+    }
+
+    _driverDocSub?.cancel();
+    _driverDocSub = _driverDocRef?.snapshots().listen((snap) {
+      if (!mounted || _isDisposed) return;
+      if (!snap.exists) return;
+      final data = snap.data() ?? {};
+      setState(() {
+        _driverStatus = DriverStatus.normalize(
+          data['status']?.toString() ?? DriverStatus.offline,
+        );
+      });
+    });
   }
 
   // ── Driver name ──────────────────────────────────────────────────────────────
@@ -110,7 +150,6 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
 
       setState(() {
         _assignedTripsCount = scheduled + onTripSlots.length;
-        _onTripCount = onTripSlots.length;
       });
 
       // Pick the first active slot and start/refresh live tracking
@@ -385,6 +424,18 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
   @override
   Widget build(BuildContext context) {
     final bool hasActiveTrip = _activeSlot != null;
+    final bool isAvailable = _driverStatus == DriverStatus.available;
+    final bool isOffline = _driverStatus == DriverStatus.offline;
+    final bool isAssigned = _driverStatus == DriverStatus.assigned;
+
+    final String statusLabel =
+        isAvailable ? 'Available' : (isAssigned ? 'Assigned' : 'Offline');
+    final Color statusColor = isAvailable
+        ? NavigoColors.accentGreen
+        : (isAssigned ? NavigoColors.primaryOrange : NavigoColors.accentRed);
+    final IconData statusIcon = isAvailable
+        ? Icons.check_circle_outline
+        : (isAssigned ? Icons.assignment_turned_in_outlined : Icons.cancel_outlined);
 
     return Scaffold(
       backgroundColor: NavigoColors.backgroundLight,
@@ -527,12 +578,11 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                         Container(
                           width: 44,
                           height: 44,
-                          decoration: NavigoDecorations.iconCircleDecoration(
-                            NavigoColors.accentGreen,
-                          ),
-                          child: const Icon(
-                            Icons.check_circle_outline,
-                            color: NavigoColors.accentGreen,
+                          decoration:
+                              NavigoDecorations.iconCircleDecoration(statusColor),
+                          child: Icon(
+                            statusIcon,
+                            color: statusColor,
                             size: 24,
                           ),
                         ),
@@ -542,7 +592,11 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                'You are Available',
+                                isOffline
+                                    ? 'You are Offline'
+                                    : (isAssigned
+                                        ? 'You have an Assigned trip'
+                                        : 'You are Available'),
                                 style: NavigoTextStyles.titleSmall.copyWith(
                                   fontSize: 16,
                                 ),
@@ -556,8 +610,8 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                           ),
                         ),
                         NavigoDecorations.statusChip(
-                          label: 'Available',
-                          color: NavigoColors.accentGreen,
+                          label: statusLabel,
+                          color: statusColor,
                           padding: const EdgeInsets.symmetric(
                             horizontal: 14,
                             vertical: 6,
