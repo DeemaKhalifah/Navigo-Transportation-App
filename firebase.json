@@ -1,1 +1,19 @@
-{"flutter":{"platforms":{"dart":{"lib/firebase_options.dart":{"projectId":"navigo-c89a0","configurations":{"macos":"1:1085605678072:ios:980567764eed54cf5f640d","web":"1:1085605678072:web:ad6a33607bc263555f640d","windows":"1:1085605678072:web:c06dc00e6c91264f5f640d"}}}}}}
+{
+  "flutter": {
+    "platforms": {
+      "dart": {
+        "lib/firebase_options.dart": {
+          "projectId": "navigo-c89a0",
+          "configurations": {
+            "macos": "1:1085605678072:ios:980567764eed54cf5f640d",
+            "web": "1:1085605678072:web:ad6a33607bc263555f640d",
+            "windows": "1:1085605678072:web:c06dc00e6c91264f5f640d"
+          }
+        }
+      }
+    }
+  },
+  "functions": {
+    "source": "functions"
+  }
+}
