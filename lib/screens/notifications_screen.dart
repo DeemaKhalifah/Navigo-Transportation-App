@@ -1,6 +1,8 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+
+import '../models/notification_model.dart';
+import '../services/notification_service.dart';
 import '../theme/app_theme.dart';
 
 class NotificationsScreen extends StatefulWidget {
@@ -12,13 +14,34 @@ class NotificationsScreen extends StatefulWidget {
 
 class _NotificationsScreenState extends State<NotificationsScreen> {
   final TextEditingController _searchController = TextEditingController();
+  final NotificationService _notificationService = NotificationService();
+
   String _searchQuery = '';
+
   static const String _noNotificationsFound = "No notifications found";
 
   @override
   void dispose() {
     _searchController.dispose();
     super.dispose();
+  }
+
+  List<NotificationModel> _filterNotifications(
+    List<NotificationModel> notifications,
+  ) {
+    final query = _searchQuery.trim().toLowerCase();
+
+    if (query.isEmpty) return notifications;
+
+    return notifications.where((notification) {
+      return notification.title.toLowerCase().contains(query) ||
+          notification.message.toLowerCase().contains(query) ||
+          notification.type.toLowerCase().contains(query);
+    }).toList();
+  }
+
+  String _formatDate(DateTime date) {
+    return '${date.day}/${date.month}/${date.year}';
   }
 
   @override
@@ -35,16 +58,23 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
               onBack: () => Navigator.pop(context),
               context: context,
             ),
+
             NavigoDecorations.pageTitle(
               title: "Notifications",
               subtitle: "All notifications",
             ),
+
             const SizedBox(height: 12),
+
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 20),
               child: TextField(
                 controller: _searchController,
-                onChanged: (value) => setState(() => _searchQuery = value),
+                onChanged: (value) {
+                  setState(() {
+                    _searchQuery = value;
+                  });
+                },
                 decoration: NavigoDecorations.kInputDecoration.copyWith(
                   hintText: "Search notifications...",
                   filled: true,
@@ -56,17 +86,21 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                 ),
               ),
             ),
+
             const SizedBox(height: 12),
+
             Expanded(
               child: user == null
-                  ? const Center(child: Text("No notifications found"))
-                  : StreamBuilder<QuerySnapshot>(
-                      stream: FirebaseFirestore.instance
-                          .collection('users')
-                          .doc(user.uid)
-                          .collection('notifications')
-                          .orderBy('timestamp', descending: true)
-                          .snapshots(),
+                  ? const Center(
+                      child: Text(
+                        _noNotificationsFound,
+                        style: NavigoTextStyles.bodySmall,
+                      ),
+                    )
+                  : StreamBuilder<List<NotificationModel>>(
+                      stream: _notificationService.watchUserNotifications(
+                        user.uid,
+                      ),
                       builder: (context, snapshot) {
                         if (snapshot.connectionState ==
                             ConnectionState.waiting) {
@@ -74,18 +108,32 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                             child: CircularProgressIndicator(),
                           );
                         }
-                        if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+
+                        if (snapshot.hasError) {
+                          return Center(
+                            child: Text(
+                              "Failed to load notifications",
+                              style: NavigoTextStyles.bodySmall,
+                            ),
+                          );
+                        }
+
+                        final notifications = _filterNotifications(
+                          snapshot.data ?? [],
+                        );
+
+                        if (notifications.isEmpty) {
                           return Center(
                             child: Column(
                               mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                const Icon(
+                              children: const [
+                                Icon(
                                   Icons.notifications_off_outlined,
                                   size: 48,
                                   color: NavigoColors.textMuted,
                                 ),
-                                const SizedBox(height: 12),
-                                const Text(
+                                SizedBox(height: 12),
+                                Text(
                                   _noNotificationsFound,
                                   style: NavigoTextStyles.bodySmall,
                                 ),
@@ -94,46 +142,22 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                           );
                         }
 
-                        final docs = snapshot.data!.docs.where((doc) {
-                          if (_searchQuery.isEmpty) return true;
-                          final data = doc.data() as Map<String, dynamic>;
-                          final title = (data['title'] ?? '')
-                              .toString()
-                              .toLowerCase();
-                          final body = (data['body'] ?? '')
-                              .toString()
-                              .toLowerCase();
-                          return title.contains(_searchQuery.toLowerCase()) ||
-                              body.contains(_searchQuery.toLowerCase());
-                        }).toList();
-
-                        if (docs.isEmpty) {
-                          return const Center(
-                            child: Text(
-                              _noNotificationsFound,
-                              style: NavigoTextStyles.bodySmall,
-                            ),
-                          );
-                        }
-
                         return ListView.separated(
                           padding: const EdgeInsets.symmetric(horizontal: 20),
-                          itemCount: docs.length,
+                          itemCount: notifications.length,
                           separatorBuilder: (_, __) =>
                               const SizedBox(height: 12),
                           itemBuilder: (context, index) {
-                            final data =
-                                docs[index].data() as Map<String, dynamic>;
                             return _buildNotificationCard(
                               context,
-                              data,
-                              docs[index].reference,
+                              notifications[index],
                             );
                           },
                         );
                       },
                     ),
             ),
+
             const SizedBox(height: 20),
           ],
         ),
@@ -143,21 +167,19 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
 
   Widget _buildNotificationCard(
     BuildContext context,
-    Map<String, dynamic> data,
-    DocumentReference ref,
+    NotificationModel notification,
   ) {
-    final title = data['title']?.toString() ?? '';
-    final body = data['body']?.toString() ?? '';
-    final from = data['from']?.toString() ?? '';
-    final isRead = data['isRead'] == true;
-    final timestamp = data['timestamp'] as Timestamp?;
-    final formattedDate = timestamp != null
-        ? '${timestamp.toDate().day}/${timestamp.toDate().month}/${timestamp.toDate().year}'
-        : '';
+    final title = notification.title;
+    final body = notification.message;
+    final isRead = notification.isRead;
+    final formattedDate = _formatDate(notification.timestamp);
 
     return GestureDetector(
-      onTap: () {
-        ref.update({'isRead': true});
+      onTap: () async {
+        await _notificationService.markAsRead(notification.notificationId);
+
+        if (!context.mounted) return;
+
         showDialog(
           context: context,
           builder: (_) => AlertDialog(
@@ -167,14 +189,10 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(body),
+
                 const SizedBox(height: 12),
-                if (from.isNotEmpty)
-                  Text('From: $from', style: NavigoTextStyles.bodySmall),
-                if (formattedDate.isNotEmpty)
-                  Text(
-                    'Date: $formattedDate',
-                    style: NavigoTextStyles.bodySmall,
-                  ),
+
+                Text('Date: $formattedDate', style: NavigoTextStyles.bodySmall),
               ],
             ),
             actions: [
@@ -208,7 +226,9 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                 size: 20,
               ),
             ),
+
             const SizedBox(width: 12),
+
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -217,17 +237,19 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                     title,
                     style: NavigoTextStyles.titleSmall.copyWith(fontSize: 15),
                   ),
+
                   const SizedBox(height: 4),
+
                   Text(
                     body,
                     style: NavigoTextStyles.bodySmall,
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                   ),
-                  if (formattedDate.isNotEmpty) ...[
-                    const SizedBox(height: 6),
-                    Text(formattedDate, style: NavigoTextStyles.label),
-                  ],
+
+                  const SizedBox(height: 6),
+
+                  Text(formattedDate, style: NavigoTextStyles.label),
                 ],
               ),
             ),

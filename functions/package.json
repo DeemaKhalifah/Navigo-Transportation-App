@@ -1,6 +1,12 @@
 {
   "name": "navigo-functions",
   "private": true,
+  "scripts": {
+    "lint": "echo \"No lint configured\"",
+    "serve": "firebase emulators:start --only functions",
+    "deploy": "firebase deploy --only functions",
+    "logs": "firebase functions:log"
+  },
   "engines": {
     "node": "18"
   },

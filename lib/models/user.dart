@@ -7,6 +7,7 @@ abstract class UserModel {
   final String role;
   final bool isVerified;
   final bool isOnline;
+  final String? fcm;
 
   UserModel({
     required this.userId,
@@ -17,6 +18,7 @@ abstract class UserModel {
     required this.role,
     required this.isVerified,
     this.isOnline = false,
+    this.fcm,
   });
 
   Map<String, dynamic> toMap();

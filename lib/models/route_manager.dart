@@ -14,6 +14,7 @@ class RouteManagerModel extends UserModel {
     required super.role,
     required super.isVerified,
     super.isOnline,
+    super.fcm,
     required this.email,
     required this.routeId,
   });
@@ -29,6 +30,7 @@ class RouteManagerModel extends UserModel {
       'role': role,
       'isVerified': isVerified,
       'isOnline': isOnline,
+      'fcm': fcm,
     };
   }
 
@@ -50,6 +52,7 @@ class RouteManagerModel extends UserModel {
       role: map['role'] ?? 'route_manager',
       isVerified: map['isVerified'] ?? false,
       isOnline: map['isOnline'] ?? false,
+      fcm: map['fcm'] as String?,
       email: map['email'] as String? ?? '',
       routeId: map['routeId'] as String? ?? '',
     );

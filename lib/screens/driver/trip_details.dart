@@ -3,6 +3,7 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
+import '../../controllers/trip_notification_controller.dart';
 import '../../models/route.dart';
 import '../../models/schedule_slot.dart';
 import '../../services/driver_trip_details_service.dart';
@@ -24,6 +25,9 @@ class TripDetailes extends StatefulWidget {
 class _TripDetailesState extends State<TripDetailes> {
   final DriverTripDetailsService service = DriverTripDetailsService();
   final DriverLiveTripService _liveTripService = DriverLiveTripService();
+  final TripNotificationController _tripNotificationController =
+      TripNotificationController();
+
   bool _isCancelling = false;
   Timer? _clockTick;
 
@@ -187,11 +191,9 @@ class _TripDetailesState extends State<TripDetailes> {
                   final startWindow = slot.departureAt.subtract(
                     const Duration(minutes: 30),
                   );
-                  final isSameDate =
-                      now.year == slot.departureAt.year &&
-                      now.month == slot.departureAt.month &&
-                      now.day == slot.departureAt.day;
-                  final canStartTrip = isSameDate && !now.isBefore(startWindow);
+                  // Enable by time window only. Date equality checks can fail
+                  // around timezone/day-boundary cases even when the slot is valid.
+                  final canStartTrip = !now.isBefore(startWindow);
 
                   return Padding(
                     padding: const EdgeInsets.symmetric(
@@ -331,6 +333,13 @@ class _TripDetailesState extends State<TripDetailes> {
                                         routeId: safeRouteId,
                                         tripId: safeTripId,
                                         driverId: driverId,
+                                      );
+
+                                      await _tripNotificationController
+                                          .notifyPassengersTripStarted(
+                                        routeId: slot.routeId,
+                                        tripId: slot.slotId,
+                                        passengerIds: slot.passengersIds,
                                       );
                                     } catch (e) {
                                       if (!context.mounted) return;

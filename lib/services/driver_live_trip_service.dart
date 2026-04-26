@@ -53,51 +53,94 @@ class DriverLiveTripService {
     final routeRef = _db.collection(_routesCollection).doc(resolvedRouteId);
     final driverRef = _db.collection(_driversCollection).doc(safeDriverId);
 
-    await _db.runTransaction((tx) async {
-      final routeSnap = await tx.get(routeRef);
-      if (!routeSnap.exists) {
-        throw Exception('Route not found.');
+    final routeSnap = await routeRef.get();
+
+    if (!routeSnap.exists) {
+      throw Exception('Route not found.');
+    }
+
+    final routeData = routeSnap.data() ?? {};
+    final rawScheduleSlots = routeData['scheduleSlots'];
+
+    if (rawScheduleSlots is! List) {
+      throw Exception('scheduleSlots is missing in this route.');
+    }
+
+    final List<Map<String, dynamic>> cleanSlots = [];
+
+    for (final rawSlot in rawScheduleSlots) {
+      if (rawSlot is Map) {
+        cleanSlots.add(_cleanFirestoreMap(Map<String, dynamic>.from(rawSlot)));
       }
+    }
 
-      final data = routeSnap.data() as Map<String, dynamic>;
-      final rawSlots = List<Map<String, dynamic>>.from(
-        (data['scheduleSlots'] as List? ?? []).map(
-          (e) => Map<String, dynamic>.from(e as Map),
-        ),
-      );
+    final index = cleanSlots.indexWhere(
+      (slot) => (slot['slotId'] ?? '').toString().trim() == safeTripId,
+    );
 
-      final index = rawSlots.indexWhere(
-        (e) => (e['slotId'] ?? '').toString().trim() == safeTripId,
-      );
+    if (index == -1) {
+      throw Exception('Trip slot not found.');
+    }
 
-      if (index == -1) {
-        throw Exception('Trip slot not found.');
-      }
+    final selectedSlot = Map<String, dynamic>.from(cleanSlots[index]);
 
-      rawSlots[index]['status'] = 'ongoing';
-      rawSlots[index]['routeId'] =
-          (rawSlots[index]['routeId'] ?? resolvedRouteId).toString();
+    selectedSlot['slotId'] = safeTripId;
+    selectedSlot['routeId'] = resolvedRouteId;
+    selectedSlot['driverId'] = (selectedSlot['driverId'] ?? safeDriverId)
+        .toString();
+    selectedSlot['status'] = 'onTrip';
+    selectedSlot['startedAt'] = Timestamp.now();
 
-      tx.update(routeRef, {'scheduleSlots': rawSlots});
+    cleanSlots[index] = selectedSlot;
 
-      final driverUpdate = <String, dynamic>{
-        'status': DriverStatus.onTrip,
-        'isOnline': true,
-        'updatedAt': FieldValue.serverTimestamp(),
-      };
-
-      if (startLatitude != null && startLongitude != null) {
-        driverUpdate['latitude'] = startLatitude;
-        driverUpdate['longitude'] = startLongitude;
-        driverUpdate['location'] = {
-          'lat': startLatitude,
-          'lng': startLongitude,
-        };
-        driverUpdate['lastLocationUpdate'] = FieldValue.serverTimestamp();
-      }
-
-      tx.set(driverRef, driverUpdate, SetOptions(merge: true));
+    await routeRef.update({
+      'scheduleSlots': cleanSlots,
+      'updatedAt': FieldValue.serverTimestamp(),
     });
+
+    final driverUpdate = <String, dynamic>{
+      'status': DriverStatus.onTrip,
+      'isOnline': true,
+      'currentRouteId': resolvedRouteId,
+      'currentTripId': safeTripId,
+      'updatedAt': FieldValue.serverTimestamp(),
+    };
+
+    if (startLatitude != null && startLongitude != null) {
+      driverUpdate['latitude'] = startLatitude;
+      driverUpdate['longitude'] = startLongitude;
+      driverUpdate['location'] = {'lat': startLatitude, 'lng': startLongitude};
+      driverUpdate['lastLocationUpdate'] = FieldValue.serverTimestamp();
+    }
+
+    await driverRef.set(driverUpdate, SetOptions(merge: true));
+
+  }
+
+  Map<String, dynamic> _cleanFirestoreMap(Map<String, dynamic> map) {
+    final clean = <String, dynamic>{};
+
+    map.forEach((key, value) {
+      if (key.trim().isEmpty) return;
+
+      if (value == null) {
+        clean[key] = '';
+      } else if (value is Map) {
+        clean[key] = _cleanFirestoreMap(Map<String, dynamic>.from(value));
+      } else if (value is List) {
+        clean[key] = value.map((item) {
+          if (item == null) return '';
+          if (item is Map) {
+            return _cleanFirestoreMap(Map<String, dynamic>.from(item));
+          }
+          return item;
+        }).toList();
+      } else {
+        clean[key] = value;
+      }
+    });
+
+    return clean;
   }
 
   Future<void> completeTrip({
@@ -128,50 +171,50 @@ class DriverLiveTripService {
     final routeRef = _db.collection(_routesCollection).doc(resolvedRouteId);
     final driverRef = _db.collection(_driversCollection).doc(safeDriverId);
 
-    await _db.runTransaction((tx) async {
-      final routeSnap = await tx.get(routeRef);
-      if (!routeSnap.exists) {
-        throw Exception('Route not found.');
-      }
+    final routeSnap = await routeRef.get();
 
-      final data = routeSnap.data() as Map<String, dynamic>;
-      final rawSlots = List<Map<String, dynamic>>.from(
-        (data['scheduleSlots'] as List? ?? []).map(
-          (e) => Map<String, dynamic>.from(e as Map),
-        ),
-      );
+    if (!routeSnap.exists) {
+      throw Exception('Route not found.');
+    }
 
-      final index = rawSlots.indexWhere(
-        (e) => (e['slotId'] ?? '').toString().trim() == safeTripId,
-      );
+    final data = routeSnap.data() ?? {};
+    final rawScheduleSlots = data['scheduleSlots'];
 
-      if (index == -1) {
-        throw Exception('Trip slot not found.');
-      }
+    if (rawScheduleSlots is! List) {
+      throw Exception('scheduleSlots is missing in this route.');
+    }
 
-      rawSlots[index]['status'] = 'completed';
-      rawSlots[index]['routeId'] =
-          (rawSlots[index]['routeId'] ?? resolvedRouteId).toString();
+    final rawSlots = rawScheduleSlots
+        .whereType<Map>()
+        .map((e) => _cleanFirestoreMap(Map<String, dynamic>.from(e)))
+        .toList();
 
-      tx.update(routeRef, {'scheduleSlots': rawSlots});
+    final index = rawSlots.indexWhere(
+      (e) => (e['slotId'] ?? '').toString().trim() == safeTripId,
+    );
 
-      tx.set(driverRef, {
-        'status': DriverStatus.available,
-        'updatedAt': FieldValue.serverTimestamp(),
-      }, SetOptions(merge: true));
+    if (index == -1) {
+      throw Exception('Trip slot not found.');
+    }
+
+    rawSlots[index]['status'] = 'completed';
+    rawSlots[index]['routeId'] = (rawSlots[index]['routeId'] ?? resolvedRouteId)
+        .toString();
+    rawSlots[index]['completedAt'] = Timestamp.now();
+
+    await routeRef.update({
+      'scheduleSlots': rawSlots,
+      'updatedAt': FieldValue.serverTimestamp(),
     });
 
-    try {
-      await driverRef.update({
-        'currentRouteId': FieldValue.delete(),
-        'currentTripId': FieldValue.delete(),
-      });
-    } catch (_) {
-      // Legacy fields may already be absent; ignore.
-    }
+    await driverRef.set({
+      'status': DriverStatus.available,
+      'updatedAt': FieldValue.serverTimestamp(),
+      'currentRouteId': FieldValue.delete(),
+      'currentTripId': FieldValue.delete(),
+    }, SetOptions(merge: true));
   }
 
-  /// Cancel a scheduled trip: sets slot status to 'cancelled' and driver to 'available'.
   Future<void> cancelTrip({
     required String routeId,
     required String tripId,
@@ -200,36 +243,46 @@ class DriverLiveTripService {
     final routeRef = _db.collection(_routesCollection).doc(resolvedRouteId);
     final driverRef = _db.collection(_driversCollection).doc(safeDriverId);
 
-    await _db.runTransaction((tx) async {
-      final routeSnap = await tx.get(routeRef);
-      if (!routeSnap.exists) {
-        throw Exception('Route not found.');
-      }
+    final routeSnap = await routeRef.get();
 
-      final data = routeSnap.data() as Map<String, dynamic>;
-      final rawSlots = List<Map<String, dynamic>>.from(
-        (data['scheduleSlots'] as List? ?? []).map(
-          (e) => Map<String, dynamic>.from(e as Map),
-        ),
-      );
+    if (!routeSnap.exists) {
+      throw Exception('Route not found.');
+    }
 
-      final index = rawSlots.indexWhere(
-        (e) => (e['slotId'] ?? '').toString().trim() == safeTripId,
-      );
+    final data = routeSnap.data() ?? {};
+    final rawScheduleSlots = data['scheduleSlots'];
 
-      if (index == -1) {
-        throw Exception('Trip slot not found.');
-      }
+    if (rawScheduleSlots is! List) {
+      throw Exception('scheduleSlots is missing in this route.');
+    }
 
-      rawSlots[index]['status'] = 'cancelled';
+    final rawSlots = rawScheduleSlots
+        .whereType<Map>()
+        .map((e) => _cleanFirestoreMap(Map<String, dynamic>.from(e)))
+        .toList();
 
-      tx.update(routeRef, {'scheduleSlots': rawSlots});
+    final index = rawSlots.indexWhere(
+      (e) => (e['slotId'] ?? '').toString().trim() == safeTripId,
+    );
 
-      tx.set(driverRef, {
-        'status': DriverStatus.available,
-        'updatedAt': FieldValue.serverTimestamp(),
-      }, SetOptions(merge: true));
+    if (index == -1) {
+      throw Exception('Trip slot not found.');
+    }
+
+    rawSlots[index]['status'] = 'cancelled';
+    rawSlots[index]['cancelledAt'] = Timestamp.now();
+
+    await routeRef.update({
+      'scheduleSlots': rawSlots,
+      'updatedAt': FieldValue.serverTimestamp(),
     });
+
+    await driverRef.set({
+      'status': DriverStatus.available,
+      'updatedAt': FieldValue.serverTimestamp(),
+      'currentRouteId': FieldValue.delete(),
+      'currentTripId': FieldValue.delete(),
+    }, SetOptions(merge: true));
   }
 
   Future<void> updateDriverLocation({
@@ -238,6 +291,7 @@ class DriverLiveTripService {
     required double longitude,
   }) async {
     final safeDriverId = driverId.trim();
+
     if (safeDriverId.isEmpty) {
       throw Exception('Driver ID is missing.');
     }
@@ -255,6 +309,7 @@ class DriverLiveTripService {
     required String tripId,
   }) async* {
     final safeTripId = tripId.trim();
+
     if (safeTripId.isEmpty) {
       yield null;
       return;
@@ -277,7 +332,7 @@ class DriverLiveTripService {
         .asyncMap((routeSnap) async {
           if (!routeSnap.exists) return null;
 
-          final routeData = routeSnap.data() as Map<String, dynamic>;
+          final routeData = routeSnap.data() ?? {};
           final routeMap = Map<String, dynamic>.from(routeData);
           routeMap['routeId'] = (routeMap['routeId'] ?? routeSnap.id)
               .toString();
@@ -288,6 +343,7 @@ class DriverLiveTripService {
           if (rawSlots is! List) return null;
 
           ScheduleSlot? slot;
+
           for (int i = 0; i < rawSlots.length; i++) {
             final raw = rawSlots[i];
             if (raw is! Map) continue;
@@ -361,11 +417,14 @@ class DriverLiveTripService {
     for (final doc in snapshot.docs) {
       final data = doc.data();
       final rawSlots = data['scheduleSlots'];
+
       if (rawSlots is! List) continue;
 
       for (final raw in rawSlots) {
         if (raw is! Map) continue;
+
         final slotId = (raw['slotId'] ?? '').toString().trim();
+
         if (slotId == safeTripId) {
           return doc.id;
         }
@@ -377,12 +436,14 @@ class DriverLiveTripService {
 
   Future<String> getDriverName(String driverId) async {
     final safeDriverId = driverId.trim();
+
     if (safeDriverId.isEmpty) return 'Driver';
 
     final userDoc = await _db
         .collection(_usersCollection)
         .doc(safeDriverId)
         .get();
+
     if (!userDoc.exists) return 'Driver';
 
     final data = userDoc.data() ?? {};
@@ -395,12 +456,14 @@ class DriverLiveTripService {
 
   Future<Map<String, double>?> getDriverLocation(String driverId) async {
     final safeDriverId = driverId.trim();
+
     if (safeDriverId.isEmpty) return null;
 
     final doc = await _db
         .collection(_driversCollection)
         .doc(safeDriverId)
         .get();
+
     if (doc.exists) {
       final fromDriver = _extractLatLng(doc.data() ?? {});
       if (fromDriver != null) return fromDriver;
@@ -411,6 +474,7 @@ class DriverLiveTripService {
 
   Stream<Map<String, double>?> watchDriverDocumentLocation(String driverId) {
     final id = driverId.trim();
+
     if (id.isEmpty) return Stream.value(null);
 
     return _db.collection(_driversCollection).doc(id).snapshots().map((snap) {
@@ -425,6 +489,7 @@ class DriverLiveTripService {
         .map((e) => e.trim())
         .where((e) => e.isNotEmpty)
         .toList();
+
     if (ids.isEmpty) return Stream.value(const []);
 
     final subs = <StreamSubscription<DocumentSnapshot>>[];
@@ -434,10 +499,12 @@ class DriverLiveTripService {
 
     void emit() {
       final ordered = <Map<String, dynamic>>[];
+
       for (final id in ids) {
         final row = cache[id];
         if (row != null) ordered.add(row);
       }
+
       if (!controller.isClosed) controller.add(ordered);
     }
 
@@ -476,6 +543,7 @@ class DriverLiveTripService {
         .collection(_usersCollection)
         .doc(passengerId)
         .get();
+
     final userData = userSnap.data() ?? {};
 
     final first = (userData['firstName'] ?? '').toString().trim();
@@ -504,10 +572,11 @@ class DriverLiveTripService {
   Future<List<Map<String, dynamic>>> _getPassengers(
     List<String> passengerIds,
   ) async {
-    final List<Map<String, dynamic>> result = [];
+    final result = <Map<String, dynamic>>[];
 
     for (final rawPassengerId in passengerIds) {
       final passengerId = rawPassengerId.trim();
+
       if (passengerId.isEmpty) continue;
 
       final passengerSnap = await _db
@@ -531,6 +600,7 @@ class DriverLiveTripService {
         _toDouble(data['latitude']) ??
         _toDouble(data['lat']) ??
         _toDouble(data['currentLat']);
+
     final directLng =
         _toDouble(data['longitude']) ??
         _toDouble(data['lng']) ??
@@ -545,6 +615,7 @@ class DriverLiveTripService {
       final lat = _toDouble(location['lat']) ?? _toDouble(location['latitude']);
       final lng =
           _toDouble(location['lng']) ?? _toDouble(location['longitude']);
+
       if (lat != null && lng != null) {
         return {'lat': lat, 'lng': lng};
       }
@@ -557,6 +628,7 @@ class DriverLiveTripService {
       final lng =
           _toDouble(liveLocation['lng']) ??
           _toDouble(liveLocation['longitude']);
+
       if (lat != null && lng != null) {
         return {'lat': lat, 'lng': lng};
       }
@@ -583,6 +655,7 @@ class DriverLiveTripService {
     if (value is Map) {
       return _toDouble(value[key]);
     }
+
     return null;
   }
 
@@ -633,7 +706,9 @@ class DriverLiveTripService {
     );
 
     final minutes = (meters / 1000 / 30 * 60).round();
+
     if (minutes <= 1) return '1 min';
+
     return '$minutes min';
   }
 }
