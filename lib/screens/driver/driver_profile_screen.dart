@@ -7,6 +7,7 @@ import 'driver_bottom_nav_bar.dart';
 import 'driver_home_screen.dart';
 import '../../screens/passenger/support_screen.dart';
 import '../../models/driver_status.dart';
+import '../authentication/phone_number_screen.dart';
 
 class DriverProfileScreen extends StatefulWidget {
   const DriverProfileScreen({super.key});
@@ -103,10 +104,11 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
 
   Future<void> _logout() async {
     await controller.logout();
-
     if (!mounted) return;
-
-    Navigator.of(context).popUntil((route) => route.isFirst);
+    Navigator.of(context).pushAndRemoveUntil(
+      MaterialPageRoute(builder: (_) => const PhoneNumberScreen()),
+      (route) => false,
+    );
   }
 
   Widget _buildProfileImage({

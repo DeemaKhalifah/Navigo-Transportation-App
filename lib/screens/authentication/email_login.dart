@@ -71,7 +71,7 @@ class _EmailLoginScreenState extends State<EmailLoginScreen> {
       body: SafeArea(
         child: Column(
           children: [
-            NavigoDecorations.topBar(
+            NavigoDecorations.topBar1(
               onBack: () => Navigator.pop(context),
               context: context,
             ),

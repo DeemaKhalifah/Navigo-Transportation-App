@@ -93,7 +93,7 @@ class _PhoneNumberScreenState extends State<PhoneNumberScreen> {
       body: SafeArea(
         child: Column(
           children: [
-            NavigoDecorations.topBar(onBack: () => Navigator.pop(context)),
+            NavigoDecorations.topBar1(onBack: () => Navigator.pop(context)),
             Expanded(
               child: Center(
                 child: SingleChildScrollView(
@@ -118,10 +118,7 @@ class _PhoneNumberScreenState extends State<PhoneNumberScreen> {
                               style: NavigoTextStyles.bodyMedium,
                             ),
                             const SizedBox(height: 20),
-                            Text(
-                              "Phone number",
-                              style: NavigoTextStyles.label,
-                            ),
+                            Text("Phone number", style: NavigoTextStyles.label),
                             const SizedBox(height: 8),
                             TextField(
                               controller: _phoneController,
@@ -129,7 +126,7 @@ class _PhoneNumberScreenState extends State<PhoneNumberScreen> {
                               style: NavigoTextStyles.fieldText,
                               decoration: NavigoDecorations.kInputDecoration
                                   .copyWith(
-                                    hintText: "e.g. +97059XXXXXXXX",
+                                    hintText: "e.g. +970590000000",
                                     prefixIcon: const Icon(
                                       Icons.phone_outlined,
                                       color: NavigoColors.accentGreen,

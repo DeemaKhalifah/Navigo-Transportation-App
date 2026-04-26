@@ -86,9 +86,6 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
     final uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid == null) return;
 
-    // Resolve the correct driver document:
-    // - Prefer `drivers/{uid}`
-    // - Otherwise, fallback to first doc where `userId == uid`
     _driverDocRef = FirebaseFirestore.instance.collection('drivers').doc(uid);
     try {
       final direct = await _driverDocRef!.get();
@@ -102,9 +99,7 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
           _driverDocRef = q.docs.first.reference;
         }
       }
-    } catch (_) {
-      // If resolving fails, keep defaults; UI will still render.
-    }
+    } catch (_) {}
 
     _driverDocSub?.cancel();
     _driverDocSub = _driverDocRef?.snapshots().listen((snap) {
@@ -119,7 +114,6 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
     });
   }
 
-  // ── Driver name ──────────────────────────────────────────────────────────────
   Future<void> _loadDriverName() async {
     final uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid == null) return;
@@ -136,7 +130,6 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
     } catch (_) {}
   }
 
-  // ── Watch assigned trips ─────────────────────────────────────────────────────
   void _watchTrips() {
     _tripsSub = _tripsService.watchDriverTrips().listen((trips) {
       if (!mounted || _isDisposed) return;
@@ -152,7 +145,6 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
         _assignedTripsCount = scheduled + onTripSlots.length;
       });
 
-      // Pick the first active slot and start/refresh live tracking
       final newActive = onTripSlots.isNotEmpty ? onTripSlots.first : null;
       final newSlotId = newActive?.slotId;
       final oldSlotId = _activeSlot?.slotId;
@@ -166,7 +158,6 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
     });
   }
 
-  // ── Start live tracking for an active slot ───────────────────────────────────
   void _startLiveTracking(ScheduleSlot slot) {
     if (_isDisposed) return;
 
@@ -179,10 +170,8 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
       _tripLine = _tripsService.lineOf(slot);
     });
 
-    // Start GPS publishing
     _startGpsPublishing(driverId);
 
-    // Subscribe to live Firestore trip data (passengers, polyline coords)
     _liveDataSub = _liveService
         .watchLiveTrip(routeId: slot.routeId, tripId: slot.slotId)
         .listen((data) {
@@ -193,7 +182,6 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
           final endLat = data['endLat'] as double?;
           final endLng = data['endLng'] as double?;
 
-          // Draw route polyline
           _polylines.clear();
           if (startLat != null &&
               startLng != null &&
@@ -209,7 +197,6 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
             );
           }
 
-          // Driver location for ETA
           final driverLoc = data['driverLocation'] as Map<String, double>?;
           final eta = _liveService.etaText(
             from: driverLoc,
@@ -219,7 +206,6 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
           if (mounted && !_isDisposed) setState(() => _etaText = eta);
         });
 
-    // Subscribe to live passenger pins
     _passengersSub = _liveService
         .watchAssignedPassengerPins(slot.passengersIds)
         .listen((pins) {
@@ -250,7 +236,6 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
     );
   }
 
-  // ── GPS publishing ───────────────────────────────────────────────────────────
   Future<void> _startGpsPublishing(String driverId) async {
     if (_isLocating || _isDisposed) return;
     if (mounted) setState(() => _isLocating = true);
@@ -301,7 +286,6 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
     }
   }
 
-  // ── Get initial location (no active trip) ───────────────────────────────────
   Future<void> _getUserLocation() async {
     try {
       var perm = await Geolocator.checkPermission();
@@ -345,7 +329,6 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
   void _rebuildPassengerMarkers() {
     if (_isDisposed || !mounted) return;
 
-    // Remove old passenger markers
     _markers.removeWhere((m) => m.markerId.value.startsWith('passenger_'));
 
     int onMapCount = 0;
@@ -386,7 +369,6 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
     } catch (_) {}
   }
 
-  // ── End trip ─────────────────────────────────────────────────────────────────
   Future<void> _endTrip() async {
     final driverId = FirebaseAuth.instance.currentUser?.uid;
     if (driverId == null || _activeSlot == null) return;
@@ -428,14 +410,17 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
     final bool isOffline = _driverStatus == DriverStatus.offline;
     final bool isAssigned = _driverStatus == DriverStatus.assigned;
 
-    final String statusLabel =
-        isAvailable ? 'Available' : (isAssigned ? 'Assigned' : 'Offline');
+    final String statusLabel = isAvailable
+        ? 'Available'
+        : (isAssigned ? 'Assigned' : 'Offline');
     final Color statusColor = isAvailable
         ? NavigoColors.accentGreen
         : (isAssigned ? NavigoColors.primaryOrange : NavigoColors.accentRed);
     final IconData statusIcon = isAvailable
         ? Icons.check_circle_outline
-        : (isAssigned ? Icons.assignment_turned_in_outlined : Icons.cancel_outlined);
+        : (isAssigned
+              ? Icons.assignment_turned_in_outlined
+              : Icons.cancel_outlined);
 
     return Scaffold(
       backgroundColor: NavigoColors.backgroundLight,
@@ -461,10 +446,13 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
               child: Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
+                  // Title + subtitle
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
                       children: [
                         Text(
                           'Hello, $_driverName',
@@ -479,6 +467,7 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                       ],
                     ),
                   ),
+                  // Notification button — same style as PassengerHomeScreen
                   Container(
                     decoration: NavigoDecorations.kTopBarBackButton,
                     child: IconButton(
@@ -492,8 +481,9 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                     ),
                   ),
                   const SizedBox(width: 8),
+                  // Avatar — radius 30, logo 40×40, matching PassengerHomeScreen
                   CircleAvatar(
-                    radius: 26,
+                    radius: 30,
                     backgroundColor: NavigoColors.surfaceWhite,
                     child: Padding(
                       padding: const EdgeInsets.all(3),
@@ -501,8 +491,8 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                         child: Image.asset(
                           'assets/images/logo.png',
                           fit: BoxFit.contain,
-                          width: 36,
-                          height: 36,
+                          width: 40,
+                          height: 40,
                         ),
                       ),
                     ),
@@ -578,13 +568,10 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                         Container(
                           width: 44,
                           height: 44,
-                          decoration:
-                              NavigoDecorations.iconCircleDecoration(statusColor),
-                          child: Icon(
-                            statusIcon,
-                            color: statusColor,
-                            size: 24,
+                          decoration: NavigoDecorations.iconCircleDecoration(
+                            statusColor,
                           ),
+                          child: Icon(statusIcon, color: statusColor, size: 24),
                         ),
                         const SizedBox(width: 12),
                         Expanded(
@@ -595,8 +582,8 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                                 isOffline
                                     ? 'You are Offline'
                                     : (isAssigned
-                                        ? 'You have an Assigned trip'
-                                        : 'You are Available'),
+                                          ? 'You have an Assigned trip'
+                                          : 'You are Available'),
                                 style: NavigoTextStyles.titleSmall.copyWith(
                                   fontSize: 16,
                                 ),

@@ -47,7 +47,12 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                 onChanged: (value) => setState(() => _searchQuery = value),
                 decoration: NavigoDecorations.kInputDecoration.copyWith(
                   hintText: "Search notifications...",
-                  prefixIcon: const Icon(Icons.search, color: NavigoColors.accentGreen),
+                  filled: true,
+                  fillColor: NavigoColors.surfaceWhite,
+                  prefixIcon: const Icon(
+                    Icons.search,
+                    color: NavigoColors.accentGreen,
+                  ),
                 ),
               ),
             ),
@@ -63,19 +68,27 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                           .orderBy('timestamp', descending: true)
                           .snapshots(),
                       builder: (context, snapshot) {
-                        if (snapshot.connectionState == ConnectionState.waiting) {
-                          return const Center(child: CircularProgressIndicator());
+                        if (snapshot.connectionState ==
+                            ConnectionState.waiting) {
+                          return const Center(
+                            child: CircularProgressIndicator(),
+                          );
                         }
                         if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
                           return Center(
                             child: Column(
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [
-                                const Icon(Icons.notifications_off_outlined,
-                                    size: 48, color: NavigoColors.textMuted),
+                                const Icon(
+                                  Icons.notifications_off_outlined,
+                                  size: 48,
+                                  color: NavigoColors.textMuted,
+                                ),
                                 const SizedBox(height: 12),
-                                const Text(_noNotificationsFound,
-                                    style: NavigoTextStyles.bodySmall),
+                                const Text(
+                                  _noNotificationsFound,
+                                  style: NavigoTextStyles.bodySmall,
+                                ),
                               ],
                             ),
                           );
@@ -84,43 +97,44 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                         final docs = snapshot.data!.docs.where((doc) {
                           if (_searchQuery.isEmpty) return true;
                           final data = doc.data() as Map<String, dynamic>;
-                          final title = (data['title'] ?? '').toString().toLowerCase();
-                          final body = (data['body'] ?? '').toString().toLowerCase();
+                          final title = (data['title'] ?? '')
+                              .toString()
+                              .toLowerCase();
+                          final body = (data['body'] ?? '')
+                              .toString()
+                              .toLowerCase();
                           return title.contains(_searchQuery.toLowerCase()) ||
                               body.contains(_searchQuery.toLowerCase());
                         }).toList();
 
                         if (docs.isEmpty) {
-                          return Center(
-                            child: const Text(_noNotificationsFound,
-                                style: NavigoTextStyles.bodySmall),
+                          return const Center(
+                            child: Text(
+                              _noNotificationsFound,
+                              style: NavigoTextStyles.bodySmall,
+                            ),
                           );
                         }
 
                         return ListView.separated(
                           padding: const EdgeInsets.symmetric(horizontal: 20),
                           itemCount: docs.length,
-                          separatorBuilder: (_, __) => const SizedBox(height: 12),
+                          separatorBuilder: (_, __) =>
+                              const SizedBox(height: 12),
                           itemBuilder: (context, index) {
-                            final data = docs[index].data() as Map<String, dynamic>;
-                            return _buildNotificationCard(context, data, docs[index].reference);
+                            final data =
+                                docs[index].data() as Map<String, dynamic>;
+                            return _buildNotificationCard(
+                              context,
+                              data,
+                              docs[index].reference,
+                            );
                           },
                         );
                       },
                     ),
             ),
-            Padding(
-              padding: const EdgeInsets.all(20),
-              child: SizedBox(
-                width: double.infinity,
-                height: NavigoSizes.buttonHeight,
-                child: ElevatedButton(
-                  onPressed: () => _markAllAsRead(context),
-                  style: NavigoDecorations.kPrimaryButtonLargeStyle,
-                  child: const Text("Mark all as read", style: NavigoTextStyles.button),
-                ),
-              ),
-            ),
+            const SizedBox(height: 20),
           ],
         ),
       ),
@@ -157,7 +171,10 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                 if (from.isNotEmpty)
                   Text('From: $from', style: NavigoTextStyles.bodySmall),
                 if (formattedDate.isNotEmpty)
-                  Text('Date: $formattedDate', style: NavigoTextStyles.bodySmall),
+                  Text(
+                    'Date: $formattedDate',
+                    style: NavigoTextStyles.bodySmall,
+                  ),
               ],
             ),
             actions: [
@@ -185,7 +202,9 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
               ),
               child: Icon(
                 isRead ? Icons.mark_email_read : Icons.notifications_active,
-                color: isRead ? NavigoColors.textMuted : NavigoColors.primaryOrange,
+                color: isRead
+                    ? NavigoColors.textMuted
+                    : NavigoColors.primaryOrange,
                 size: 20,
               ),
             ),
@@ -194,11 +213,17 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(title,
-                      style: NavigoTextStyles.titleSmall.copyWith(fontSize: 15)),
+                  Text(
+                    title,
+                    style: NavigoTextStyles.titleSmall.copyWith(fontSize: 15),
+                  ),
                   const SizedBox(height: 4),
-                  Text(body,
-                      style: NavigoTextStyles.bodySmall, maxLines: 2, overflow: TextOverflow.ellipsis),
+                  Text(
+                    body,
+                    style: NavigoTextStyles.bodySmall,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
                   if (formattedDate.isNotEmpty) ...[
                     const SizedBox(height: 6),
                     Text(formattedDate, style: NavigoTextStyles.label),
@@ -209,29 +234,6 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
           ],
         ),
       ),
-    );
-  }
-
-  void _markAllAsRead(BuildContext context) async {
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null) return;
-
-    final batch = FirebaseFirestore.instance.batch();
-    final snap = await FirebaseFirestore.instance
-        .collection('users')
-        .doc(user.uid)
-        .collection('notifications')
-        .where('isRead', isEqualTo: false)
-        .get();
-
-    for (final doc in snap.docs) {
-      batch.update(doc.reference, {'isRead': true});
-    }
-    await batch.commit();
-
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text("All notifications marked as read")),
     );
   }
 }

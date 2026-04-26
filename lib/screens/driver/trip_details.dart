@@ -184,8 +184,9 @@ class _TripDetailesState extends State<TripDetailes> {
                       );
 
                   final now = DateTime.now();
-                  final startWindow =
-                      slot.departureAt.subtract(const Duration(minutes: 30));
+                  final startWindow = slot.departureAt.subtract(
+                    const Duration(minutes: 30),
+                  );
                   final isSameDate =
                       now.year == slot.departureAt.year &&
                       now.month == slot.departureAt.month &&
@@ -271,7 +272,7 @@ class _TripDetailesState extends State<TripDetailes> {
                                 )
                               : ListView.separated(
                                   itemCount: passengers.length,
-                                  separatorBuilder: (_, __) => const SizedBox(
+                                  separatorBuilder: (_, _) => const SizedBox(
                                     height: NavigoSizes.itemGap,
                                   ),
                                   itemBuilder: (context, index) {
@@ -299,49 +300,60 @@ class _TripDetailesState extends State<TripDetailes> {
                             style: NavigoDecorations.kPrimaryButtonLargeStyle,
                             onPressed: canStartTrip
                                 ? () async {
-                              final safeTripId = (widget.trip['tripId'] ?? '')
-                                  .toString()
-                                  .trim();
-                              final safeRouteId = (widget.trip['routeId'] ?? '')
-                                  .toString()
-                                  .trim();
-                              final driverId =
-                                  FirebaseAuth.instance.currentUser?.uid ?? '';
+                                    final safeTripId =
+                                        (widget.trip['tripId'] ?? '')
+                                            .toString()
+                                            .trim();
+                                    final safeRouteId =
+                                        (widget.trip['routeId'] ?? '')
+                                            .toString()
+                                            .trim();
+                                    final driverId =
+                                        FirebaseAuth
+                                            .instance
+                                            .currentUser
+                                            ?.uid ??
+                                        '';
 
-                              if (safeTripId.isEmpty) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(
-                                    content: Text('Trip ID is missing'),
-                                  ),
-                                );
-                                return;
-                              }
+                                    if (safeTripId.isEmpty) {
+                                      ScaffoldMessenger.of(
+                                        context,
+                                      ).showSnackBar(
+                                        const SnackBar(
+                                          content: Text('Trip ID is missing'),
+                                        ),
+                                      );
+                                      return;
+                                    }
 
-                              try {
-                                await _liveTripService.startTrip(
-                                  routeId: safeRouteId,
-                                  tripId: safeTripId,
-                                  driverId: driverId,
-                                );
-                              } catch (e) {
-                                if (!context.mounted) return;
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(
-                                    content: Text('Could not start: $e'),
-                                  ),
-                                );
-                                return;
-                              }
+                                    try {
+                                      await _liveTripService.startTrip(
+                                        routeId: safeRouteId,
+                                        tripId: safeTripId,
+                                        driverId: driverId,
+                                      );
+                                    } catch (e) {
+                                      if (!context.mounted) return;
+                                      ScaffoldMessenger.of(
+                                        context,
+                                      ).showSnackBar(
+                                        SnackBar(
+                                          content: Text('Could not start: $e'),
+                                        ),
+                                      );
+                                      return;
+                                    }
 
-                              if (!context.mounted) return;
-                              Navigator.pushAndRemoveUntil(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (_) => const DriverHomeScreen(),
-                                ),
-                                (route) => false,
-                              );
-                            }
+                                    if (!context.mounted) return;
+                                    Navigator.pushAndRemoveUntil(
+                                      context,
+                                      MaterialPageRoute(
+                                        builder: (_) =>
+                                            const DriverHomeScreen(),
+                                      ),
+                                      (route) => false,
+                                    );
+                                  }
                                 : null,
                             child: const Text(
                               "Start Trip",

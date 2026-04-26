@@ -7,18 +7,21 @@ plugins {
 }
 
 android {
-    namespace = "com.birzeit.navigo"  // <-- update here
+    namespace = "com.birzeit.navigo"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
+
+        // Required for flutter_local_notifications
+        isCoreLibraryDesugaringEnabled = true
     }
 
     defaultConfig {
         // Application ID must match the package in AndroidManifest.xml
-        applicationId = "com.birzeit.navigo"  // <-- update here
+        applicationId = "com.birzeit.navigo"
         minSdk = flutter.minSdkVersion
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
@@ -40,6 +43,11 @@ tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile>().configureEach 
 
 flutter {
     source = "../.."
+}
+
+dependencies {
+    // Required for flutter_local_notifications
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")
 }
 
 apply(plugin = "com.google.gms.google-services")

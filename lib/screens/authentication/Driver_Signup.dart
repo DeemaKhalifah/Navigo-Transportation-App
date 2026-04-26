@@ -22,7 +22,7 @@ class _DriverSignupScreenState extends State<DriverSignupScreen> {
   String? _selectedRouteId;
   String? _selectedCarType;
 
-  static const List<String> _carTypes = ['Bus', 'Mini Bus', 'Van'];
+  static const List<String> _carTypes = ['Bus', 'Micro Bus'];
 
   bool _isLoading = false;
   bool _routesLoading = true;
@@ -41,8 +41,10 @@ class _DriverSignupScreenState extends State<DriverSignupScreen> {
       _routesError = null;
     });
     try {
-      final snap =
-          await FirebaseFirestore.instance.collection('route').limit(50).get();
+      final snap = await FirebaseFirestore.instance
+          .collection('route')
+          .limit(50)
+          .get();
       final items = <DropdownMenuItem<String>>[];
       for (final d in snap.docs) {
         final m = d.data();
@@ -100,15 +102,15 @@ class _DriverSignupScreenState extends State<DriverSignupScreen> {
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
     if (_selectedRouteId == null || _selectedRouteId!.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Select a route')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Select a route')));
       return;
     }
     if (_selectedCarType == null || _selectedCarType!.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Select vehicle type')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Select vehicle type')));
       return;
     }
 
@@ -145,9 +147,9 @@ class _DriverSignupScreenState extends State<DriverSignupScreen> {
         verificationFailed: (FirebaseAuthException e) {
           if (!mounted) return;
           setState(() => _isLoading = false);
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text("Error: ${e.message}")),
-          );
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text("Error: ${e.message}")));
         },
         codeSent: (String verificationId, int? resendToken) {
           if (!mounted) return;
@@ -192,7 +194,7 @@ class _DriverSignupScreenState extends State<DriverSignupScreen> {
       body: SafeArea(
         child: Column(
           children: [
-            NavigoDecorations.topBar(onBack: () => Navigator.pop(context)),
+            NavigoDecorations.topBar1(onBack: () => Navigator.pop(context)),
             Expanded(
               child: Center(
                 child: SingleChildScrollView(
@@ -232,7 +234,9 @@ class _DriverSignupScreenState extends State<DriverSignupScreen> {
                             if (_routesLoading)
                               const Padding(
                                 padding: EdgeInsets.all(12),
-                                child: Center(child: CircularProgressIndicator()),
+                                child: Center(
+                                  child: CircularProgressIndicator(),
+                                ),
                               )
                             else if (_routesError != null)
                               Text(
@@ -288,12 +292,14 @@ class _DriverSignupScreenState extends State<DriverSignupScreen> {
                               width: double.infinity,
                               height: 55,
                               child: ElevatedButton(
-                                onPressed: _isLoading ||
+                                onPressed:
+                                    _isLoading ||
                                         _routesLoading ||
                                         _routeItems.isEmpty
                                     ? null
                                     : _submit,
-                                style: NavigoDecorations.kPrimaryButtonLargeStyle,
+                                style:
+                                    NavigoDecorations.kPrimaryButtonLargeStyle,
                                 child: _isLoading
                                     ? const SizedBox(
                                         width: 22,
@@ -356,7 +362,8 @@ class _DriverSignupScreenState extends State<DriverSignupScreen> {
       controller: controller,
       keyboardType: keyboard,
       style: const TextStyle(color: Colors.black, fontSize: 16),
-      validator: validator ??
+      validator:
+          validator ??
           (value) => value == null || value.isEmpty ? 'Required' : null,
       decoration: NavigoDecorations.kInputDecoration.copyWith(
         hintText: hint,

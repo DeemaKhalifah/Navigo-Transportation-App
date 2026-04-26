@@ -415,7 +415,7 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
       body: SafeArea(
         child: Column(
           children: [
-            NavigoDecorations.topBar(onBack: () => Navigator.pop(context)),
+            NavigoDecorations.topBar1(onBack: () => Navigator.pop(context)),
             Expanded(
               child: Center(
                 child: SingleChildScrollView(
