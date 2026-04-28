@@ -41,7 +41,7 @@ class _ReportsState extends State<Reports> {
   }
 
   Future<void> _openReportSheet(SupportReport report) async {
-    if (report.managerReadAt == null) {
+    if (!report.isRead) {
       // Persist read-state so unread/bold works across sessions.
       await _service.markReportReadByManager(report.reportId);
     }
@@ -280,7 +280,7 @@ class _ReportsState extends State<Reports> {
                       final report = reports[index];
                       final isSelected =
                           selectedReportIds.contains(report.reportId);
-                      final isUnread = report.managerReadAt == null;
+                      final isUnread = !report.isRead;
                       final titleStyle = NavigoTextStyles.titleSmall.copyWith(
                         fontWeight: isUnread ? FontWeight.w800 : FontWeight.w600,
                       );

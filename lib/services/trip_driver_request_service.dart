@@ -11,6 +11,7 @@ class TripDriverRequestService {
 
   final FirebaseFirestore _db;
   final FirebaseAuth _auth;
+  static const String _notificationsCollection = 'notifications';
 
   static const String _collection = 'tripDriverRequests';
 
@@ -67,6 +68,13 @@ class TripDriverRequestService {
     );
 
     await ref.set(request.toMap());
+    await _createDriverRequestNotification(
+      driverId: safeDriver,
+      routeId: safeRoute,
+      requestId: ref.id,
+      lineLabel: lineLabel.trim(),
+      seatsRequested: seatsRequested,
+    );
     return ref.id;
   }
 
@@ -89,6 +97,30 @@ class TripDriverRequestService {
             return tb.compareTo(ta);
           });
           return list;
+        });
+  }
+
+  Stream<int> watchPendingCountForDriver(String driverId) {
+    return watchPendingForDriver(driverId).map((list) => list.length);
+  }
+
+  Stream<int> watchUnacceptedCountForRoute(String routeId) {
+    final safe = routeId.trim();
+    if (safe.isEmpty) return Stream.value(0);
+
+    return _db
+        .collection(_collection)
+        .where('routeId', isEqualTo: safe)
+        .snapshots()
+        .map((snap) {
+          var count = 0;
+          for (final doc in snap.docs) {
+            final status = (doc.data()['status'] ?? '').toString().toLowerCase();
+            if (status != TripDriverRequest.accepted) {
+              count++;
+            }
+          }
+          return count;
         });
   }
 
@@ -171,5 +203,29 @@ class TripDriverRequestService {
     final last = (d['lastName'] ?? '').toString().trim();
     final full = '$first $last'.trim();
     return full.isEmpty ? null : full;
+  }
+
+  Future<void> _createDriverRequestNotification({
+    required String driverId,
+    required String routeId,
+    required String requestId,
+    required String lineLabel,
+    required int seatsRequested,
+  }) async {
+    final ref = _db.collection(_notificationsCollection).doc();
+    final lineText = lineLabel.isEmpty ? 'your route' : lineLabel;
+
+    await ref.set({
+      'notificationId': ref.id,
+      'userId': driverId,
+      'title': 'New Trip Request',
+      'message': 'A passenger requested $seatsRequested seat(s) on $lineText.',
+      'body': 'A passenger requested $seatsRequested seat(s) on $lineText.',
+      'type': 'driver_request',
+      'routeId': routeId,
+      'requestId': requestId,
+      'isRead': false,
+      'timestamp': FieldValue.serverTimestamp(),
+    });
   }
 }

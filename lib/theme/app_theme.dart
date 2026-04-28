@@ -452,13 +452,17 @@ class NavigoDecorations {
     required IconData icon,
     required String label,
     required bool isActive,
+    Widget? iconWidget,
   }) {
     final color = isActive ? NavigoColors.accentGreen : NavigoColors.textMuted;
 
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Icon(icon, color: color),
+        IconTheme(
+          data: IconThemeData(color: color),
+          child: iconWidget ?? Icon(icon, color: color),
+        ),
         const SizedBox(height: 4),
         Text(
           label,

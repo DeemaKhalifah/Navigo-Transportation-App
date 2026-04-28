@@ -15,6 +15,7 @@ class SupportReportService {
 
   final FirebaseFirestore _db;
   final FirebaseAuth _auth;
+  static const String _notificationsCollection = 'notifications';
 
   Future<void> createSupportReport({
     required String message,
@@ -91,6 +92,12 @@ class SupportReportService {
     );
 
     await ref.set(report.toMap());
+    await _notifyRouteManagersAboutReport(
+      routeId: routeId,
+      senderName: senderName,
+      routeLabel: routeLabel,
+      reportId: ref.id,
+    );
   }
 
   Stream<List<SupportReport>> watchReportsForCurrentRouteManager() {
@@ -165,8 +172,79 @@ class SupportReportService {
   Future<void> markReportReadByManager(String reportId) async {
     if (reportId.trim().isEmpty) return;
     await _db.collection('supportReports').doc(reportId).set(
-      {'managerReadAt': FieldValue.serverTimestamp()},
+      {
+        'isRead': true,
+        'managerReadAt': FieldValue.serverTimestamp(),
+      },
       SetOptions(merge: true),
     );
+  }
+
+  Stream<int> watchUnreadCountForCurrentRouteManager() {
+    final uid = _auth.currentUser?.uid;
+    if (uid == null) return Stream.value(0);
+
+    return Stream.fromFuture(rm_route.resolveManagedRouteId()).asyncExpand((
+      routeId,
+    ) {
+      final safeRouteId = (routeId ?? '').trim();
+      if (safeRouteId.isEmpty) return Stream.value(0);
+
+      return _db
+          .collection('supportReports')
+          .where('routeId', isEqualTo: safeRouteId)
+          .snapshots()
+          .map((snap) {
+            var count = 0;
+            for (final doc in snap.docs) {
+              final isRead = doc.data()['isRead'] == true;
+              if (!isRead) count++;
+            }
+            return count;
+          });
+    });
+  }
+
+  Future<void> _notifyRouteManagersAboutReport({
+    required String routeId,
+    required String senderName,
+    required String routeLabel,
+    required String reportId,
+  }) async {
+    final safeRouteId = routeId.trim();
+    if (safeRouteId.isEmpty) return;
+
+    final managerQuery = await _db
+        .collection('route_manager')
+        .where('routeId', isEqualTo: safeRouteId)
+        .get();
+
+    final managerIds = managerQuery.docs
+        .map((doc) => doc.id.trim())
+        .where((id) => id.isNotEmpty)
+        .toSet()
+        .toList();
+
+    if (managerIds.isEmpty) return;
+
+    final batch = _db.batch();
+    for (final managerId in managerIds) {
+      final notificationRef = _db.collection(_notificationsCollection).doc();
+      batch.set(notificationRef, {
+        'notificationId': notificationRef.id,
+        'userId': managerId,
+        'title': 'New Support Report',
+        'message':
+            '$senderName sent a new report${routeLabel.trim().isEmpty ? '' : ' for $routeLabel'}.',
+        'body':
+            '$senderName sent a new report${routeLabel.trim().isEmpty ? '' : ' for $routeLabel'}.',
+        'type': 'support_report',
+        'routeId': safeRouteId,
+        'reportId': reportId,
+        'isRead': false,
+        'timestamp': FieldValue.serverTimestamp(),
+      });
+    }
+    await batch.commit();
   }
 }

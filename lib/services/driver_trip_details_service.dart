@@ -1,7 +1,9 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
 
 import '../models/route.dart';
 import '../models/schedule_slot.dart';
+import 'geocoding_service.dart';
 
 class DriverTripDetailsService {
   DriverTripDetailsService({FirebaseFirestore? firestore})
@@ -59,7 +61,7 @@ class DriverTripDetailsService {
         );
 
         final passengers = await _getPassengersForTrip(
-          passengerIds: fixedSlot.passengersIds,
+          passengerBookings: fixedSlot.passengerBookings,
           fallbackPickup: route.startPoint,
         );
 
@@ -71,14 +73,16 @@ class DriverTripDetailsService {
   }
 
   Future<List<Map<String, dynamic>>> _getPassengersForTrip({
-    required List<String> passengerIds,
+    required List<Map<String, dynamic>> passengerBookings,
     required String fallbackPickup,
   }) async {
-    if (passengerIds.isEmpty) return [];
+    if (passengerBookings.isEmpty) return [];
 
     final List<Map<String, dynamic>> result = [];
 
-    for (final passengerId in passengerIds) {
+    for (final booking in passengerBookings) {
+      final passengerId = (booking['passengerId'] ?? '').toString().trim();
+      if (passengerId.isEmpty) continue;
       final userSnap = await _db
           .collection(_usersCollection)
           .doc(passengerId)
@@ -95,13 +99,14 @@ class DriverTripDetailsService {
       final lastName = (userData['lastName'] ?? '').toString().trim();
       final fullName = '$firstName $lastName'.trim();
 
+      final typedPickup = _cleanPickupText(booking['pickupLocationDescription']);
       final pickup =
-          (passengerData['pickup'] ??
-                  passengerData['pickupPoint'] ??
-                  passengerData['pickupLocation'] ??
-                  fallbackPickup)
-              .toString()
-              .trim();
+          typedPickup.isNotEmpty
+              ? typedPickup
+              : await _pickupNameFromPassengerLocation(
+                    passengerData,
+                    fallbackPickup: fallbackPickup,
+                  );
 
       result.add({
         'userId': passengerId,
@@ -111,6 +116,58 @@ class DriverTripDetailsService {
     }
 
     return result;
+  }
+
+  Future<String> _pickupNameFromPassengerLocation(
+    Map<String, dynamic> passengerData, {
+    required String fallbackPickup,
+  }) async {
+    final directPickup = _cleanPickupText(
+      passengerData['pickupLocationDescription'] ??
+          passengerData['pickup'] ??
+          passengerData['pickupLocation'],
+    );
+    if (directPickup.isNotEmpty) return directPickup;
+
+    final lat = _toDouble(passengerData['latitude']) ??
+        _nestedDouble(passengerData['location'], 'lat');
+    final lng = _toDouble(passengerData['longitude']) ??
+        _nestedDouble(passengerData['location'], 'lng');
+
+    if (lat == null || lng == null) {
+      return fallbackPickup.trim().isEmpty ? 'Unknown pickup' : fallbackPickup;
+    }
+
+    final label = await GeocodingService.reverseGeocodeLabel(LatLng(lat, lng));
+    if (_looksLikeCoordinates(label)) {
+      return fallbackPickup.trim().isEmpty ? 'Unknown pickup' : fallbackPickup;
+    }
+    return label.trim().isEmpty ? fallbackPickup : label;
+  }
+
+  String _cleanPickupText(dynamic value) {
+    final text = (value ?? '').toString().trim();
+    if (text.isEmpty) return '';
+    if (text.toLowerCase() == 'null') return '';
+    return text;
+  }
+
+  bool _looksLikeCoordinates(String value) {
+    final s = value.trim();
+    return RegExp(r'^-?\d+(\.\d+)?\s*,\s*-?\d+(\.\d+)?$').hasMatch(s);
+  }
+
+  double? _nestedDouble(dynamic map, String key) {
+    if (map is Map) {
+      return _toDouble(map[key]);
+    }
+    return null;
+  }
+
+  double? _toDouble(dynamic value) {
+    if (value is num) return value.toDouble();
+    if (value is String) return double.tryParse(value);
+    return null;
   }
 
   String lineText(RouteModel route) {

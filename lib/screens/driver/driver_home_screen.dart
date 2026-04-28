@@ -11,6 +11,7 @@ import '../../models/trip_status.dart';
 import '../../models/driver_status.dart';
 import '../../services/driver_live_trip_service.dart';
 import '../../services/driver_trips_service.dart';
+import '../../services/notification_service.dart';
 import '../../theme/app_theme.dart';
 import 'driver_bottom_nav_bar.dart';
 import 'package:navigo/screens/notifications_screen.dart';
@@ -40,6 +41,7 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
   // ── Services ─────────────────────────────────────────────────────────────────
   final DriverTripsService _tripsService = DriverTripsService();
   final DriverLiveTripService _liveService = DriverLiveTripService();
+  final NotificationService _notificationService = NotificationService();
 
   // ── Subscriptions ────────────────────────────────────────────────────────────
   StreamSubscription? _tripsSub;
@@ -470,14 +472,59 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                   // Notification button — same style as PassengerHomeScreen
                   Container(
                     decoration: NavigoDecorations.kTopBarBackButton,
-                    child: IconButton(
-                      icon: const Icon(Icons.notifications_none, size: 20),
-                      onPressed: () => Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => const NotificationsScreen(),
-                        ),
+                    child: StreamBuilder<int>(
+                      stream: _notificationService.watchUnreadCount(
+                        FirebaseAuth.instance.currentUser?.uid ?? '',
                       ),
+                      initialData: 0,
+                      builder: (context, snapshot) {
+                        final unreadCount = snapshot.data ?? 0;
+                        return IconButton(
+                          icon: Stack(
+                            clipBehavior: Clip.none,
+                            children: [
+                              const Icon(Icons.notifications_none, size: 20),
+                              if (unreadCount > 0)
+                                Positioned(
+                                  right: -6,
+                                  top: -6,
+                                  child: Container(
+                                    constraints: const BoxConstraints(
+                                      minWidth: 16,
+                                      minHeight: 16,
+                                    ),
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 4,
+                                    ),
+                                    decoration: const BoxDecoration(
+                                      color: NavigoColors.accentRed,
+                                      borderRadius: BorderRadius.all(
+                                        Radius.circular(999),
+                                      ),
+                                    ),
+                                    alignment: Alignment.center,
+                                    child: Text(
+                                      unreadCount > 99
+                                          ? '99+'
+                                          : unreadCount.toString(),
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 9,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                            ],
+                          ),
+                          onPressed: () => Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => const NotificationsScreen(),
+                            ),
+                          ),
+                        );
+                      },
                     ),
                   ),
                   const SizedBox(width: 8),

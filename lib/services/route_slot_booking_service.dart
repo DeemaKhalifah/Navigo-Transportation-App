@@ -71,9 +71,12 @@ class RouteSlotBookingService {
         seatsToAdd: seatsToAdd,
       );
 
-      final updated = List<String>.from(current.passengersIds);
+      final updated = List<Map<String, dynamic>>.from(current.passengerBookings);
       for (var i = 0; i < seatsToAdd; i++) {
-        updated.add(safePassenger);
+        updated.add({
+          'passengerId': safePassenger,
+          'pickupLocationDescription': '',
+        });
       }
 
       tx.update(subSlotRef, {
@@ -114,9 +117,12 @@ class RouteSlotBookingService {
       seatsToAdd: seatsToAdd,
     );
 
-    final updated = List<String>.from(current.passengersIds);
+    final updated = List<Map<String, dynamic>>.from(current.passengerBookings);
     for (var i = 0; i < seatsToAdd; i++) {
-      updated.add(safePassenger);
+      updated.add({
+        'passengerId': safePassenger,
+        'pickupLocationDescription': '',
+      });
     }
 
     currentMap['passengersIds'] = updated;

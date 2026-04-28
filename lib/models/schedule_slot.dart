@@ -16,6 +16,7 @@ class ScheduleSlot {
 
   /// Passenger user ids booked on this slot.
   final List<String> passengersIds;
+  final List<Map<String, dynamic>> passengerBookings;
 
   /// Bus only: repeat interval in minutes (optional metadata / generation).
   final int? frequencyMinutes;
@@ -33,9 +34,17 @@ class ScheduleSlot {
     required this.vehicleType,
     this.driverId = '',
     List<String>? passengersIds,
+    List<Map<String, dynamic>>? passengerBookings,
     this.frequencyMinutes,
     this.status = TripStatus.scheduled, // default
-  }) : passengersIds = passengersIds ?? const [];
+  }) : passengerBookings = _normalizePassengerBookings(
+         passengerBookings: passengerBookings,
+         passengersIds: passengersIds,
+       ),
+       passengersIds = _normalizePassengerBookings(
+         passengerBookings: passengerBookings,
+         passengersIds: passengersIds,
+       ).map((e) => (e['passengerId'] ?? '').toString()).toList();
 
   DateTime get serviceDate =>
       DateTime(departureAt.year, departureAt.month, departureAt.day);
@@ -49,7 +58,7 @@ class ScheduleSlot {
       'capacity': capacity,
       'vehicleType': vehicleType,
       'driverId': driverId,
-      'passengersIds': passengersIds,
+      'passengersIds': passengerBookings,
       'status': status, // ✅ added
     };
     if (price != null) m['price'] = price;
@@ -79,7 +88,7 @@ class ScheduleSlot {
       capacity: (map['capacity'] as num?)?.toInt() ?? 0,
       vehicleType: map['vehicleType'] as String? ?? 'bus',
       driverId: map['driverId'] as String? ?? '',
-      passengersIds: _parseIdList(map['passengersIds']),
+      passengerBookings: _parsePassengerBookings(map['passengersIds']),
       frequencyMinutes: (map['frequencyMinutes'] as num?)?.toInt(),
 
       // ✅ NEW: normalize status from Firestore
@@ -87,12 +96,65 @@ class ScheduleSlot {
     );
   }
 
-  static List<String> _parseIdList(dynamic raw) {
-    if (raw is! List) return [];
-    return raw
-        .map((e) => e.toString().trim())
-        .where((s) => s.isNotEmpty)
+  static List<Map<String, dynamic>> _normalizePassengerBookings({
+    required List<Map<String, dynamic>>? passengerBookings,
+    required List<String>? passengersIds,
+  }) {
+    if (passengerBookings != null && passengerBookings.isNotEmpty) {
+      return passengerBookings
+          .map(
+            (entry) => {
+              'passengerId': (entry['passengerId'] ?? '').toString().trim(),
+              'pickupLocationDescription':
+                  (entry['pickupLocationDescription'] ?? '')
+                      .toString()
+                      .trim(),
+            },
+          )
+          .where((entry) => (entry['passengerId'] ?? '').toString().isNotEmpty)
+          .toList();
+    }
+
+    if (passengersIds == null || passengersIds.isEmpty) return [];
+    return passengersIds
+        .map((id) => id.trim())
+        .where((id) => id.isNotEmpty)
+        .map(
+          (id) => <String, dynamic>{
+            'passengerId': id,
+            'pickupLocationDescription': '',
+          },
+        )
         .toList();
+  }
+
+  static List<Map<String, dynamic>> _parsePassengerBookings(dynamic raw) {
+    if (raw is! List) return [];
+    final result = <Map<String, dynamic>>[];
+    for (final item in raw) {
+      if (item is Map) {
+        final passengerId = (item['passengerId'] ?? item['userId'] ?? '')
+            .toString()
+            .trim();
+        if (passengerId.isEmpty) continue;
+        result.add({
+          'passengerId': passengerId,
+          'pickupLocationDescription':
+              (item['pickupLocationDescription'] ??
+                      item['pickup'] ??
+                      item['pickupLocation'] ??
+                      '')
+                  .toString()
+                  .trim(),
+        });
+        continue;
+      }
+
+      final id = item.toString().trim();
+      if (id.isEmpty) continue;
+      result.add({'passengerId': id, 'pickupLocationDescription': ''});
+    }
+    return result;
   }
 
   static DateTime? _parseDate(dynamic value) {

@@ -35,6 +35,7 @@ class PassengerScheduleService {
     final String normalizedVehicle = (vehicleType ?? '').trim().toLowerCase();
 
     final List<ScheduleSlot> candidates = [];
+    final now = DateTime.now();
 
     _lineBySlotKey.clear();
     _fromBySlotKey.clear();
@@ -72,8 +73,14 @@ class PassengerScheduleService {
       );
 
       for (final slot in routeSlots) {
-        final slotMapStatus = TripStatus.normalize(slot.status);
-        if (slotMapStatus != TripStatus.scheduled) continue;
+        final resolvedStatus = _resolveStatus(
+          rawStatus: slot.status,
+          departureAt: slot.departureAt,
+          arrivalAt: slot.arrivalAt,
+          now: now,
+        );
+        if (resolvedStatus != TripStatus.scheduled) continue;
+        if (slot.departureAt.isBefore(now)) continue;
 
         if (normalizedVehicle.isNotEmpty &&
             slot.vehicleType.toLowerCase() != normalizedVehicle &&
@@ -95,7 +102,7 @@ class PassengerScheduleService {
           driverId: slot.driverId,
           passengersIds: List<String>.from(slot.passengersIds),
           frequencyMinutes: slot.frequencyMinutes,
-          status: slotMapStatus,
+          status: resolvedStatus,
         );
 
         candidates.add(fixedSlot);
@@ -107,7 +114,7 @@ class PassengerScheduleService {
         _fromBySlotKey[slotKey] = fromText.isEmpty ? 'Unknown start' : fromText;
         _toBySlotKey[slotKey] = toText.isEmpty ? 'Unknown destination' : toText;
         _availableSeatsBySlotKey[slotKey] = availableSeats;
-        _statusBySlotKey[slotKey] = slotMapStatus;
+        _statusBySlotKey[slotKey] = resolvedStatus;
       }
     }
 
@@ -167,6 +174,7 @@ class PassengerScheduleService {
   Future<void> confirmSchedule({
     required ScheduleSlot slot,
     required int seatsToBook,
+    String? pickupLocationDescription,
   }) async {
     final uid = currentUserId;
     if (uid == null) {
@@ -193,9 +201,15 @@ class PassengerScheduleService {
           );
         }
 
-        final updatedPassengers = List<String>.from(currentSlot.passengersIds);
+        final updatedPassengers = List<Map<String, dynamic>>.from(
+          currentSlot.passengerBookings,
+        );
+        final pickup = (pickupLocationDescription ?? '').trim();
         for (int i = 0; i < seatsToBook; i++) {
-          updatedPassengers.add(uid);
+          updatedPassengers.add({
+            'passengerId': uid,
+            'pickupLocationDescription': pickup,
+          });
         }
 
         tx.update(subSlotRef, {
@@ -233,9 +247,15 @@ class PassengerScheduleService {
         );
       }
 
-      final updatedPassengers = List<String>.from(currentSlot.passengersIds);
+      final updatedPassengers = List<Map<String, dynamic>>.from(
+        currentSlot.passengerBookings,
+      );
+      final pickup = (pickupLocationDescription ?? '').trim();
       for (int i = 0; i < seatsToBook; i++) {
-        updatedPassengers.add(uid);
+        updatedPassengers.add({
+          'passengerId': uid,
+          'pickupLocationDescription': pickup,
+        });
       }
 
       currentMap['passengersIds'] = updatedPassengers;
@@ -249,12 +269,19 @@ class PassengerScheduleService {
     required ScheduleSlot slot,
     required int seatsBooked,
     required String? userId,
+    String? pickupLocationDescription,
   }) {
     final uid = userId ?? currentUserId ?? '';
 
-    final updatedPassengers = List<String>.from(slot.passengersIds);
+    final updatedPassengers = List<Map<String, dynamic>>.from(
+      slot.passengerBookings,
+    );
+    final pickup = (pickupLocationDescription ?? '').trim();
     for (int i = 0; i < seatsBooked; i++) {
-      updatedPassengers.add(uid);
+      updatedPassengers.add({
+        'passengerId': uid,
+        'pickupLocationDescription': pickup,
+      });
     }
 
     final updatedSlot = ScheduleSlot(
@@ -266,7 +293,7 @@ class PassengerScheduleService {
       capacity: slot.capacity,
       vehicleType: slot.vehicleType,
       driverId: slot.driverId,
-      passengersIds: updatedPassengers,
+      passengerBookings: updatedPassengers,
       frequencyMinutes: slot.frequencyMinutes,
       status: slot.status,
     );
@@ -303,6 +330,33 @@ class PassengerScheduleService {
   }
 
   String _slotKey(String routeId, String slotId) => '$routeId::$slotId';
+
+  String _resolveStatus({
+    required String rawStatus,
+    required DateTime departureAt,
+    required DateTime arrivalAt,
+    required DateTime now,
+  }) {
+    final normalized = TripStatus.normalize(rawStatus);
+
+    if (normalized == TripStatus.cancelled) {
+      return TripStatus.cancelled;
+    }
+
+    if (normalized == TripStatus.completed) {
+      return TripStatus.completed;
+    }
+
+    if (normalized == TripStatus.onTrip) {
+      return TripStatus.onTrip;
+    }
+
+    if (arrivalAt.isBefore(now)) {
+      return TripStatus.completed;
+    }
+
+    return TripStatus.scheduled;
+  }
 
   Future<List<ScheduleSlot>> _loadRouteSlots(
     String routeId,

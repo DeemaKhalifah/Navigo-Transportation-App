@@ -6,9 +6,11 @@ const db = admin.firestore();
 
 async function getUserTokens(userId) {
   const userRef = db.collection('users').doc(userId);
-  const [userSnap, tokenSnap] = await Promise.all([
+  const passengerRef = db.collection('passengers').doc(userId);
+  const [userSnap, tokenSnap, passengerSnap] = await Promise.all([
     userRef.get(),
     userRef.collection('fcmTokens').get(),
+    passengerRef.get(),
   ]);
 
   const tokens = new Set();
@@ -21,6 +23,12 @@ async function getUserTokens(userId) {
   for (const doc of tokenSnap.docs) {
     const token = ((doc.data() || {}).token || doc.id || '').toString().trim();
     if (token) tokens.add(token);
+  }
+
+  if (passengerSnap.exists) {
+    const passengerData = passengerSnap.data() || {};
+    const passengerToken = (passengerData.fcmToken || '').toString().trim();
+    if (passengerToken) tokens.add(passengerToken);
   }
 
   return Array.from(tokens);

@@ -1,17 +1,25 @@
 ﻿import 'package:flutter/material.dart';
+import '../../services/support_report_service.dart';
 import '../../theme/app_theme.dart';
 import 'manager_profile.dart';
 import 'reports.dart';
 import 'route_schedule.dart';
 import 'assign_driver.dart';
 
-class RouteManagerNavBar extends StatelessWidget {
+class RouteManagerNavBar extends StatefulWidget {
   final int currentIndex;
 
   const RouteManagerNavBar({super.key, required this.currentIndex});
 
+  @override
+  State<RouteManagerNavBar> createState() => _RouteManagerNavBarState();
+}
+
+class _RouteManagerNavBarState extends State<RouteManagerNavBar> {
+  final SupportReportService _reportService = SupportReportService();
+
   void _onItemTapped(BuildContext context, int index) {
-    if (index == currentIndex) return;
+    if (index == widget.currentIndex) return;
 
     Widget screen;
 
@@ -50,7 +58,7 @@ class RouteManagerNavBar extends StatelessWidget {
             children: [
               _buildItem(context, 0, Icons.schedule, "Schedule"),
               _buildItem(context, 1, Icons.assignment, "Assign"),
-              _buildItem(context, 2, Icons.bar_chart, "Reports"),
+              _buildReportsItem(context),
               _buildItem(context, 3, Icons.person, "Profile"),
             ],
           ),
@@ -65,7 +73,7 @@ class RouteManagerNavBar extends StatelessWidget {
     IconData icon,
     String label,
   ) {
-    final bool isActive = index == currentIndex;
+    final bool isActive = index == widget.currentIndex;
 
     return GestureDetector(
       onTap: () => _onItemTapped(context, index),
@@ -74,6 +82,60 @@ class RouteManagerNavBar extends StatelessWidget {
         label: label,
         isActive: isActive,
       ),
+    );
+  }
+
+  Widget _buildReportsItem(BuildContext context) {
+    return StreamBuilder<int>(
+      stream: _reportService.watchUnreadCountForCurrentRouteManager(),
+      initialData: 0,
+      builder: (context, snapshot) {
+        final count = snapshot.data ?? 0;
+        final icon = count > 0
+            ? _badgeIcon(Icons.bar_chart, count)
+            : const Icon(Icons.bar_chart);
+
+        final bool isActive = widget.currentIndex == 2;
+        return GestureDetector(
+          onTap: () => _onItemTapped(context, 2),
+          child: NavigoDecorations.navItem(
+            icon: Icons.bar_chart,
+            iconWidget: icon,
+            label: "Reports",
+            isActive: isActive,
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _badgeIcon(IconData iconData, int count) {
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        Icon(iconData),
+        Positioned(
+          right: -8,
+          top: -8,
+          child: Container(
+            constraints: const BoxConstraints(minWidth: 16, minHeight: 16),
+            padding: const EdgeInsets.symmetric(horizontal: 4),
+            decoration: BoxDecoration(
+              color: NavigoColors.accentRed,
+              borderRadius: BorderRadius.circular(999),
+            ),
+            alignment: Alignment.center,
+            child: Text(
+              count > 99 ? '99+' : count.toString(),
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 9,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+        ),
+      ],
     );
   }
 }

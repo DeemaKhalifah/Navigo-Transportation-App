@@ -4,6 +4,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:geolocator/geolocator.dart';
 
+import '../controllers/driver_proximity_controller.dart';
 import '../models/driver_status.dart';
 import '../models/route.dart';
 import '../models/schedule_slot.dart';
@@ -15,6 +16,8 @@ class DriverLiveTripService {
 
   final FirebaseFirestore _db;
   final FirebaseAuth _auth;
+  final DriverProximityController _proximityController =
+      DriverProximityController();
 
   static const String _routesCollection = 'route';
   static const String _driversCollection = 'drivers';
@@ -302,6 +305,12 @@ class DriverLiveTripService {
       'location': {'lat': latitude, 'lng': longitude},
       'lastLocationUpdate': FieldValue.serverTimestamp(),
     }, SetOptions(merge: true));
+
+    await _proximityController.handleDriverLocationUpdate(
+      driverId: safeDriverId,
+      latitude: latitude,
+      longitude: longitude,
+    );
   }
 
   Stream<Map<String, dynamic>?> watchLiveTrip({

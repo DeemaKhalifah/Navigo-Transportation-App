@@ -269,24 +269,17 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                                   await _scheduleService.confirmSchedule(
                                     slot: slot,
                                     seatsToBook: sheetSeatCount,
+                                    pickupLocationDescription:
+                                        _manualPickupController.text,
                                   );
-
-                                  final pickupNote =
-                                      _manualPickupController.text.trim();
-                                  await _tripRepository
-                                      .syncPassengerDocumentLocation(
-                                        pickupLatLng,
-                                        pickupLocationDescription:
-                                            pickupNote.isEmpty
-                                            ? null
-                                            : pickupNote,
-                                      );
 
                                   final updated = _scheduleService
                                       .applyLocalBooking(
                                         slot: slot,
                                         seatsBooked: sheetSeatCount,
                                         userId: _scheduleService.currentUserId,
+                                        pickupLocationDescription:
+                                            _manualPickupController.text,
                                       );
                                   if (!mounted) return;
                                   setState(() {

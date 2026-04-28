@@ -16,6 +16,7 @@ import '../../services/passenger_trip_repository.dart';
 import '../../services/local_storage_service.dart';
 import '../../services/trip_driver_request_service.dart';
 import '../../services/geocoding_service.dart';
+import '../../services/notification_service.dart';
 
 class PassengerHomeScreen extends StatefulWidget {
   const PassengerHomeScreen({
@@ -50,6 +51,7 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> {
   final PassengerTripRepository _tripRepository = PassengerTripRepository();
   final TripDriverRequestService _tripRequestService =
       TripDriverRequestService();
+  final NotificationService _notificationService = NotificationService();
 
   List<String> _lines = [];
   List<String> _filteredLines = [];
@@ -867,17 +869,62 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> {
                       children: [
                         Container(
                           decoration: NavigoDecorations.kTopBarBackButton,
-                          child: IconButton(
-                            icon: const Icon(
-                              Icons.notifications_none,
-                              size: 20,
+                          child: StreamBuilder<int>(
+                            stream: _notificationService.watchUnreadCount(
+                              FirebaseAuth.instance.currentUser?.uid ?? '',
                             ),
-                            onPressed: () => Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (_) => const NotificationsScreen(),
-                              ),
-                            ),
+                            initialData: 0,
+                            builder: (context, snapshot) {
+                              final unreadCount = snapshot.data ?? 0;
+                              return IconButton(
+                                icon: Stack(
+                                  clipBehavior: Clip.none,
+                                  children: [
+                                    const Icon(
+                                      Icons.notifications_none,
+                                      size: 20,
+                                    ),
+                                    if (unreadCount > 0)
+                                      Positioned(
+                                        right: -6,
+                                        top: -6,
+                                        child: Container(
+                                          constraints: const BoxConstraints(
+                                            minWidth: 16,
+                                            minHeight: 16,
+                                          ),
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 4,
+                                          ),
+                                          decoration: const BoxDecoration(
+                                            color: NavigoColors.accentRed,
+                                            borderRadius: BorderRadius.all(
+                                              Radius.circular(999),
+                                            ),
+                                          ),
+                                          alignment: Alignment.center,
+                                          child: Text(
+                                            unreadCount > 99
+                                                ? '99+'
+                                                : unreadCount.toString(),
+                                            style: const TextStyle(
+                                              color: Colors.white,
+                                              fontSize: 9,
+                                              fontWeight: FontWeight.bold,
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                  ],
+                                ),
+                                onPressed: () => Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) => const NotificationsScreen(),
+                                  ),
+                                ),
+                              );
+                            },
                           ),
                         ),
                         const SizedBox(width: 8),

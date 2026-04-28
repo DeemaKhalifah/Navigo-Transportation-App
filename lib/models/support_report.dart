@@ -9,6 +9,7 @@ class SupportReport {
   final String routeLabel;
   final String message;
   final String status; // pending / sent_to_admin
+  final bool isRead;
   final DateTime? createdAt;
   final DateTime? sentToAdminAt;
   final DateTime? managerReadAt;
@@ -22,6 +23,7 @@ class SupportReport {
     required this.routeLabel,
     required this.message,
     required this.status,
+    this.isRead = false,
     this.createdAt,
     this.sentToAdminAt,
     this.managerReadAt,
@@ -39,6 +41,7 @@ class SupportReport {
       'routeLabel': routeLabel,
       'message': message,
       'status': status,
+      'isRead': isRead,
       'createdAt': createdAt == null
           ? FieldValue.serverTimestamp()
           : Timestamp.fromDate(createdAt!),
@@ -59,6 +62,7 @@ class SupportReport {
       routeLabel: (data['routeLabel'] ?? '').toString(),
       message: (data['message'] ?? '').toString(),
       status: (data['status'] ?? pending).toString(),
+      isRead: data['isRead'] == true,
       createdAt: _toDate(data['createdAt']),
       sentToAdminAt: _toDate(data['sentToAdminAt']),
       managerReadAt: _toDate(data['managerReadAt']),

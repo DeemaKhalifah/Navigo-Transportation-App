@@ -64,6 +64,15 @@ class NotificationService {
         });
   }
 
+  Stream<int> watchUnreadCount(String userId) {
+    final safeUserId = userId.trim();
+    if (safeUserId.isEmpty) return Stream.value(0);
+
+    return watchUserNotifications(safeUserId).map(
+      (notifications) => notifications.where((n) => !n.isRead).length,
+    );
+  }
+
   Future<void> markAsRead(String notificationId) async {
     final id = notificationId.trim();
     if (id.isEmpty) return;

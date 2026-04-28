@@ -8,8 +8,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
 import '../navigation/app_navigator.dart';
+import '../screens/driver/driver_requests_screen.dart';
 import '../screens/notifications_screen.dart';
 import '../screens/passenger/passenger_home_screen.dart';
+import '../screens/route_manager/reports.dart';
 
 class PushNotificationService {
   PushNotificationService({
@@ -70,6 +72,10 @@ class PushNotificationService {
         final payload = resp.payload ?? '';
         if (payload == 'trip_started') {
           _openTripStartedDestination();
+        } else if (payload == 'driver_request') {
+          _openDriverRequests();
+        } else if (payload == 'support_report') {
+          _openRouteManagerReports();
         } else {
           _openNotifications();
         }
@@ -120,6 +126,11 @@ class PushNotificationService {
       'fcm': token,
       'fcmUpdatedAt': FieldValue.serverTimestamp(),
     }, SetOptions(merge: true));
+
+    await _db.collection('passengers').doc(uid).set({
+      'fcmToken': token,
+      'fcmUpdatedAt': FieldValue.serverTimestamp(),
+    }, SetOptions(merge: true));
   }
 
   Future<void> _showLocalForRemoteMessage(RemoteMessage message) async {
@@ -153,6 +164,14 @@ class PushNotificationService {
       _openTripStartedDestination();
       return;
     }
+    if (type == 'driver_request') {
+      _openDriverRequests();
+      return;
+    }
+    if (type == 'support_report') {
+      _openRouteManagerReports();
+      return;
+    }
     _openNotifications();
   }
 
@@ -166,5 +185,17 @@ class PushNotificationService {
     final nav = appNavigatorKey.currentState;
     if (nav == null) return;
     nav.push(MaterialPageRoute(builder: (_) => const NotificationsScreen()));
+  }
+
+  void _openDriverRequests() {
+    final nav = appNavigatorKey.currentState;
+    if (nav == null) return;
+    nav.push(MaterialPageRoute(builder: (_) => const DriverRequestsScreen()));
+  }
+
+  void _openRouteManagerReports() {
+    final nav = appNavigatorKey.currentState;
+    if (nav == null) return;
+    nav.push(MaterialPageRoute(builder: (_) => const Reports()));
   }
 }
