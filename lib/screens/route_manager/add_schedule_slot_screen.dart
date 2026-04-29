@@ -3,6 +3,7 @@ import 'package:navigo/models/schedule_slot.dart';
 import 'package:navigo/services/schedule_slot_repository.dart';
 import 'package:navigo/services/slot_driver_assignment_service.dart';
 import 'package:navigo/theme/app_theme.dart';
+import 'route_manager_notification_compose.dart';
 import 'route_manager_nav_bar.dart';
 
 class AddScheduleSlotScreen extends StatefulWidget {
@@ -152,6 +153,14 @@ class _AddScheduleSlotScreenState extends State<AddScheduleSlotScreen> {
           driverId: e.driverId,
           passengersIds: List<String>.from(e.passengersIds),
           frequencyMinutes: _selectedType == 'bus' ? frequencyMinutes : null,
+          etaMinutes: e.etaMinutes,
+          etaText: e.etaText,
+          distanceMeters: e.distanceMeters,
+          distanceKm: e.distanceKm,
+          distanceText: e.distanceText,
+          routePolyline: e.routePolyline,
+          routePath: e.routePath,
+          routeModule: e.routeModule,
         ),
       ];
     }
@@ -389,7 +398,15 @@ class _AddScheduleSlotScreenState extends State<AddScheduleSlotScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            NavigoDecorations.topBar(onBack: () => Navigator.pop(context)),
+            NavigoDecorations.topBar3(
+              onBack: () => Navigator.pop(context),
+              onNotification: () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => const RouteManagerNotificationCompose(),
+                ),
+              ),
+            ),
 
             Padding(
               padding: const EdgeInsets.symmetric(

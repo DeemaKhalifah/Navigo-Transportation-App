@@ -4,6 +4,7 @@ import 'package:image_picker/image_picker.dart';
 import '../../controllers/manager_profile_controller.dart';
 import '../../theme/app_theme.dart';
 import '../authentication/email_login.dart';
+import 'route_manager_notification_compose.dart';
 import 'route_manager_nav_bar.dart';
 import 'route_schedule.dart';
 
@@ -370,13 +371,18 @@ class _ManagerProfileState extends State<ManagerProfile> {
       body: SafeArea(
         child: Column(
           children: [
-            NavigoDecorations.topBar(
+            NavigoDecorations.topBar3(
               onBack: () {
                 Navigator.of(context).pushReplacement(
                   MaterialPageRoute(builder: (_) => const RouteSchedule()),
                 );
               },
-              context: context,
+              onNotification: () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => const RouteManagerNotificationCompose(),
+                ),
+              ),
             ),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),

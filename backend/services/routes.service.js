@@ -37,8 +37,19 @@ async function getAllRoutes() {
         passengersIds: slot.passengersIds || [],
         status: slot.status || 'scheduled',
         price: slot.price || null,
+        etaMinutes: slot.etaMinutes || null,
+        etaText: slot.etaText || '',
+        distanceMeters: slot.distanceMeters || null,
+        distanceText: slot.distanceText || '',
+        routeModule: slot.routeModule || null,
       })),
       driverQueueIds: data.driverQueueIds || [],
+      etaMinutes: data.etaMinutes || null,
+      etaText: data.etaText || '',
+      distanceMeters: data.distanceMeters || null,
+      distanceText: data.distanceText || '',
+      routePath: data.routePath || data.path || [],
+      routeModule: data.routeModule || null,
     });
   }
 
@@ -74,7 +85,18 @@ async function getRouteById(routeId) {
       driverId: slot.driverId || '',
       passengersIds: slot.passengersIds || [],
       status: slot.status || 'scheduled',
+      etaMinutes: slot.etaMinutes || null,
+      etaText: slot.etaText || '',
+      distanceMeters: slot.distanceMeters || null,
+      distanceText: slot.distanceText || '',
+      routeModule: slot.routeModule || null,
     })),
+    etaMinutes: data.etaMinutes || null,
+    etaText: data.etaText || '',
+    distanceMeters: data.distanceMeters || null,
+    distanceText: data.distanceText || '',
+    routePath: data.routePath || data.path || [],
+    routeModule: data.routeModule || null,
   };
 }
 
@@ -163,7 +185,8 @@ async function getDriversForLine(lineFilter) {
       to: route.endPoint,
       availableSeats,
       price: `${route.price} NIS`,
-      eta: 'Live',
+      eta: slot.etaText || route.etaText || 'Live',
+      etaMinutes: slot.etaMinutes || route.etaMinutes || null,
       phone: (userData.phone || 'N/A').toString(),
       vehicleType: (vehicleData.type || 'Bus').toString(),
       lat: driverLat,

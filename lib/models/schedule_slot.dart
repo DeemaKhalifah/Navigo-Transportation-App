@@ -23,6 +23,14 @@ class ScheduleSlot {
 
   /// NEW: Trip status
   final String status;
+  final int? etaMinutes;
+  final String? etaText;
+  final int? distanceMeters;
+  final double? distanceKm;
+  final String? distanceText;
+  final String? routePolyline;
+  final List<Map<String, double>> routePath;
+  final Map<String, dynamic>? routeModule;
 
   ScheduleSlot({
     required this.slotId,
@@ -37,6 +45,14 @@ class ScheduleSlot {
     List<Map<String, dynamic>>? passengerBookings,
     this.frequencyMinutes,
     this.status = TripStatus.scheduled, // default
+    this.etaMinutes,
+    this.etaText,
+    this.distanceMeters,
+    this.distanceKm,
+    this.distanceText,
+    this.routePolyline,
+    List<Map<String, double>>? routePath,
+    this.routeModule,
   }) : passengerBookings = _normalizePassengerBookings(
          passengerBookings: passengerBookings,
          passengersIds: passengersIds,
@@ -44,7 +60,8 @@ class ScheduleSlot {
        passengersIds = _normalizePassengerBookings(
          passengerBookings: passengerBookings,
          passengersIds: passengersIds,
-       ).map((e) => (e['passengerId'] ?? '').toString()).toList();
+       ).map((e) => (e['passengerId'] ?? '').toString()).toList(),
+       routePath = routePath ?? const [];
 
   DateTime get serviceDate =>
       DateTime(departureAt.year, departureAt.month, departureAt.day);
@@ -63,6 +80,24 @@ class ScheduleSlot {
     };
     if (price != null) m['price'] = price;
     if (frequencyMinutes != null) m['frequencyMinutes'] = frequencyMinutes;
+    if (etaMinutes != null) m['etaMinutes'] = etaMinutes;
+    if (etaText != null && etaText!.trim().isNotEmpty) m['etaText'] = etaText;
+    if (distanceMeters != null) m['distanceMeters'] = distanceMeters;
+    if (distanceKm != null) m['distanceKm'] = distanceKm;
+    if (distanceText != null && distanceText!.trim().isNotEmpty) {
+      m['distanceText'] = distanceText;
+    }
+    if (routePolyline != null && routePolyline!.trim().isNotEmpty) {
+      m['routePolyline'] = routePolyline;
+    }
+    if (routePath.isNotEmpty) {
+      m['routePath'] = routePath
+          .map((point) => {'lat': point['lat'], 'lng': point['lng']})
+          .toList();
+    }
+    if (routeModule != null && routeModule!.isNotEmpty) {
+      m['routeModule'] = routeModule;
+    }
     return m;
   }
 
@@ -93,7 +128,30 @@ class ScheduleSlot {
 
       // ✅ NEW: normalize status from Firestore
       status: TripStatus.normalize(map['status']),
+      etaMinutes: (map['etaMinutes'] as num?)?.toInt(),
+      etaText: map['etaText'] as String?,
+      distanceMeters: (map['distanceMeters'] as num?)?.toInt(),
+      distanceKm: (map['distanceKm'] as num?)?.toDouble(),
+      distanceText: map['distanceText'] as String?,
+      routePolyline: map['routePolyline'] as String?,
+      routePath: _parseRoutePath(map['routePath']),
+      routeModule: map['routeModule'] is Map
+          ? Map<String, dynamic>.from(map['routeModule'] as Map)
+          : null,
     );
+  }
+
+  static List<Map<String, double>> _parseRoutePath(dynamic raw) {
+    if (raw is! List) return const [];
+    final points = <Map<String, double>>[];
+    for (final item in raw) {
+      if (item is! Map) continue;
+      final lat = (item['lat'] as num?)?.toDouble();
+      final lng = (item['lng'] as num?)?.toDouble();
+      if (lat == null || lng == null) continue;
+      points.add({'lat': lat, 'lng': lng});
+    }
+    return points;
   }
 
   static List<Map<String, dynamic>> _normalizePassengerBookings({

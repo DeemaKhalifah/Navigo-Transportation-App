@@ -102,7 +102,7 @@ class _PassengerLiveTrackScreenState extends State<PassengerLiveTrackScreen> {
     final lat = (p['latitude'] as num?)?.toDouble();
     final lng = (p['longitude'] as num?)?.toDouble();
     if (lat != null && lng != null) return LatLng(lat, lng);
-    return _latLngFromMap(p['location']);
+    return null;
   }
 
   static LatLng? _latLngFromMap(dynamic location) {

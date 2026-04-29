@@ -123,16 +123,12 @@ class DriverTripDetailsService {
     required String fallbackPickup,
   }) async {
     final directPickup = _cleanPickupText(
-      passengerData['pickupLocationDescription'] ??
-          passengerData['pickup'] ??
-          passengerData['pickupLocation'],
+      passengerData['pickupLocationDescription'],
     );
     if (directPickup.isNotEmpty) return directPickup;
 
-    final lat = _toDouble(passengerData['latitude']) ??
-        _nestedDouble(passengerData['location'], 'lat');
-    final lng = _toDouble(passengerData['longitude']) ??
-        _nestedDouble(passengerData['location'], 'lng');
+    final lat = _toDouble(passengerData['latitude']);
+    final lng = _toDouble(passengerData['longitude']);
 
     if (lat == null || lng == null) {
       return fallbackPickup.trim().isEmpty ? 'Unknown pickup' : fallbackPickup;
@@ -155,13 +151,6 @@ class DriverTripDetailsService {
   bool _looksLikeCoordinates(String value) {
     final s = value.trim();
     return RegExp(r'^-?\d+(\.\d+)?\s*,\s*-?\d+(\.\d+)?$').hasMatch(s);
-  }
-
-  double? _nestedDouble(dynamic map, String key) {
-    if (map is Map) {
-      return _toDouble(map[key]);
-    }
-    return null;
   }
 
   double? _toDouble(dynamic value) {

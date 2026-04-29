@@ -1,16 +1,19 @@
 ﻿import 'package:cloud_firestore/cloud_firestore.dart';
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:navigo/models/driver_status.dart';
 import 'package:navigo/models/route.dart';
 import 'package:navigo/models/schedule_slot.dart';
+import 'package:navigo/services/google_route_path_service.dart';
 import 'package:navigo/services/route_manager_route_id.dart';
 import 'package:navigo/services/route_driver_queue_service.dart';
 import 'package:navigo/services/schedule_slot_repository.dart';
 import 'package:navigo/services/slot_driver_assignment_service.dart';
 import 'add_schedule_slot_screen.dart';
+import 'route_manager_notification_compose.dart';
 import 'route_manager_nav_bar.dart';
 import '../../theme/app_theme.dart';
-import '../notifications_screen.dart';
 
 class RouteSchedule extends StatefulWidget {
   const RouteSchedule({super.key});
@@ -23,6 +26,7 @@ class _RouteScheduleState extends State<RouteSchedule> {
   final ScheduleSlotRepository _repo = ScheduleSlotRepository();
   final RouteDriverQueueService _queueSvc = RouteDriverQueueService();
   final SlotDriverAssignmentService _slotAssign = SlotDriverAssignmentService();
+  final GoogleRoutePathService _routePathService = GoogleRoutePathService();
 
   final Map<String, Future<String>> _driverLabelFutures = {};
 
@@ -65,6 +69,7 @@ class _RouteScheduleState extends State<RouteSchedule> {
           _route = RouteModel.fromMap(data);
           _loadingRoute = false;
         });
+        unawaited(_syncRoutePath(id, _route!));
         return;
       }
     } catch (e) {
@@ -73,6 +78,18 @@ class _RouteScheduleState extends State<RouteSchedule> {
 
     if (!mounted) return;
     setState(() => _loadingRoute = false);
+  }
+
+  Future<void> _syncRoutePath(String routeId, RouteModel route) async {
+    try {
+      await _routePathService.syncRoutePathForRoute(
+        routeId: routeId,
+        startPoint: route.startPoint,
+        endPoint: route.endPoint,
+      );
+    } catch (e) {
+      debugPrint('RouteSchedule route path sync: $e');
+    }
   }
 
   Future<void> _openSlotEditor({ScheduleSlot? existing}) async {
@@ -644,11 +661,12 @@ class _RouteScheduleState extends State<RouteSchedule> {
                     Container(
                       decoration: NavigoDecorations.kTopBarBackButton,
                       child: IconButton(
-                        icon: const Icon(Icons.notifications_none, size: 20),
+                        icon: const Icon(Icons.edit, size: 20),
                         onPressed: () => Navigator.push(
                           context,
                           MaterialPageRoute(
-                            builder: (_) => const NotificationsScreen(),
+                            builder: (_) =>
+                                const RouteManagerNotificationCompose(),
                           ),
                         ),
                       ),

@@ -56,17 +56,19 @@ class DriverProximityController {
     final rawPassengers = slot['passengersIds'];
     if (rawPassengers is! List) return;
 
-    final passengerIds =
-        rawPassengers
-            .map((e) => e.toString().trim())
-            .where((id) => id.isNotEmpty)
-            .toSet()
-            .toList();
+    final passengerIds = rawPassengers
+        .map((e) => e.toString().trim())
+        .where((id) => id.isNotEmpty)
+        .toSet()
+        .toList();
 
     if (passengerIds.isEmpty) return;
 
     for (final passengerId in passengerIds) {
-      final passengerSnap = await _db.collection('passengers').doc(passengerId).get();
+      final passengerSnap = await _db
+          .collection('passengers')
+          .doc(passengerId)
+          .get();
       final passengerData = passengerSnap.data() ?? {};
 
       final passengerLat = _extractLat(passengerData);
@@ -97,33 +99,18 @@ class DriverProximityController {
         driverId: safeDriverId,
         passengerId: passengerId,
         distanceMeters: meters,
-        pickupDescription:
-            (passengerData['pickupLocationDescription'] ??
-                    passengerData['pickup'] ??
-                    '')
-                .toString(),
+        pickupDescription: (passengerData['pickupLocationDescription'] ?? '')
+            .toString(),
       );
     }
   }
 
   double? _extractLat(Map<String, dynamic> map) {
-    final direct = _toDouble(map['latitude']) ?? _toDouble(map['lat']);
-    if (direct != null) return direct;
-    final location = map['location'];
-    if (location is Map) {
-      return _toDouble(location['lat']) ?? _toDouble(location['latitude']);
-    }
-    return null;
+    return _toDouble(map['latitude']);
   }
 
   double? _extractLng(Map<String, dynamic> map) {
-    final direct = _toDouble(map['longitude']) ?? _toDouble(map['lng']);
-    if (direct != null) return direct;
-    final location = map['location'];
-    if (location is Map) {
-      return _toDouble(location['lng']) ?? _toDouble(location['longitude']);
-    }
-    return null;
+    return _toDouble(map['longitude']);
   }
 
   double? _toDouble(dynamic value) {

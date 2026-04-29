@@ -10,6 +10,7 @@ import 'package:navigo/services/manual_driver_assignment_service.dart';
 import 'package:navigo/services/route_manager_route_id.dart';
 import 'package:navigo/theme/app_theme.dart';
 
+import 'route_manager_notification_compose.dart';
 import 'route_manager_nav_bar.dart';
 
 class _DriverRow {
@@ -400,12 +401,17 @@ class _AssignDriverState extends State<AssignDriver> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            NavigoDecorations.topBar(
+            NavigoDecorations.topBar3(
               onBack: () => Navigator.pushReplacement(
                 context,
                 MaterialPageRoute(builder: (_) => const RouteSchedule()),
               ),
-              context: context,
+              onNotification: () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => const RouteManagerNotificationCompose(),
+                ),
+              ),
             ),
 
             Padding(

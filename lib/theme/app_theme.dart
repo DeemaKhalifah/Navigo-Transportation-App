@@ -202,6 +202,67 @@ class NavigoDecorations {
     );
   }
 
+  static Widget topBar3({
+    required VoidCallback onBack,
+    VoidCallback? onNotification,
+    BuildContext? context, // ← add this
+  }) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          /// BACK BUTTON
+          Container(
+            decoration: kTopBarBackButton,
+            child: IconButton(
+              icon: const Icon(Icons.arrow_back_ios_new, size: 20),
+              onPressed: onBack,
+            ),
+          ),
+
+          /// RIGHT SIDE — notification + logo
+          Row(
+            children: [
+              Container(
+                decoration: kTopBarBackButton,
+                child: IconButton(
+                  icon: const Icon(Icons.edit, size: 20),
+                  onPressed:
+                      onNotification ??
+                      (context != null
+                          ? () => Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => const NotificationsScreen(),
+                              ),
+                            )
+                          : () {}),
+                ),
+              ),
+              const SizedBox(width: 8),
+              CircleAvatar(
+                radius: 30,
+                backgroundColor: NavigoColors.surfaceWhite,
+                child: Padding(
+                  padding: const EdgeInsets.all(3),
+                  child: ClipOval(
+                    child: Image.asset(
+                      'assets/images/logo.png',
+                      fit: BoxFit.contain,
+                      width: 40,
+                      height: 40,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
   static final BoxDecoration kCardDecoration = BoxDecoration(
     color: NavigoColors.lightorange,
     borderRadius: const BorderRadius.all(Radius.circular(20)),

@@ -56,6 +56,7 @@ class ScheduleSlotRepository {
       final m = slot.toMap();
       m['slotId'] = slotId;
       m['routeId'] = routeId;
+      _copyRouteTravelDataToSlot(snap.data() ?? {}, m);
       list.add(m);
       txn.update(routeRef, {'scheduleSlots': list});
     });
@@ -75,6 +76,7 @@ class ScheduleSlotRepository {
       final m = slot.toMap();
       m['slotId'] = slot.slotId;
       m['routeId'] = slot.routeId;
+      _copyRouteTravelDataToSlot(snap.data() ?? {}, m);
 
       final idx = list.indexWhere((e) => e['slotId'] == slot.slotId);
       if (idx >= 0) {
@@ -96,5 +98,43 @@ class ScheduleSlotRepository {
       list.removeWhere((e) => e['slotId'] == slotId);
       txn.update(routeRef, {'scheduleSlots': list});
     });
+  }
+
+  static void _copyRouteTravelDataToSlot(
+    Map<String, dynamic> routeData,
+    Map<String, dynamic> slot,
+  ) {
+    final etaMinutes = routeData['etaMinutes'];
+    final etaText = routeData['etaText'];
+    final distanceMeters = routeData['distanceMeters'];
+    final distanceKm = routeData['distanceKm'];
+    final distanceText = routeData['distanceText'];
+    final routePolyline = routeData['routePolyline'];
+    final routePath = routeData['routePath'] ?? routeData['path'];
+    final routeModule = routeData['routeModule'];
+
+    if (etaMinutes != null) slot['etaMinutes'] = etaMinutes;
+    if (etaText != null) slot['etaText'] = etaText;
+    if (distanceMeters != null) slot['distanceMeters'] = distanceMeters;
+    if (distanceKm != null) slot['distanceKm'] = distanceKm;
+    if (distanceText != null) slot['distanceText'] = distanceText;
+    if (routePolyline != null) slot['routePolyline'] = routePolyline;
+    if (routePath != null) slot['routePath'] = routePath;
+    if (routeModule != null) slot['routeModule'] = routeModule;
+
+    final departure = _parseDate(slot['departureAt']);
+    final minutes = etaMinutes is num ? etaMinutes.toInt() : null;
+    if (departure != null && minutes != null) {
+      slot['estimatedArrivalAt'] = Timestamp.fromDate(
+        departure.add(Duration(minutes: minutes)),
+      );
+    }
+  }
+
+  static DateTime? _parseDate(dynamic value) {
+    if (value is Timestamp) return value.toDate();
+    if (value is DateTime) return value;
+    if (value is String) return DateTime.tryParse(value);
+    return null;
   }
 }

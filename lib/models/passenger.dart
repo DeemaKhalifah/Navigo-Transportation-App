@@ -33,9 +33,6 @@ class Passenger {
       // LOCATION
       'latitude': latitude,
       'longitude': longitude,
-      'location': latitude != null && longitude != null
-          ? {'lat': latitude, 'lng': longitude}
-          : null,
       'lastLocationUpdate': lastLocationUpdate != null
           ? Timestamp.fromDate(lastLocationUpdate!)
           : null,
@@ -44,7 +41,6 @@ class Passenger {
     final pickup = pickupLocationDescription?.trim();
     if (pickup != null && pickup.isNotEmpty) {
       map['pickupLocationDescription'] = pickup;
-      map['pickup'] = pickup;
     }
 
     return map;
@@ -67,29 +63,17 @@ class Passenger {
   static String? _pickupDescription(Map<String, dynamic> map) {
     final direct = map['pickupLocationDescription']?.toString().trim();
     if (direct != null && direct.isNotEmpty) return direct;
-    final pickup = map['pickup']?.toString().trim();
-    if (pickup != null && pickup.isNotEmpty) return pickup;
     return null;
   }
 
   // 🔹 HELPERS
   static double? _getLat(Map<String, dynamic> map) {
     if (map['latitude'] != null) return (map['latitude'] as num).toDouble();
-
-    if (map['location'] is Map && map['location']['lat'] != null) {
-      return (map['location']['lat'] as num).toDouble();
-    }
-
     return null;
   }
 
   static double? _getLng(Map<String, dynamic> map) {
     if (map['longitude'] != null) return (map['longitude'] as num).toDouble();
-
-    if (map['location'] is Map && map['location']['lng'] != null) {
-      return (map['location']['lng'] as num).toDouble();
-    }
-
     return null;
   }
 

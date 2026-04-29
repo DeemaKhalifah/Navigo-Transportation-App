@@ -127,10 +127,6 @@ class PushNotificationService {
       'fcmUpdatedAt': FieldValue.serverTimestamp(),
     }, SetOptions(merge: true));
 
-    await _db.collection('passengers').doc(uid).set({
-      'fcmToken': token,
-      'fcmUpdatedAt': FieldValue.serverTimestamp(),
-    }, SetOptions(merge: true));
   }
 
   Future<void> _showLocalForRemoteMessage(RemoteMessage message) async {

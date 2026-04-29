@@ -17,6 +17,7 @@ import '../../services/local_storage_service.dart';
 import '../../services/trip_driver_request_service.dart';
 import '../../services/geocoding_service.dart';
 import '../../services/notification_service.dart';
+import '../../services/google_route_path_service.dart';
 
 class PassengerHomeScreen extends StatefulWidget {
   const PassengerHomeScreen({
@@ -52,6 +53,7 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> {
   final TripDriverRequestService _tripRequestService =
       TripDriverRequestService();
   final NotificationService _notificationService = NotificationService();
+  final GoogleRoutePathService _routePathService = GoogleRoutePathService();
 
   List<String> _lines = [];
   List<String> _filteredLines = [];
@@ -66,8 +68,13 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> {
 
   // ── Live tracking state ──────────────────────────────────────────────────
   StreamSubscription<DocumentSnapshot>? _liveDriverSub;
+  StreamSubscription<Position>? _passengerLocationSub;
   bool _isLiveTracking = false;
   String? _trackingDriverId;
+  LatLng? _trackedDriverPosition;
+  LatLng? _passengerTrackingPosition;
+  String? _trackingEtaText;
+  bool _manualPickupSelected = false;
 
   @override
   void initState() {
@@ -77,6 +84,7 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> {
     _loadCarMarker();
     _loadLinesFromFirestore();
     _loadInitialPassengerLocation();
+    unawaited(_startPassengerLocationPublishing());
 
     // Handle View Route if parameters are set
     if (widget.routeStartPoint != null && widget.routeEndPoint != null) {
@@ -95,13 +103,38 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> {
     _searchController.dispose();
     _mapController?.dispose();
     _liveDriverSub?.cancel();
+    _passengerLocationSub?.cancel();
     super.dispose();
   }
 
   // ── Draw Route Polyline ──────────────────────────────────────────────────
-  Future<void> _drawRoutePolyline(String startPoint, String endPoint) async {
-    final startLatLng = await GeocodingService.geocodeAddress(startPoint);
-    final endLatLng = await GeocodingService.geocodeAddress(endPoint);
+  Future<void> _drawRoutePolyline(
+    String startPoint,
+    String endPoint, {
+    String? routeId,
+  }) async {
+    RoutePathInfo? routeInfo;
+    LatLng? startLatLng;
+    LatLng? endLatLng;
+
+    try {
+      routeInfo = routeId == null || routeId.trim().isEmpty
+          ? await _routePathService.fetchRoutePath(
+              startPoint: startPoint,
+              endPoint: endPoint,
+            )
+          : await _routePathService.syncRoutePathForRoute(
+              routeId: routeId,
+              startPoint: startPoint,
+              endPoint: endPoint,
+            );
+      startLatLng = routeInfo.startLocation;
+      endLatLng = routeInfo.endLocation;
+    } catch (e) {
+      debugPrint('Route path API error: $e');
+      startLatLng = await GeocodingService.geocodeAddress(startPoint);
+      endLatLng = await GeocodingService.geocodeAddress(endPoint);
+    }
 
     if (!mounted) return;
 
@@ -111,16 +144,18 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> {
       );
       return;
     }
+    final start = startLatLng;
+    final end = endLatLng;
+    final routePoints = routeInfo?.path ?? [start, end];
 
     setState(() {
       _polylines.clear();
       _polylines.add(
         Polyline(
           polylineId: const PolylineId('route_line'),
-          points: [startLatLng, endLatLng],
+          points: routePoints,
           color: NavigoColors.primaryOrange,
-          width: 4,
-          patterns: [PatternItem.dash(20), PatternItem.gap(10)],
+          width: 5,
         ),
       );
 
@@ -133,7 +168,7 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> {
       _markers.add(
         Marker(
           markerId: const MarkerId('route_start'),
-          position: startLatLng,
+          position: start,
           infoWindow: InfoWindow(title: 'Start', snippet: startPoint),
           icon: BitmapDescriptor.defaultMarkerWithHue(
             BitmapDescriptor.hueGreen,
@@ -143,7 +178,7 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> {
       _markers.add(
         Marker(
           markerId: const MarkerId('route_end'),
-          position: endLatLng,
+          position: end,
           infoWindow: InfoWindow(title: 'End', snippet: endPoint),
           icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRed),
         ),
@@ -151,21 +186,24 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> {
     });
 
     // Zoom to fit both points
-    _fitBounds(startLatLng, endLatLng);
+    _fitBoundsForPoints(routePoints);
   }
 
-  void _fitBounds(LatLng a, LatLng b) {
+  void _fitBoundsForPoints(List<LatLng> points) {
     final c = _mapController;
-    if (c == null) return;
+    if (c == null || points.isEmpty) return;
 
-    final south =
-        a.latitude < b.latitude ? a.latitude : b.latitude;
-    final north =
-        a.latitude > b.latitude ? a.latitude : b.latitude;
-    final west =
-        a.longitude < b.longitude ? a.longitude : b.longitude;
-    final east =
-        a.longitude > b.longitude ? a.longitude : b.longitude;
+    var south = points.first.latitude;
+    var north = points.first.latitude;
+    var west = points.first.longitude;
+    var east = points.first.longitude;
+
+    for (final point in points) {
+      if (point.latitude < south) south = point.latitude;
+      if (point.latitude > north) north = point.latitude;
+      if (point.longitude < west) west = point.longitude;
+      if (point.longitude > east) east = point.longitude;
+    }
 
     c.animateCamera(
       CameraUpdate.newLatLngBounds(
@@ -186,6 +224,8 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> {
     setState(() {
       _isLiveTracking = true;
       _trackingDriverId = driverId;
+      _trackedDriverPosition = null;
+      _trackingEtaText = null;
     });
 
     _liveDriverSub = db
@@ -216,15 +256,24 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> {
 
           if (driverPos == null) return;
 
+          final etaText = _etaBetween(
+            from: driverPos,
+            to: _passengerTrackingPosition,
+          );
+
           setState(() {
+            _trackedDriverPosition = driverPos;
+            _trackingEtaText = etaText;
             _markers.removeWhere((m) => m.markerId.value == 'live_driver');
             _markers.add(
               Marker(
                 markerId: const MarkerId('live_driver'),
                 position: driverPos!,
-                infoWindow: const InfoWindow(
+                infoWindow: InfoWindow(
                   title: 'Driver',
-                  snippet: 'Live location',
+                  snippet: etaText == null
+                      ? 'Live location'
+                      : 'ETA to pickup: $etaText',
                 ),
                 icon: BitmapDescriptor.defaultMarkerWithHue(
                   BitmapDescriptor.hueOrange,
@@ -248,7 +297,117 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> {
     setState(() {
       _isLiveTracking = false;
       _trackingDriverId = null;
+      _trackedDriverPosition = null;
+      _trackingEtaText = null;
       _markers.removeWhere((m) => m.markerId.value == 'live_driver');
+    });
+  }
+
+  Future<bool> _ensureLocationPermission({bool showMessages = false}) async {
+    final serviceEnabled = await Geolocator.isLocationServiceEnabled();
+    if (!serviceEnabled) {
+      if (showMessages && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Please enable location services")),
+        );
+      }
+      return false;
+    }
+
+    var permission = await Geolocator.checkPermission();
+    if (permission == LocationPermission.denied) {
+      permission = await Geolocator.requestPermission();
+    }
+
+    if (permission == LocationPermission.denied) {
+      if (showMessages && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Location permission denied")),
+        );
+      }
+      return false;
+    }
+
+    if (permission == LocationPermission.deniedForever) {
+      if (showMessages && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("Enable location permission from settings"),
+          ),
+        );
+        await Geolocator.openAppSettings();
+      }
+      return false;
+    }
+
+    return true;
+  }
+
+  Future<void> _startPassengerLocationPublishing() async {
+    if (_passengerLocationSub != null) return;
+    final allowed = await _ensureLocationPermission();
+    if (!allowed) return;
+
+    _passengerLocationSub = Geolocator.getPositionStream(
+      locationSettings: const LocationSettings(
+        accuracy: LocationAccuracy.high,
+        distanceFilter: 10,
+      ),
+    ).listen(
+      (position) async {
+        final location = LatLng(position.latitude, position.longitude);
+
+        if (!mounted) return;
+        if (!_manualPickupSelected) {
+          try {
+            await _tripRepository.syncPassengerLiveLocation(location);
+          } catch (e) {
+            debugPrint("Passenger live location publish error: $e");
+          }
+
+          setState(() {
+            _passengerTrackingPosition = location;
+            _initialPosition = location;
+          });
+          _refreshTrackingEta();
+        }
+      },
+      onError: (e) {
+        debugPrint("Passenger location stream error: $e");
+      },
+    );
+  }
+
+  String? _etaBetween({required LatLng from, required LatLng? to}) {
+    if (to == null) return null;
+
+    final meters = Geolocator.distanceBetween(
+      from.latitude,
+      from.longitude,
+      to.latitude,
+      to.longitude,
+    );
+    final minutes = (meters / 1000 / 30 * 60).ceil();
+    return _formatEta(minutes < 1 ? 1 : minutes);
+  }
+
+  String _formatEta(int minutes) {
+    if (minutes < 60) return '$minutes min';
+    final hours = minutes ~/ 60;
+    final rest = minutes % 60;
+    if (rest == 0) return '${hours}h';
+    return '${hours}h ${rest}m';
+  }
+
+  void _refreshTrackingEta() {
+    final driver = _trackedDriverPosition;
+    if (driver == null) return;
+
+    setState(() {
+      _trackingEtaText = _etaBetween(
+        from: driver,
+        to: _passengerTrackingPosition,
+      );
     });
   }
 
@@ -330,6 +489,7 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> {
         _selectedLine = savedLine;
         _searchController.text = savedLine;
       });
+      unawaited(_drawSelectedLineRoute(savedLine));
     }
   }
 
@@ -379,50 +539,8 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> {
     setState(() => _isLocating = true);
 
     try {
-      final bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
-      if (!serviceEnabled) {
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Please enable location services")),
-        );
-        return;
-      }
-
-      LocationPermission permission;
-      try {
-        permission = await Geolocator.checkPermission();
-      } catch (e) {
-        debugPrint("Permission check error: $e");
-        return;
-      }
-
-      if (permission == LocationPermission.denied) {
-        try {
-          permission = await Geolocator.requestPermission();
-        } catch (e) {
-          debugPrint("Permission request error: $e");
-          return;
-        }
-      }
-
-      if (permission == LocationPermission.denied) {
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Location permission denied")),
-        );
-        return;
-      }
-
-      if (permission == LocationPermission.deniedForever) {
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text("Enable location permission from settings"),
-          ),
-        );
-        await Geolocator.openAppSettings();
-        return;
-      }
+      final allowed = await _ensureLocationPermission(showMessages: true);
+      if (!allowed) return;
 
       final position = await Geolocator.getCurrentPosition(
         desiredAccuracy: LocationAccuracy.high,
@@ -435,7 +553,9 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> {
 
       if (!mounted) return;
       setState(() {
+        _manualPickupSelected = false;
         _initialPosition = newPosition;
+        _passengerTrackingPosition = newPosition;
         _selectedLocation = areaName;
 
         _markers.removeWhere((m) => m.markerId.value == "current_location");
@@ -455,6 +575,10 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> {
       );
 
       await _tripRepository.savePassengerLocation(newPosition);
+      await _tripRepository.syncPassengerLiveLocation(
+        newPosition,
+      );
+      unawaited(_startPassengerLocationPublishing());
     } catch (e) {
       debugPrint("Location error: $e");
       if (!mounted) return;
@@ -472,7 +596,9 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> {
     if (!mounted) return;
 
     setState(() {
+      if (saveToFirestore) _manualPickupSelected = true;
       _initialPosition = location;
+      _passengerTrackingPosition = location;
       // Show loading text while geocoding
       _selectedLocation = 'Loading area name...';
 
@@ -490,6 +616,16 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> {
     GeocodingService.reverseGeocodeLabel(location).then((areaName) {
       if (!mounted) return;
       setState(() => _selectedLocation = areaName);
+      if (saveToFirestore) {
+        _tripRepository
+            .syncPassengerDocumentLocation(
+              location,
+              pickupLocationDescription: areaName,
+            )
+            .catchError((e) {
+              debugPrint("Manual passenger pickup label save error: $e");
+            });
+      }
     });
 
     _mapController?.animateCamera(
@@ -499,8 +635,12 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> {
     );
 
     if (saveToFirestore) {
-      _tripRepository.savePassengerLocation(location);
+      _tripRepository.savePassengerLocation(location).catchError((e) {
+        debugPrint("Manual passenger location save error: $e");
+      });
     }
+
+    _refreshTrackingEta();
   }
 
   void _filterLines(String query) {
@@ -515,6 +655,20 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> {
         }).toList();
       }
     });
+  }
+
+  Future<void> _drawSelectedLineRoute(String line) async {
+    try {
+      final route = await _tripRepository.getRouteForLine(line);
+      if (route == null) return;
+      await _drawRoutePolyline(
+        route.startPoint,
+        route.endPoint,
+        routeId: route.routeId,
+      );
+    } catch (e) {
+      debugPrint('Draw selected route error: $e');
+    }
   }
 
   Future<void> _showDriversNow() async {
@@ -849,7 +1003,7 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> {
                 final points = _polylines.first.points;
                 if (points.length >= 2) {
                   WidgetsBinding.instance.addPostFrameCallback((_) {
-                    _fitBounds(points.first, points.last);
+                    _fitBoundsForPoints(points);
                   });
                 }
               }
@@ -1035,6 +1189,7 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> {
                                         await LocalStorageService.saveSelectedLine(
                                           line,
                                         );
+                                        await _drawSelectedLineRoute(line);
                                       },
                                     );
                                   },
@@ -1084,10 +1239,12 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> {
                       size: 20,
                     ),
                     const SizedBox(width: 10),
-                    const Expanded(
+                    Expanded(
                       child: Text(
-                        'Tracking driver live…',
-                        style: TextStyle(
+                        _trackingEtaText == null
+                            ? 'Tracking driver live...'
+                            : 'ETA to pickup: $_trackingEtaText',
+                        style: const TextStyle(
                           color: Colors.white,
                           fontWeight: FontWeight.w600,
                           fontSize: 14,

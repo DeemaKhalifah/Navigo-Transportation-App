@@ -258,12 +258,13 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
 
       if (widget.role == 'passenger') {
         await FirebaseFirestore.instance.collection('passengers').doc(uid).set({
-          'userId': uid,
-          'TripHistory': <String>[],
-          'paymentMethod': <dynamic>[],
+          'passengerId': uid,
+          'fullName': [firstName, lastName]
+              .where((part) => part.trim().isNotEmpty)
+              .join(' '),
+          'phoneNumber': widget.phoneNumber,
           'latitude': null,
           'longitude': null,
-          'location': null,
           'lastLocationUpdate': null,
         }, SetOptions(merge: true));
 

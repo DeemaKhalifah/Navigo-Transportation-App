@@ -190,7 +190,8 @@ class PassengerTripRepository {
         'to': route.endPoint,
         'availableSeats': availableSeats,
         'price': '${route.price.toStringAsFixed(0)} NIS',
-        'eta': 'Live',
+        'eta': offerSlot.etaText ?? route.etaText ?? 'Live',
+        'etaMinutes': offerSlot.etaMinutes ?? route.etaMinutes,
         'phone': userMap['phone']?.toString() ?? 'N/A',
         'vehicleType': vehicleMap['type']?.toString() ?? 'Bus',
         'lat': location.latitude,
@@ -238,7 +239,7 @@ class PassengerTripRepository {
       return LatLng(lat, lng);
     }
 
-    return _latLngFromMap(data['location']);
+    return null;
   }
 
   static LatLng? _latLngFromMap(dynamic location) {
@@ -259,23 +260,24 @@ class PassengerTripRepository {
     if (uid == null || uid.trim().isEmpty) return;
 
     final passengerPayload = <String, dynamic>{
-      'userId': uid,
       'latitude': location.latitude,
       'longitude': location.longitude,
-      'location': {'lat': location.latitude, 'lng': location.longitude},
       'lastLocationUpdate': FieldValue.serverTimestamp(),
     };
 
     final trimmedPickup = pickupLocationDescription?.trim();
     if (trimmedPickup != null && trimmedPickup.isNotEmpty) {
       passengerPayload['pickupLocationDescription'] = trimmedPickup;
-      passengerPayload['pickup'] = trimmedPickup;
     }
 
     await _db
         .collection(_passengersCollection)
         .doc(uid)
         .set(passengerPayload, SetOptions(merge: true));
+  }
+
+  Future<void> syncPassengerLiveLocation(LatLng location) async {
+    await syncPassengerDocumentLocation(location);
   }
 
   Future<void> savePassengerLocation(LatLng location) async {

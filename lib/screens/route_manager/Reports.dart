@@ -3,6 +3,7 @@
 import '../../models/support_report.dart';
 import '../../services/support_report_service.dart';
 import '../../theme/app_theme.dart';
+import 'route_manager_notification_compose.dart';
 import 'route_manager_nav_bar.dart';
 import 'route_schedule.dart';
 
@@ -141,9 +142,9 @@ class _ReportsState extends State<Reports> {
         .toList();
 
     if (selectedReports.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("No reports selected!")),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text("No reports selected!")));
       return;
     }
 
@@ -188,12 +189,17 @@ class _ReportsState extends State<Reports> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            NavigoDecorations.topBar(
+            NavigoDecorations.topBar3(
               onBack: () => Navigator.pushReplacement(
                 context,
                 MaterialPageRoute(builder: (_) => const RouteSchedule()),
               ),
-              context: context,
+              onNotification: () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => const RouteManagerNotificationCompose(),
+                ),
+              ),
             ),
 
             Padding(
@@ -278,18 +284,25 @@ class _ReportsState extends State<Reports> {
                     itemCount: reports.length,
                     itemBuilder: (context, index) {
                       final report = reports[index];
-                      final isSelected =
-                          selectedReportIds.contains(report.reportId);
+                      final isSelected = selectedReportIds.contains(
+                        report.reportId,
+                      );
                       final isUnread = !report.isRead;
                       final titleStyle = NavigoTextStyles.titleSmall.copyWith(
-                        fontWeight: isUnread ? FontWeight.w800 : FontWeight.w600,
+                        fontWeight: isUnread
+                            ? FontWeight.w800
+                            : FontWeight.w600,
                       );
                       final metaStyle = NavigoTextStyles.bodySmall.copyWith(
-                        fontWeight: isUnread ? FontWeight.w700 : FontWeight.w400,
+                        fontWeight: isUnread
+                            ? FontWeight.w700
+                            : FontWeight.w400,
                       );
                       final chipTextStyle = NavigoTextStyles.bodySmall.copyWith(
                         color: NavigoColors.textLight,
-                        fontWeight: isUnread ? FontWeight.w800 : FontWeight.w600,
+                        fontWeight: isUnread
+                            ? FontWeight.w800
+                            : FontWeight.w600,
                       );
 
                       return Container(
@@ -325,8 +338,9 @@ class _ReportsState extends State<Reports> {
                                 borderRadius: BorderRadius.circular(16),
                                 onTap: () => _openReportSheet(report),
                                 child: Padding(
-                                  padding:
-                                      const EdgeInsets.symmetric(vertical: 6),
+                                  padding: const EdgeInsets.symmetric(
+                                    vertical: 6,
+                                  ),
                                   child: Column(
                                     crossAxisAlignment:
                                         CrossAxisAlignment.start,
