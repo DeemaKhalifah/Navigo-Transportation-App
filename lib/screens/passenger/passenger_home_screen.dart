@@ -102,8 +102,11 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> {
   void dispose() {
     _searchController.dispose();
     _mapController?.dispose();
+    _mapController = null;
     _liveDriverSub?.cancel();
+    _liveDriverSub = null;
     _passengerLocationSub?.cancel();
+    _passengerLocationSub = null;
     super.dispose();
   }
 
@@ -228,66 +231,64 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> {
       _trackingEtaText = null;
     });
 
-    _liveDriverSub = db
-        .collection('drivers')
-        .doc(driverId)
-        .snapshots()
-        .listen((snap) {
-          if (!mounted) return;
-          final data = snap.data();
-          if (data == null) return;
+    _liveDriverSub = db.collection('drivers').doc(driverId).snapshots().listen((
+      snap,
+    ) {
+      if (!mounted) return;
+      final data = snap.data();
+      if (data == null) return;
 
-          final lat = (data['latitude'] as num?)?.toDouble();
-          final lng = (data['longitude'] as num?)?.toDouble();
-          LatLng? driverPos;
+      final lat = (data['latitude'] as num?)?.toDouble();
+      final lng = (data['longitude'] as num?)?.toDouble();
+      LatLng? driverPos;
 
-          if (lat != null && lng != null) {
-            driverPos = LatLng(lat, lng);
-          } else {
-            final loc = data['location'];
-            if (loc is Map) {
-              final la = (loc['lat'] as num?)?.toDouble();
-              final lo = (loc['lng'] as num?)?.toDouble();
-              if (la != null && lo != null) {
-                driverPos = LatLng(la, lo);
-              }
-            }
+      if (lat != null && lng != null) {
+        driverPos = LatLng(lat, lng);
+      } else {
+        final loc = data['location'];
+        if (loc is Map) {
+          final la = (loc['lat'] as num?)?.toDouble();
+          final lo = (loc['lng'] as num?)?.toDouble();
+          if (la != null && lo != null) {
+            driverPos = LatLng(la, lo);
           }
+        }
+      }
 
-          if (driverPos == null) return;
+      if (driverPos == null) return;
 
-          final etaText = _etaBetween(
-            from: driverPos,
-            to: _passengerTrackingPosition,
-          );
+      final etaText = _etaBetween(
+        from: driverPos,
+        to: _passengerTrackingPosition,
+      );
 
-          setState(() {
-            _trackedDriverPosition = driverPos;
-            _trackingEtaText = etaText;
-            _markers.removeWhere((m) => m.markerId.value == 'live_driver');
-            _markers.add(
-              Marker(
-                markerId: const MarkerId('live_driver'),
-                position: driverPos!,
-                infoWindow: InfoWindow(
-                  title: 'Driver',
-                  snippet: etaText == null
-                      ? 'Live location'
-                      : 'ETA to pickup: $etaText',
-                ),
-                icon: BitmapDescriptor.defaultMarkerWithHue(
-                  BitmapDescriptor.hueOrange,
-                ),
-              ),
-            );
-          });
-
-          _mapController?.animateCamera(
-            CameraUpdate.newCameraPosition(
-              CameraPosition(target: driverPos, zoom: 14.5),
+      setState(() {
+        _trackedDriverPosition = driverPos;
+        _trackingEtaText = etaText;
+        _markers.removeWhere((m) => m.markerId.value == 'live_driver');
+        _markers.add(
+          Marker(
+            markerId: const MarkerId('live_driver'),
+            position: driverPos!,
+            infoWindow: InfoWindow(
+              title: 'Driver',
+              snippet: etaText == null
+                  ? 'Live location'
+                  : 'ETA to pickup: $etaText',
             ),
-          );
-        });
+            icon: BitmapDescriptor.defaultMarkerWithHue(
+              BitmapDescriptor.hueOrange,
+            ),
+          ),
+        );
+      });
+
+      _mapController?.animateCamera(
+        CameraUpdate.newCameraPosition(
+          CameraPosition(target: driverPos, zoom: 14.5),
+        ),
+      );
+    });
   }
 
   void _stopLiveTracking() {
@@ -348,34 +349,36 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> {
     final allowed = await _ensureLocationPermission();
     if (!allowed) return;
 
-    _passengerLocationSub = Geolocator.getPositionStream(
-      locationSettings: const LocationSettings(
-        accuracy: LocationAccuracy.high,
-        distanceFilter: 10,
-      ),
-    ).listen(
-      (position) async {
-        final location = LatLng(position.latitude, position.longitude);
+    _passengerLocationSub =
+        Geolocator.getPositionStream(
+          locationSettings: const LocationSettings(
+            accuracy: LocationAccuracy.high,
+            distanceFilter: 10,
+          ),
+        ).listen(
+          (position) async {
+            final location = LatLng(position.latitude, position.longitude);
 
-        if (!mounted) return;
-        if (!_manualPickupSelected) {
-          try {
-            await _tripRepository.syncPassengerLiveLocation(location);
-          } catch (e) {
-            debugPrint("Passenger live location publish error: $e");
-          }
+            if (!mounted) return;
+            if (!_manualPickupSelected) {
+              try {
+                await _tripRepository.syncPassengerLiveLocation(location);
+              } catch (e) {
+                debugPrint("Passenger live location publish error: $e");
+              }
 
-          setState(() {
-            _passengerTrackingPosition = location;
-            _initialPosition = location;
-          });
-          _refreshTrackingEta();
-        }
-      },
-      onError: (e) {
-        debugPrint("Passenger location stream error: $e");
-      },
-    );
+              if (!mounted) return;
+              setState(() {
+                _passengerTrackingPosition = location;
+                _initialPosition = location;
+              });
+              _refreshTrackingEta();
+            }
+          },
+          onError: (e) {
+            debugPrint("Passenger location stream error: $e");
+          },
+        );
   }
 
   String? _etaBetween({required LatLng from, required LatLng? to}) {
@@ -400,6 +403,7 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> {
   }
 
   void _refreshTrackingEta() {
+    if (!mounted) return;
     final driver = _trackedDriverPosition;
     if (driver == null) return;
 
@@ -575,9 +579,7 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> {
       );
 
       await _tripRepository.savePassengerLocation(newPosition);
-      await _tripRepository.syncPassengerLiveLocation(
-        newPosition,
-      );
+      await _tripRepository.syncPassengerLiveLocation(newPosition);
       unawaited(_startPassengerLocationPublishing());
     } catch (e) {
       debugPrint("Location error: $e");
@@ -1233,11 +1235,7 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> {
                 ),
                 child: Row(
                   children: [
-                    const Icon(
-                      Icons.gps_fixed,
-                      color: Colors.white,
-                      size: 20,
-                    ),
+                    const Icon(Icons.gps_fixed, color: Colors.white, size: 20),
                     const SizedBox(width: 10),
                     Expanded(
                       child: Text(

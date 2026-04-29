@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/foundation.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 
 import '../models/route.dart';
@@ -55,7 +56,9 @@ class DriverTripDetailsService {
           capacity: slot.capacity,
           vehicleType: slot.vehicleType,
           driverId: slot.driverId,
-          passengersIds: List<String>.from(slot.passengersIds),
+          passengerBookings: List<Map<String, dynamic>>.from(
+            slot.passengerBookings,
+          ),
           frequencyMinutes: slot.frequencyMinutes,
           status: slot.status,
         );
@@ -83,17 +86,15 @@ class DriverTripDetailsService {
     for (final booking in passengerBookings) {
       final passengerId = (booking['passengerId'] ?? '').toString().trim();
       if (passengerId.isEmpty) continue;
-      final userSnap = await _db
-          .collection(_usersCollection)
-          .doc(passengerId)
-          .get();
-      final passengerSnap = await _db
-          .collection(_passengersCollection)
-          .doc(passengerId)
-          .get();
 
-      final userData = userSnap.data() ?? {};
-      final passengerData = passengerSnap.data() ?? {};
+      final userData = await _safeGetDocumentData(
+        collection: _usersCollection,
+        documentId: passengerId,
+      );
+      final passengerData = await _safeGetDocumentData(
+        collection: _passengersCollection,
+        documentId: passengerId,
+      );
 
       final firstName = (userData['firstName'] ?? '').toString().trim();
       final lastName = (userData['lastName'] ?? '').toString().trim();
@@ -116,6 +117,21 @@ class DriverTripDetailsService {
     }
 
     return result;
+  }
+
+  Future<Map<String, dynamic>> _safeGetDocumentData({
+    required String collection,
+    required String documentId,
+  }) async {
+    try {
+      final snap = await _db.collection(collection).doc(documentId).get();
+      return snap.data() ?? {};
+    } on FirebaseException catch (e) {
+      debugPrint(
+        'Could not load $collection/$documentId: ${e.code} ${e.message ?? ''}',
+      );
+      return {};
+    }
   }
 
   Future<String> _pickupNameFromPassengerLocation(

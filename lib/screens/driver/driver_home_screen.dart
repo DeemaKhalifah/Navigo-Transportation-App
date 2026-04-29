@@ -163,7 +163,8 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
   void _startLiveTracking(ScheduleSlot slot) {
     if (_isDisposed) return;
 
-    final driverId = _driverDocRef?.id ?? FirebaseAuth.instance.currentUser?.uid;
+    final driverId =
+        _driverDocRef?.id ?? FirebaseAuth.instance.currentUser?.uid;
     if (driverId == null) return;
 
     setState(() {
@@ -323,7 +324,8 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
       );
       _updateDriverMarker(LatLng(pos.latitude, pos.longitude));
 
-      final driverId = _driverDocRef?.id ?? FirebaseAuth.instance.currentUser?.uid;
+      final driverId =
+          _driverDocRef?.id ?? FirebaseAuth.instance.currentUser?.uid;
       if (driverId != null && driverId.trim().isNotEmpty) {
         await _liveService.updateDriverLocation(
           driverId: driverId,
@@ -331,22 +333,21 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
           longitude: pos.longitude,
         );
 
-        if (_locationSub == null) {
-          _locationSub = Geolocator.getPositionStream(
-            locationSettings: const LocationSettings(
-              accuracy: LocationAccuracy.high,
-              distanceFilter: 10,
-            ),
-          ).listen((livePos) async {
-            if (_isDisposed) return;
-            await _liveService.updateDriverLocation(
-              driverId: driverId,
-              latitude: livePos.latitude,
-              longitude: livePos.longitude,
-            );
-            _updateDriverMarker(LatLng(livePos.latitude, livePos.longitude));
-          });
-        }
+        _locationSub ??=
+            Geolocator.getPositionStream(
+              locationSettings: const LocationSettings(
+                accuracy: LocationAccuracy.high,
+                distanceFilter: 10,
+              ),
+            ).listen((livePos) async {
+              if (_isDisposed) return;
+              await _liveService.updateDriverLocation(
+                driverId: driverId,
+                latitude: livePos.latitude,
+                longitude: livePos.longitude,
+              );
+              _updateDriverMarker(LatLng(livePos.latitude, livePos.longitude));
+            });
       }
     } catch (e) {
       debugPrint('Location error: $e');
