@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../../controllers/manager_profile_controller.dart';
+import '../../localization/localization_x.dart';
 import '../../theme/app_theme.dart';
+import '../../widgets/language_toggle_switch.dart';
 import '../authentication/email_login.dart';
 import 'route_manager_notification_compose.dart';
 import 'route_manager_nav_bar.dart';
@@ -49,7 +51,7 @@ class _ManagerProfileState extends State<ManagerProfile> {
           children: [
             ListTile(
               leading: const Icon(Icons.camera_alt),
-              title: const Text("Take Photo"),
+              title: Text(context.texts.t('takePhoto')),
               onTap: () {
                 Navigator.of(sheetContext).pop();
                 controller.pickImage(ImageSource.camera);
@@ -57,7 +59,7 @@ class _ManagerProfileState extends State<ManagerProfile> {
             ),
             ListTile(
               leading: const Icon(Icons.photo),
-              title: const Text("Choose from Gallery"),
+              title: Text(context.texts.t('chooseGallery')),
               onTap: () {
                 Navigator.of(sheetContext).pop();
                 controller.pickImage(ImageSource.gallery);
@@ -74,7 +76,7 @@ class _ManagerProfileState extends State<ManagerProfile> {
 
     if (!mounted) return;
 
-    _showSnack(error ?? "Profile updated");
+    _showSnack(error ?? context.texts.t('profileUpdated'));
   }
 
   Future<void> _logout() async {
@@ -121,7 +123,7 @@ class _ManagerProfileState extends State<ManagerProfile> {
                 if (error == null) {
                   Navigator.of(dialogContext).pop();
 
-                  _showSnack("Password changed successfully");
+                  _showSnack(context.texts.t('passwordChanged'));
 
                   await controller.logout();
 
@@ -156,8 +158,8 @@ class _ManagerProfileState extends State<ManagerProfile> {
                       ),
                     ),
                     const SizedBox(width: 12),
-                    const Text(
-                      "Change Password",
+                    Text(
+                      context.texts.t('changePassword'),
                       style: NavigoTextStyles.titleSmall,
                     ),
                   ],
@@ -176,7 +178,7 @@ class _ManagerProfileState extends State<ManagerProfile> {
                           fontWeight: FontWeight.w500,
                         ),
                         decoration: NavigoDecorations.kInputDecoration.copyWith(
-                          hintText: "Current Password",
+                          hintText: context.texts.t('currentPassword'),
                           prefixIcon: const Icon(
                             Icons.lock,
                             color: NavigoColors.textMuted,
@@ -208,7 +210,7 @@ class _ManagerProfileState extends State<ManagerProfile> {
                           fontWeight: FontWeight.w500,
                         ),
                         decoration: NavigoDecorations.kInputDecoration.copyWith(
-                          hintText: "New Password",
+                          hintText: context.texts.t('newPassword'),
                           prefixIcon: const Icon(
                             Icons.lock_open,
                             color: NavigoColors.accentGreen,
@@ -240,7 +242,7 @@ class _ManagerProfileState extends State<ManagerProfile> {
                           fontWeight: FontWeight.w500,
                         ),
                         decoration: NavigoDecorations.kInputDecoration.copyWith(
-                          hintText: "Confirm New Password",
+                          hintText: context.texts.t('confirmNewPassword'),
                           prefixIcon: const Icon(
                             Icons.lock_open,
                             color: NavigoColors.accentGreen,
@@ -271,7 +273,7 @@ class _ManagerProfileState extends State<ManagerProfile> {
                         ? null
                         : () => Navigator.of(dialogContext).pop(),
                     child: Text(
-                      "Cancel",
+                      context.texts.t('cancel'),
                       style: NavigoTextStyles.bodyMedium.copyWith(
                         fontWeight: FontWeight.w600,
                         color: NavigoColors.textMuted,
@@ -290,7 +292,7 @@ class _ManagerProfileState extends State<ManagerProfile> {
                               color: NavigoColors.textLight,
                             ),
                           )
-                        : const Text("Change"),
+                        : Text(context.texts.t('change')),
                   ),
                 ],
               );
@@ -389,7 +391,7 @@ class _ManagerProfileState extends State<ManagerProfile> {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  const Text("Profile", style: NavigoTextStyles.titleLarge),
+                  Text(context.texts.t('profile'), style: NavigoTextStyles.titleLarge),
                   IconButton(
                     onPressed: controller.toggleEdit,
                     icon: Icon(
@@ -447,14 +449,14 @@ class _ManagerProfileState extends State<ManagerProfile> {
                             ),
                             const SizedBox(height: 20),
                             _field(
-                              "Full Name",
+                              context.texts.t('fullName'),
                               controller.nameController,
                               controller.isEditing,
                               Icons.person,
                             ),
                             const SizedBox(height: 16),
                             _field(
-                              "Email",
+                              context.texts.t('email'),
                               controller.emailController,
                               false,
                               Icons.email,
@@ -478,7 +480,7 @@ class _ManagerProfileState extends State<ManagerProfile> {
                                             color: NavigoColors.textLight,
                                           ),
                                         )
-                                      : const Text("Save"),
+                                      : Text(context.texts.t('save')),
                                 ),
                               ),
                             if (controller.isEditing)
@@ -486,21 +488,26 @@ class _ManagerProfileState extends State<ManagerProfile> {
                             Align(
                               alignment: Alignment.centerLeft,
                               child: Text(
-                                "Settings",
+                                context.texts.t('settings'),
                                 style: NavigoTextStyles.titleSmall.copyWith(
                                   color: NavigoColors.textGray,
                                 ),
                               ),
                             ),
                             const SizedBox(height: 10),
+                            const Align(
+                              alignment: Alignment.centerLeft,
+                              child: LanguageToggleSwitch(),
+                            ),
+                            const SizedBox(height: 8),
                             _settingsItem(
                               icon: Icons.lock_outline,
-                              title: "Change Password",
+                              title: context.texts.t('changePassword'),
                               onTap: _changePassword,
                             ),
                             _settingsItem(
                               icon: Icons.logout,
-                              title: "Log out",
+                              title: context.texts.t('logout'),
                               color: NavigoColors.accentRed,
                               onTap: _logout,
                             ),

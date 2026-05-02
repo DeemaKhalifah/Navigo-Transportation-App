@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../../controllers/profile_controller.dart';
+import '../../localization/localization_x.dart';
 import '../../theme/app_theme.dart';
+import '../../widgets/language_toggle_switch.dart';
 import 'passenger_bottom_nav_bar.dart';
 import 'passenger_home_screen.dart';
 import 'support_screen.dart';
@@ -40,7 +42,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             children: [
               ListTile(
                 leading: const Icon(Icons.camera_alt),
-                title: const Text("Take Photo"),
+                title: Text(context.texts.t('takePhoto')),
                 onTap: () {
                   Navigator.pop(context);
                   _controller.pickImage(ImageSource.camera);
@@ -48,7 +50,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ),
               ListTile(
                 leading: const Icon(Icons.photo),
-                title: const Text("Choose from Gallery"),
+                title: Text(context.texts.t('chooseGallery')),
                 onTap: () {
                   Navigator.pop(context);
                   _controller.pickImage(ImageSource.gallery);
@@ -69,7 +71,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           .showSnackBar(SnackBar(content: Text(error)));
     } else {
       ScaffoldMessenger.of(context)
-          .showSnackBar(const SnackBar(content: Text("Profile updated")));
+          .showSnackBar(SnackBar(content: Text(context.texts.t('profileUpdated'))));
     }
   }
 
@@ -122,7 +124,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  const Text("Profile", style: NavigoTextStyles.titleLarge),
+                  Text(context.texts.t('profile'), style: NavigoTextStyles.titleLarge),
                   IconButton(
                     onPressed: _controller.toggleEdit,
                     icon: Icon(
@@ -184,7 +186,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
                       /// NAME
                       _field(
-                        "Full Name",
+                        context.texts.t('fullName'),
                         _controller.nameController,
                         _controller.isEditing,
                         Icons.person,
@@ -194,7 +196,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
                       /// PHONE
                       _field(
-                        "Phone",
+                        context.texts.t('phone'),
                         _controller.phoneController,
                         _controller.isEditing,
                         Icons.phone,
@@ -210,7 +212,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                             onPressed: _handleSaveProfile,
                             style:
                                 NavigoDecorations.kPrimaryButtonLargeStyle,
-                            child: const Text("Save"),
+                            child: Text(context.texts.t('save')),
                           ),
                         ),
 
@@ -220,7 +222,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       Align(
                         alignment: Alignment.centerLeft,
                         child: Text(
-                          "Settings",
+                          context.texts.t('settings'),
                           style: NavigoTextStyles.titleSmall.copyWith(
                             color: NavigoColors.textGray,
                           ),
@@ -229,9 +231,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
                       const SizedBox(height: 10),
 
+                      const Align(
+                        alignment: Alignment.centerLeft,
+                        child: LanguageToggleSwitch(),
+                      ),
+                      const SizedBox(height: 8),
                       _settingsItem(
                         icon: Icons.help_outline,
-                        title: "Help & Support",
+                        title: context.texts.t('helpSupport'),
                         onTap: () {
                           Navigator.push(
                             context,
@@ -244,7 +251,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
                       _settingsItem(
                         icon: Icons.logout,
-                        title: "Log out",
+                        title: context.texts.t('logout'),
                         color: NavigoColors.accentRed,
                         onTap: _handleLogout,
                       ),

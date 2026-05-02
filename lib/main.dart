@@ -1,10 +1,13 @@
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 
 import 'controllers/app_controller_scope.dart';
 import 'controllers/auth_controller.dart';
+import 'controllers/language_controller.dart';
 import 'firebase_options.dart';
+import 'localization/app_texts.dart';
 import 'navigation/app_navigator.dart';
 import 'screens/welcome_flow/welcome.dart';
 import 'services/push_notification_service.dart';
@@ -23,6 +26,8 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  final languageController = LanguageController();
+  await languageController.loadSavedLanguage();
 
   try {
     if (Firebase.apps.isEmpty) {
@@ -44,11 +49,13 @@ Future<void> main() async {
 
   FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
 
-  runApp(const MyApp());
+  runApp(MyApp(languageController: languageController));
 }
 
 class MyApp extends StatefulWidget {
-  const MyApp({super.key});
+  const MyApp({super.key, required this.languageController});
+
+  final LanguageController languageController;
 
   @override
   State<MyApp> createState() => _MyAppState();
@@ -87,11 +94,22 @@ class _MyAppState extends State<MyApp> {
   Widget build(BuildContext context) {
     return AppControllerScope(
       authController: _authController,
-      child: MaterialApp(
-        navigatorKey: appNavigatorKey,
-        theme: appTheme,
-        debugShowCheckedModeBanner: false,
-        home: const SplashScreen(),
+      languageController: widget.languageController,
+      child: AnimatedBuilder(
+        animation: widget.languageController,
+        builder: (context, _) => MaterialApp(
+          navigatorKey: appNavigatorKey,
+          theme: appTheme,
+          debugShowCheckedModeBanner: false,
+          locale: widget.languageController.locale,
+          supportedLocales: AppTexts.supportedLocales,
+          localizationsDelegates: const [
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
+          home: const SplashScreen(),
+        ),
       ),
     );
   }

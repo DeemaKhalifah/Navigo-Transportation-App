@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 
+import '../../localization/localization_x.dart';
 import '../../theme/app_theme.dart';
 import '../../controllers/driver_profile_controller.dart';
+import '../../widgets/language_toggle_switch.dart';
 import 'driver_bottom_nav_bar.dart';
 import 'driver_home_screen.dart';
 import '../../screens/passenger/support_screen.dart';
@@ -53,7 +55,7 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
             children: [
               ListTile(
                 leading: const Icon(Icons.camera_alt),
-                title: const Text("Take Photo"),
+                title: Text(context.texts.t('takePhoto')),
                 onTap: () {
                   Navigator.pop(context);
                   controller.pickImage(ImageSource.camera);
@@ -61,7 +63,7 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
               ),
               ListTile(
                 leading: const Icon(Icons.photo),
-                title: const Text("Choose from Gallery"),
+                title: Text(context.texts.t('chooseGallery')),
                 onTap: () {
                   Navigator.pop(context);
                   controller.pickImage(ImageSource.gallery);
@@ -80,7 +82,7 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
     if (!mounted) return;
 
     if (error == null) {
-      _showSnack('Profile updated');
+      _showSnack(context.texts.t('profileUpdated'));
     } else {
       _showSnack(error);
     }
@@ -91,7 +93,7 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
 
     if (!mounted) return;
 
-    _showSnack(error ?? 'You are online and in the driver queue.');
+    _showSnack(error ?? context.texts.t('onlineQueue'));
   }
 
   Future<void> _goOffline() async {
@@ -99,7 +101,7 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
 
     if (!mounted) return;
 
-    _showSnack(error ?? 'You are offline and left the queue.');
+    _showSnack(error ?? context.texts.t('offlineQueue'));
   }
 
   Future<void> _logout() async {
@@ -146,7 +148,7 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  const Text("Profile", style: NavigoTextStyles.titleLarge),
+                  Text(context.texts.t('profile'), style: NavigoTextStyles.titleLarge),
                   IconButton(
                     onPressed: controller.toggleEdit,
                     icon: Icon(
@@ -204,14 +206,14 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
                             ),
                             const SizedBox(height: 20),
                             _field(
-                              "Full Name",
+                              context.texts.t('fullName'),
                               controller.nameController,
                               controller.isEditing,
                               Icons.person,
                             ),
                             const SizedBox(height: 16),
                             _field(
-                              "Phone",
+                              context.texts.t('phone'),
                               controller.phoneController,
                               controller.isEditing,
                               Icons.phone,
@@ -235,14 +237,14 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
                                             color: NavigoColors.textLight,
                                           ),
                                         )
-                                      : const Text("Save"),
+                                      : Text(context.texts.t('save')),
                                 ),
                               ),
                             const SizedBox(height: 16),
                             Align(
                               alignment: Alignment.centerLeft,
                               child: Text(
-                                'Driver status: ${controller.statusLabel}',
+                                '${context.texts.t('driverStatus')}: ${controller.statusLabel}',
                                 style: NavigoTextStyles.bodyMedium.copyWith(
                                   fontWeight: FontWeight.w600,
                                 ),
@@ -252,7 +254,7 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
                               Padding(
                                 padding: const EdgeInsets.only(top: 8),
                                 child: Text(
-                                  'Finish your current trip before changing availability.',
+                                  context.texts.t('finishTripHint'),
                                   style: NavigoTextStyles.bodySmall.copyWith(
                                     color: NavigoColors.textMuted,
                                   ),
@@ -262,7 +264,7 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
                               Padding(
                                 padding: const EdgeInsets.only(top: 8),
                                 child: Text(
-                                  'You have an assigned trip. Start it from Trips or wait until the route manager updates the schedule.',
+                                  context.texts.t('assignedTripHint'),
                                   style: NavigoTextStyles.bodySmall.copyWith(
                                     color: NavigoColors.textMuted,
                                   ),
@@ -297,7 +299,7 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
                                               color: NavigoColors.textLight,
                                             ),
                                           )
-                                        : const Text('Go online'),
+                                        : Text(context.texts.t('goOnline')),
                                   ),
                                 ),
                                 const SizedBox(width: 12),
@@ -318,7 +320,7 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
                                                 NavigoColors.accentRed,
                                               ),
                                         ),
-                                    child: const Text('Go offline'),
+                                    child: Text(context.texts.t('goOffline')),
                                   ),
                                 ),
                               ],
@@ -327,16 +329,21 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
                             Align(
                               alignment: Alignment.centerLeft,
                               child: Text(
-                                "Settings",
+                                context.texts.t('settings'),
                                 style: NavigoTextStyles.titleSmall.copyWith(
                                   color: NavigoColors.textGray,
                                 ),
                               ),
                             ),
                             const SizedBox(height: 10),
+                            const Align(
+                              alignment: Alignment.centerLeft,
+                              child: LanguageToggleSwitch(),
+                            ),
+                            const SizedBox(height: 8),
                             _settingsItem(
                               icon: Icons.help_outline,
-                              title: "Help & Support",
+                              title: context.texts.t('helpSupport'),
                               onTap: () {
                                 Navigator.push(
                                   context,
@@ -348,7 +355,7 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
                             ),
                             _settingsItem(
                               icon: Icons.logout,
-                              title: "Log out",
+                              title: context.texts.t('logout'),
                               color: NavigoColors.accentRed,
                               onTap: _logout,
                             ),

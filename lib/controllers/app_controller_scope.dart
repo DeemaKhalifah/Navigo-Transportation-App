@@ -1,6 +1,7 @@
 import 'package:flutter/widgets.dart';
 
 import 'auth_controller.dart';
+import 'language_controller.dart';
 
 /// Simple DI/scope for app-level controllers (MVC).
 ///
@@ -8,10 +9,12 @@ import 'auth_controller.dart';
 /// globals from `main.dart`.
 class AppControllerScope extends InheritedWidget {
   final AuthController authController;
+  final LanguageController languageController;
 
   const AppControllerScope({
     super.key,
     required this.authController,
+    required this.languageController,
     required super.child,
   });
 
@@ -24,7 +27,8 @@ class AppControllerScope extends InheritedWidget {
 
   @override
   bool updateShouldNotify(covariant AppControllerScope oldWidget) {
-    return authController != oldWidget.authController;
+    return authController != oldWidget.authController ||
+        languageController != oldWidget.languageController;
   }
 }
 

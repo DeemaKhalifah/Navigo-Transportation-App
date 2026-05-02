@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import '../../localization/localization_x.dart';
 import '../../theme/app_theme.dart';
+import '../../widgets/language_toggle_switch.dart';
 import 'role.dart';
 import '../authentication/phone_number_screen.dart';
 
@@ -51,8 +53,13 @@ class OnboardingScreen extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 30.0),
       child: Column(
         children: [
+          const Align(
+            alignment: Alignment.centerRight,
+            child: LanguageToggleSwitch(),
+          ),
+          const SizedBox(height: 8),
           Text(
-            "Browse routes, track vehicles, and request trips.",
+            context.texts.t('welcomeSubtitle'),
             textAlign: TextAlign.center,
             style: NavigoTextStyles.bodySmall.copyWith(height: 1.4),
           ),
@@ -69,7 +76,7 @@ class OnboardingScreen extends StatelessWidget {
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Text("Get Started"),
+                  Text(context.texts.t('getStarted')),
                   const SizedBox(width: 12),
                   const Icon(Icons.arrow_forward),
                 ],
@@ -87,7 +94,7 @@ class OnboardingScreen extends StatelessWidget {
                 MaterialPageRoute(builder: (context) => PhoneNumberScreen()),
               );
             },
-            child: Text("Sign in", style: NavigoTextStyles.actionLink),
+            child: Text(context.texts.t('signIn'), style: NavigoTextStyles.actionLink),
           ),
 
           const SizedBox(height: 8),
