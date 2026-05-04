@@ -1,6 +1,7 @@
-﻿import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
+import '../../localization/localization_x.dart';
 import '../../models/trip_driver_request.dart';
 import '../../services/trip_driver_request_service.dart';
 import '../../theme/app_theme.dart';
@@ -39,16 +40,16 @@ class _DriverRequestsScreenState extends State<DriverRequestsScreen> {
               ),
               context: context,
             ),
-            const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 20),
-              child: Text('Trip Requests', style: NavigoTextStyles.titleLarge),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              child: Text(context.texts.t('tripRequests'), style: NavigoTextStyles.titleLarge),
             ),
             const SizedBox(height: 16),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16),
               child: TextField(
                 decoration: NavigoDecorations.kInputDecoration.copyWith(
-                  hintText: 'Search requests...',
+                  hintText: context.texts.t('searchRequests'),
                   prefixIcon: const Icon(
                     Icons.search,
                     color: NavigoColors.accentGreen,
@@ -63,7 +64,7 @@ class _DriverRequestsScreenState extends State<DriverRequestsScreen> {
               child: driverId == null || driverId.isEmpty
                   ? Center(
                       child: Text(
-                        'Sign in to see requests.',
+                        context.texts.t('signInToSeeRequests'),
                         style: NavigoTextStyles.bodySmall,
                       ),
                     )
@@ -80,7 +81,7 @@ class _DriverRequestsScreenState extends State<DriverRequestsScreen> {
                             child: Padding(
                               padding: const EdgeInsets.all(20),
                               child: Text(
-                                'Could not load requests.\n${snapshot.error}',
+                                '${context.texts.t('couldNotLoadRequests')}\n${snapshot.error}',
                                 textAlign: TextAlign.center,
                                 style: NavigoTextStyles.bodySmall,
                               ),
@@ -107,8 +108,8 @@ class _DriverRequestsScreenState extends State<DriverRequestsScreen> {
                           return Center(
                             child: Text(
                               all.isEmpty
-                                  ? 'No pending requests'
-                                  : 'No requests match your search',
+                                  ? context.texts.t('noPendingRequests')
+                                  : context.texts.t('noRequestsMatch'),
                               style: NavigoTextStyles.bodySmall,
                             ),
                           );
@@ -157,7 +158,7 @@ class _DriverRequestsScreenState extends State<DriverRequestsScreen> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(accept ? 'Request accepted' : 'Request declined'),
+          content: Text(accept ? context.texts.t('requestAccepted') : context.texts.t('requestDeclined')),
         ),
       );
     } catch (e) {
@@ -239,17 +240,17 @@ class _RequestCard extends StatelessWidget {
           ),
           const SizedBox(height: 6),
           Text(
-            'Pickup: ${request.pickupDescription.isEmpty ? '—' : request.pickupDescription}',
+            '${context.texts.t('pickup')}: ${request.pickupDescription.isEmpty ? '—' : request.pickupDescription}',
             style: NavigoTextStyles.bodySmall,
           ),
           const SizedBox(height: 4),
           Text(
-            'To: ${request.endPoint.isEmpty ? '—' : request.endPoint}',
+            '${context.texts.t('to')}: ${request.endPoint.isEmpty ? '—' : request.endPoint}',
             style: NavigoTextStyles.bodySmall,
           ),
           const SizedBox(height: 4),
           Text(
-            'Seats: ${request.seatsRequested}',
+            '${context.texts.t('seats')}: ${request.seatsRequested}',
             style: NavigoTextStyles.bodySmall,
           ),
           const SizedBox(height: 16),
@@ -259,7 +260,7 @@ class _RequestCard extends StatelessWidget {
                 child: ElevatedButton(
                   onPressed: busy ? null : onDecline,
                   style: NavigoDecorations.coloredButton(NavigoColors.accentRed),
-                  child: const Text('Decline'),
+                  child: Text(context.texts.t('decline')),
                 ),
               ),
               const SizedBox(width: 10),
@@ -273,7 +274,7 @@ class _RequestCard extends StatelessWidget {
                           height: 20,
                           child: CircularProgressIndicator(strokeWidth: 2),
                         )
-                      : const Text('Accept'),
+                      : Text(context.texts.t('accept')),
                 ),
               ),
             ],

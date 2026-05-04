@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 
 import '../../models/schedule_slot.dart';
@@ -6,6 +6,7 @@ import '../../services/geocoding_service.dart';
 import '../../services/local_storage_service.dart';
 import '../../services/passenger_schedule_service.dart';
 import '../../services/passenger_trip_repository.dart';
+import '../../localization/localization_x.dart';
 import '../../theme/app_theme.dart';
 import 'passenger_bottom_nav_bar.dart';
 import 'passenger_home_screen.dart';
@@ -109,12 +110,12 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
   }
 
   String _formatDate() {
-    if (_selectedDate == null) return 'Any date';
+    if (_selectedDate == null) return context.texts.t('anyDate');
     return '${_selectedDate!.day}/${_selectedDate!.month}/${_selectedDate!.year}';
   }
 
   String _formatTime() {
-    if (_selectedTime == null) return 'Any time';
+    if (_selectedTime == null) return context.texts.t('anyTime');
     return '${_selectedTime!.hour}:${_selectedTime!.minute.toString().padLeft(2, '0')}';
   }
 
@@ -180,19 +181,19 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                     ),
                     const SizedBox(height: 12),
                     Text(
-                      'Date: ${PassengerScheduleService.formatDate(slot.departureAt)}',
+                      '${context.texts.t('date')}: ${PassengerScheduleService.formatDate(slot.departureAt)}',
                       style: NavigoTextStyles.bodyMedium,
                     ),
                     Text(
-                      'Time: ${PassengerScheduleService.formatTime(slot.departureAt)}',
+                      '${context.texts.t('time')}: ${PassengerScheduleService.formatTime(slot.departureAt)}',
                       style: NavigoTextStyles.bodyMedium,
                     ),
                     Text(
-                      'Price: ${_scheduleService.priceTextOf(slot)}',
+                      '${context.texts.t('price')}: ${_scheduleService.priceTextOf(slot)}',
                       style: NavigoTextStyles.bodyMedium,
                     ),
                     Text(
-                      'Available seats: $availableSeats',
+                      '${context.texts.t('availableSeats')}: $availableSeats',
                       style: NavigoTextStyles.bodyMedium,
                     ),
                     const SizedBox(height: 14),
@@ -206,7 +207,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                       child: Row(
                         children: [
                           Text(
-                            'Seats:',
+                            '${context.texts.t('seats')}:',
                             style: NavigoTextStyles.bodyMedium.copyWith(
                               fontWeight: FontWeight.w600,
                             ),
@@ -240,7 +241,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                       Padding(
                         padding: const EdgeInsets.only(top: 8),
                         child: Text(
-                          'Only $availableSeats seat(s) are available for this trip.',
+                          'Only $availableSeats ${context.texts.t('seatsAvailableForTrip')}',
                           style: NavigoTextStyles.bodySmall.copyWith(
                             color: NavigoColors.accentRed,
                           ),
@@ -262,7 +263,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                                           .getSavedPassengerLocation();
                                   if (pickupLatLng == null) {
                                     throw Exception(
-                                      'Set your pickup on the home map (tap the map or use My Location), then try again.',
+                                      context.texts.t('setPickupFirst'),
                                     );
                                   }
 
@@ -307,7 +308,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                                   ScaffoldMessenger.of(context).showSnackBar(
                                     SnackBar(
                                       content: Text(
-                                        'Schedule confirmed for $sheetSeatCount seat(s).',
+                                        '${context.texts.t('scheduleConfirmed')} $sheetSeatCount ${context.texts.t('seats')}.',
                                       ),
                                     ),
                                   );
@@ -338,8 +339,8 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                                   strokeWidth: 2,
                                 ),
                               )
-                            : const Text(
-                                'Confirm schedule',
+                            : Text(
+                                context.texts.t('confirmSchedule'),
                                 style: NavigoTextStyles.button,
                               ),
                       ),
@@ -375,22 +376,22 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('Schedule Ride', style: NavigoTextStyles.titleLarge),
+                    Text(context.texts.t('searchSchedule'), style: NavigoTextStyles.titleLarge),
                     const SizedBox(height: 6),
                     Text(
-                      'Line',
+                      context.texts.t('line'),
                       style: NavigoTextStyles.label.copyWith(fontSize: 12),
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      _selectedLine ?? 'All lines',
+                      _selectedLine ?? context.texts.t('allLines'),
                       style: NavigoTextStyles.bodySmall.copyWith(
                         color: NavigoColors.textMuted,
                         fontSize: 13,
                       ),
                     ),
                     const SizedBox(height: 20),
-                    Text('Vehicle Type', style: NavigoTextStyles.label),
+                    Text(context.texts.t('vehicleTypeLabel'), style: NavigoTextStyles.label),
                     const SizedBox(height: 8),
                     Row(
                       children: _vehicles.map((v) {
@@ -432,10 +433,10 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                       }).toList(),
                     ),
                     const SizedBox(height: 20),
-                    Text('Pickup location', style: NavigoTextStyles.label),
+                    Text(context.texts.t('pickupLocation'), style: NavigoTextStyles.label),
                     const SizedBox(height: 6),
                     Text(
-                      'Defaults to the point selected on the home map. You can edit the text (e.g. street or landmark).',
+                      context.texts.t('pickupHint'),
                       style: NavigoTextStyles.bodySmall.copyWith(
                         color: NavigoColors.textMuted,
                         fontSize: 12,
@@ -447,7 +448,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                       maxLines: 2,
                       style: const TextStyle(color: NavigoColors.textDark),
                       decoration: NavigoDecorations.kInputDecoration.copyWith(
-                        hintText: 'Pickup description',
+                        hintText: context.texts.t('enterPickup'),
                         filled: true,
                         fillColor: NavigoColors.surfaceWhite,
                       ),
@@ -455,7 +456,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                     const SizedBox(height: 20),
 
                     // ── Date & Time on the same row ──────────────────────────
-                    Text('Date & Time', style: NavigoTextStyles.label),
+                    Text(context.texts.t('dateAndTime'), style: NavigoTextStyles.label),
                     const SizedBox(height: 8),
                     Row(
                       children: [
@@ -527,7 +528,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                     const SizedBox(height: 22),
                     Row(
                       children: [
-                        Text('Available Trips', style: NavigoTextStyles.label),
+                        Text(context.texts.t('availableTrips'), style: NavigoTextStyles.label),
                         const Spacer(),
                         IconButton(
                           onPressed: _isLoading ? null : _loadSchedules,
@@ -544,7 +545,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                         padding: const EdgeInsets.all(16),
                         decoration: NavigoDecorations.kCardDecoration,
                         child: Text(
-                          'No available schedules found.',
+                          context.texts.t('noSchedulesFound'),
                           style: NavigoTextStyles.bodySmall,
                         ),
                       )
@@ -592,11 +593,11 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                                         style: NavigoTextStyles.bodySmall,
                                       ),
                                       Text(
-                                        'Seats: $available',
+                                        '${context.texts.t('seats')}: $available',
                                         style: NavigoTextStyles.bodySmall,
                                       ),
                                       Text(
-                                        'Price: ${_scheduleService.priceTextOf(slot)}',
+                                        '${context.texts.t('price')}: ${_scheduleService.priceTextOf(slot)}',
                                         style: NavigoTextStyles.bodySmall,
                                       ),
                                     ],

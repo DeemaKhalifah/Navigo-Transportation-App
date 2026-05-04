@@ -1,4 +1,4 @@
-﻿import 'dart:async';
+import 'dart:async';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -12,6 +12,7 @@ import '../../models/driver_status.dart';
 import '../../services/driver_live_trip_service.dart';
 import '../../services/driver_trips_service.dart';
 import '../../services/notification_service.dart';
+import '../../localization/localization_x.dart';
 import '../../theme/app_theme.dart';
 import 'driver_bottom_nav_bar.dart';
 import 'package:navigo/screens/notifications_screen.dart';
@@ -458,8 +459,8 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
     final bool isAssigned = _driverStatus == DriverStatus.assigned;
 
     final String statusLabel = isAvailable
-        ? 'Available'
-        : (isAssigned ? 'Assigned' : 'Offline');
+        ? context.texts.t('available')
+        : (isAssigned ? context.texts.t('assigned') : context.texts.t('offline'));
     final Color statusColor = isAvailable
         ? NavigoColors.accentGreen
         : (isAssigned ? NavigoColors.primaryOrange : NavigoColors.accentRed);
@@ -502,13 +503,13 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         Text(
-                          'Hello, $_driverName',
+                          '${context.texts.t('hello')}, $_driverName',
                           style: NavigoTextStyles.titleSmall,
                         ),
                         Text(
                           hasActiveTrip
-                              ? 'Live trip in progress'
-                              : 'No active trip',
+                              ? context.texts.t('liveTripInProgress')
+                              : context.texts.t('noActiveTrip'),
                           style: NavigoTextStyles.bodySmall,
                         ),
                       ],
@@ -672,17 +673,17 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                             children: [
                               Text(
                                 isOffline
-                                    ? 'You are Offline'
+                                    ? context.texts.t('youAreOffline')
                                     : (isAssigned
-                                          ? 'You have an Assigned trip'
-                                          : 'You are Available'),
+                                          ? context.texts.t('youHaveAssignedTrip')
+                                          : context.texts.t('youAreAvailable')),
                                 style: NavigoTextStyles.titleSmall.copyWith(
                                   fontSize: 16,
                                 ),
                               ),
                               const SizedBox(height: 2),
                               Text(
-                                'Assigned trips: $_assignedTripsCount',
+                                '${context.texts.t('assignedTrips')}: $_assignedTripsCount',
                                 style: NavigoTextStyles.bodySmall,
                               ),
                             ],
@@ -720,7 +721,7 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                _tripLine ?? 'Active Trip',
+                                _tripLine ?? context.texts.t('activeTrip'),
                                 style: NavigoTextStyles.titleSmall.copyWith(
                                   fontSize: 15,
                                 ),
@@ -730,14 +731,14 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                               const SizedBox(height: 2),
                               if (_etaText != null)
                                 Text(
-                                  'ETA: $_etaText',
+                                  '${context.texts.t('eta')}: $_etaText',
                                   style: NavigoTextStyles.bodySmall,
                                 ),
                             ],
                           ),
                         ),
                         NavigoDecorations.statusChip(
-                          label: 'On Trip',
+                          label: context.texts.t('onTrip'),
                           color: NavigoColors.accentBlue,
                           padding: const EdgeInsets.symmetric(
                             horizontal: 14,
@@ -759,21 +760,21 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                       children: [
                         _statChip(
                           icon: Icons.people,
-                          label: 'Total',
+                          label: context.texts.t('total'),
                           value: '${_activeSlot!.passengersIds.length}',
                           color: NavigoColors.primaryOrange,
                         ),
                         const SizedBox(width: 10),
                         _statChip(
                           icon: Icons.location_on,
-                          label: 'On Map',
+                          label: context.texts.t('onMap'),
                           value: '$_passengersOnMap',
                           color: NavigoColors.accentBlue,
                         ),
                         const SizedBox(width: 10),
                         _statChip(
                           icon: Icons.event_seat,
-                          label: 'Capacity',
+                          label: context.texts.t('capacity'),
                           value: '${_activeSlot!.capacity}',
                           color: NavigoColors.accentGreen,
                         ),
@@ -803,8 +804,8 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                                   color: NavigoColors.textLight,
                                 ),
                               )
-                            : const Text(
-                                'End Trip',
+                            : Text(
+                                context.texts.t('endTrip'),
                                 style: NavigoTextStyles.button,
                               ),
                       ),

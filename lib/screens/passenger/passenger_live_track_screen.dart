@@ -1,4 +1,4 @@
-﻿import 'dart:async';
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -6,6 +6,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 
+import '../../localization/localization_x.dart';
 import '../../theme/app_theme.dart';
 import 'passenger_bottom_nav_bar.dart';
 
@@ -146,7 +147,7 @@ class _PassengerLiveTrackScreenState extends State<PassengerLiveTrackScreen> {
         Marker(
           markerId: const MarkerId('me'),
           position: passPos,
-          infoWindow: const InfoWindow(title: 'You', snippet: 'Your pickup'),
+          infoWindow: InfoWindow(title: context.texts.t('you'), snippet: context.texts.t('yourPickup')),
           icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueAzure),
         ),
       );
@@ -204,12 +205,12 @@ class _PassengerLiveTrackScreenState extends State<PassengerLiveTrackScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('Live tracking', style: NavigoTextStyles.titleLarge),
+                  Text(context.texts.t('liveTracking'), style: NavigoTextStyles.titleLarge),
                   const SizedBox(height: 4),
                   Text(
                     driverPos == null
-                        ? 'Waiting for driver location…'
-                        : 'Following driver on the map',
+                        ? context.texts.t('waitingDriverLocation')
+                        : context.texts.t('followingDriver'),
                     style: NavigoTextStyles.bodySmall,
                   ),
                 ],

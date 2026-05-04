@@ -1,4 +1,4 @@
-﻿import 'dart:async';
+import 'dart:async';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
@@ -9,6 +9,7 @@ import 'package:navigo/screens/route_manager/route_schedule.dart';
 import 'package:navigo/services/manual_driver_assignment_service.dart';
 import 'package:navigo/services/route_manager_route_id.dart';
 import 'package:navigo/theme/app_theme.dart';
+import '../../localization/localization_x.dart';
 
 import 'route_manager_notification_compose.dart';
 import 'route_manager_nav_bar.dart';
@@ -330,8 +331,8 @@ class _AssignDriverState extends State<AssignDriver> {
 
     if (slots.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('No upcoming scheduled trips on this route.'),
+        SnackBar(
+          content: Text(context.texts.t('noUpcomingTrips')),
         ),
       );
       return;
@@ -340,7 +341,7 @@ class _AssignDriverState extends State<AssignDriver> {
     final chosen = await showDialog<ScheduleSlot>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Assign to trip'),
+        title: Text(context.texts.t('assignToTrip')),
         content: SizedBox(
           width: double.maxFinite,
           child: ListView.builder(
@@ -367,7 +368,7 @@ class _AssignDriverState extends State<AssignDriver> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: const Text('Cancel'),
+            child: Text(context.texts.t('cancel')),
           ),
         ],
       ),
@@ -383,7 +384,7 @@ class _AssignDriverState extends State<AssignDriver> {
       );
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Driver assigned to scheduled trip.')),
+        SnackBar(content: Text(context.texts.t('driverAssigned'))),
       );
     } catch (e) {
       if (!mounted) return;
@@ -421,7 +422,7 @@ class _AssignDriverState extends State<AssignDriver> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('Assignments', style: NavigoTextStyles.titleLarge),
+                  Text(context.texts.t('assignments'), style: NavigoTextStyles.titleLarge),
                   const SizedBox(height: 4),
                   Text(
                     'Drivers on your route (status from drivers collection)',
@@ -475,10 +476,10 @@ class _AssignDriverState extends State<AssignDriver> {
                       child: filteredDrivers.isEmpty
                           ? ListView(
                               physics: const AlwaysScrollableScrollPhysics(),
-                              children: const [
+                              children: [
                                 SizedBox(height: 120),
                                 Center(
-                                  child: Text('No drivers for this route.'),
+                                  child: Text(context.texts.t('noDriversForRoute')),
                                 ),
                               ],
                             )
@@ -561,8 +562,8 @@ class _AssignDriverState extends State<AssignDriver> {
                                                               ),
                                                         ),
                                                   ),
-                                              child: const Text(
-                                                'Assign',
+                                              child: Text(
+                                                context.texts.t('assign'),
                                                 style: NavigoTextStyles.button,
                                               ),
                                             ),

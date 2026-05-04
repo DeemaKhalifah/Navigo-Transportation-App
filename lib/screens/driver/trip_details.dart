@@ -1,4 +1,4 @@
-﻿import 'dart:async';
+import 'dart:async';
 
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
@@ -8,6 +8,7 @@ import '../../models/route.dart';
 import '../../models/schedule_slot.dart';
 import '../../services/driver_trip_details_service.dart';
 import '../../services/driver_live_trip_service.dart';
+import '../../localization/localization_x.dart';
 import '../../theme/app_theme.dart';
 import 'driver_home_screen.dart';
 import 'driver_bottom_nav_bar.dart';
@@ -57,7 +58,7 @@ class _TripDetailesState extends State<TripDetailes> {
     if (tripId.isEmpty) {
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(const SnackBar(content: Text('Trip ID is missing')));
+      ).showSnackBar(SnackBar(content: Text(context.texts.t('tripIdMissing'))));
       return;
     }
 
@@ -65,21 +66,21 @@ class _TripDetailesState extends State<TripDetailes> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Cancel Trip'),
-        content: const Text(
-          'Are you sure you want to cancel this trip? This action cannot be undone.',
+        title: Text(context.texts.t('cancelTrip')),
+        content: Text(
+          context.texts.t('cancelTripConfirm'),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('No'),
+            child: Text(context.texts.t('no')),
           ),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
             style: TextButton.styleFrom(
               foregroundColor: NavigoColors.accentRed,
             ),
-            child: const Text('Yes, Cancel'),
+            child: Text(context.texts.t('yesCancelTrip')),
           ),
         ],
       ),
@@ -98,7 +99,7 @@ class _TripDetailesState extends State<TripDetailes> {
 
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Trip cancelled successfully')),
+        SnackBar(content: Text(context.texts.t('tripCancelledSuccess'))),
       );
       Navigator.pushReplacement(
         context,
@@ -108,7 +109,7 @@ class _TripDetailesState extends State<TripDetailes> {
       if (!mounted) return;
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(SnackBar(content: Text('Failed to cancel: $e')));
+      ).showSnackBar(SnackBar(content: Text('${context.texts.t('failedToCancel')}: $e')));
     } finally {
       if (mounted) setState(() => _isCancelling = false);
     }
@@ -130,15 +131,15 @@ class _TripDetailesState extends State<TripDetailes> {
               onBack: () => Navigator.pop(context),
               context: context,
             ),
-            const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 20),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text("Trip Details", style: NavigoTextStyles.titleLarge),
-                  SizedBox(height: 4),
+                  Text(context.texts.t('tripDetails'), style: NavigoTextStyles.titleLarge),
+                  const SizedBox(height: 4),
                   Text(
-                    "Review before starting",
+                    context.texts.t('reviewBeforeStarting'),
                     style: NavigoTextStyles.bodySmall,
                   ),
                 ],
@@ -162,7 +163,7 @@ class _TripDetailesState extends State<TripDetailes> {
                       child: Padding(
                         padding: const EdgeInsets.all(20),
                         child: Text(
-                          'Failed to load trip details.\n${snapshot.error}',
+                          '${context.texts.t('failedToLoadTripDetails')}\n${snapshot.error}',
                           textAlign: TextAlign.center,
                           style: NavigoTextStyles.bodySmall,
                         ),
@@ -174,7 +175,7 @@ class _TripDetailesState extends State<TripDetailes> {
                   if (data == null) {
                     return Center(
                       child: Text(
-                        'Trip not found.',
+                        context.texts.t('tripNotFound'),
                         style: NavigoTextStyles.bodySmall,
                       ),
                     );
@@ -233,26 +234,26 @@ class _TripDetailesState extends State<TripDetailes> {
                                 physics: const NeverScrollableScrollPhysics(),
                                 children: [
                                   InfoItem(
-                                    title: "Trip ID",
+                                    title: context.texts.t('tripIdLabel'),
                                     value: slot.slotId,
                                   ),
                                   InfoItem(
-                                    title: "Vehicle",
+                                    title: context.texts.t('vehicle'),
                                     value: service.vehicleText(slot),
                                   ),
                                   InfoItem(
-                                    title: "Date",
+                                    title: context.texts.t('date'),
                                     value: service.dateText(slot),
                                   ),
                                   InfoItem(
-                                    title: "Time",
+                                    title: context.texts.t('time'),
                                     value: service.timeText(slot),
                                   ),
                                   InfoItem(
-                                    title: "From",
+                                    title: context.texts.t('from'),
                                     value: route.startPoint,
                                   ),
-                                  InfoItem(title: "To", value: route.endPoint),
+                                  InfoItem(title: context.texts.t('to'), value: route.endPoint),
                                 ],
                               ),
                             ],
@@ -261,14 +262,14 @@ class _TripDetailesState extends State<TripDetailes> {
 
                         const SizedBox(height: 16),
 
-                        Text("Passengers", style: NavigoTextStyles.titleSmall),
+                        Text(context.texts.t('passengers'), style: NavigoTextStyles.titleSmall),
                         const SizedBox(height: 10),
 
                         Expanded(
                           child: passengers.isEmpty
                               ? Center(
                                   child: Text(
-                                    'No passengers assigned.',
+                                    context.texts.t('noPassengersAssigned'),
                                     style: NavigoTextStyles.bodySmall,
                                   ),
                                 )
@@ -281,7 +282,7 @@ class _TripDetailesState extends State<TripDetailes> {
                                     final passenger = passengers[index];
                                     return PassengerTile(
                                       passengerName:
-                                          (passenger['name'] ?? 'Passenger')
+                                          (passenger['name'] ?? context.texts.t('passenger'))
                                               .toString(),
                                       pickup:
                                           (passenger['pickup'] ??
@@ -321,8 +322,8 @@ class _TripDetailesState extends State<TripDetailes> {
                                       ScaffoldMessenger.of(
                                         context,
                                       ).showSnackBar(
-                                        const SnackBar(
-                                          content: Text('Trip ID is missing'),
+                                        SnackBar(
+                                          content: Text(context.texts.t('tripIdMissing')),
                                         ),
                                       );
                                       return;
@@ -347,7 +348,7 @@ class _TripDetailesState extends State<TripDetailes> {
                                         context,
                                       ).showSnackBar(
                                         SnackBar(
-                                          content: Text('Could not start: $e'),
+                                          content: Text('${context.texts.t('couldNotStart')}: $e'),
                                         ),
                                       );
                                       return;
@@ -364,8 +365,8 @@ class _TripDetailesState extends State<TripDetailes> {
                                     );
                                   }
                                 : null,
-                            child: const Text(
-                              "Start Trip",
+                            child: Text(
+                              context.texts.t('startTrip'),
                               style: NavigoTextStyles.button,
                             ),
                           ),
@@ -375,7 +376,7 @@ class _TripDetailesState extends State<TripDetailes> {
                           const SizedBox(height: 8),
                           Center(
                             child: Text(
-                              "You can start this trip 30 minutes before departure.",
+                              context.texts.t('canStartBefore'),
                               textAlign: TextAlign.center,
                               style: NavigoTextStyles.bodySmall.copyWith(
                                 fontSize: 12,
@@ -407,8 +408,8 @@ class _TripDetailesState extends State<TripDetailes> {
                                       color: NavigoColors.textLight,
                                     ),
                                   )
-                                : const Text(
-                                    "Cancel Trip",
+                                : Text(
+                                    context.texts.t('cancelTrip'),
                                     style: NavigoTextStyles.button,
                                   ),
                           ),
@@ -418,7 +419,7 @@ class _TripDetailesState extends State<TripDetailes> {
 
                         Center(
                           child: Text(
-                            "Starting the trip will share your live location",
+                            context.texts.t('startingSharesLocation'),
                             style: NavigoTextStyles.bodySmall.copyWith(
                               fontSize: 12,
                             ),
@@ -502,7 +503,7 @@ class PassengerTile extends StatelessWidget {
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  "Pickup: $pickup",
+                  "${context.texts.t('pickup')}: $pickup",
                   style: NavigoTextStyles.bodySmall.copyWith(fontSize: 12),
                 ),
               ],

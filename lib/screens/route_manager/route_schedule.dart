@@ -1,4 +1,4 @@
-﻿import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -13,6 +13,7 @@ import 'package:navigo/services/slot_driver_assignment_service.dart';
 import 'add_schedule_slot_screen.dart';
 import 'route_manager_notification_compose.dart';
 import 'route_manager_nav_bar.dart';
+import '../../localization/localization_x.dart';
 import '../../theme/app_theme.dart';
 
 class RouteSchedule extends StatefulWidget {
@@ -107,7 +108,7 @@ class _RouteScheduleState extends State<RouteSchedule> {
     if (result == true && mounted && existing != null) {
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(const SnackBar(content: Text('Trip updated')));
+      ).showSnackBar(SnackBar(content: Text(context.texts.t('tripUpdated'))));
     }
   }
 
@@ -121,7 +122,7 @@ class _RouteScheduleState extends State<RouteSchedule> {
   }
 
   Future<String> _driverLabelFuture(String driverDocId) {
-    if (driverDocId.isEmpty) return Future.value('Unassigned');
+    if (driverDocId.isEmpty) return Future.value(context.texts.t('unassigned'));
     return _driverLabelFutures.putIfAbsent(
       driverDocId,
       () => _loadDriverLabel(driverDocId),
@@ -236,7 +237,7 @@ class _RouteScheduleState extends State<RouteSchedule> {
                     children: [
                       Expanded(
                         child: Text(
-                          'Driver queue',
+                          context.texts.t('driverQueue'),
                           style: NavigoTextStyles.titleSmall.copyWith(
                             fontWeight: FontWeight.w700,
                           ),
@@ -270,7 +271,7 @@ class _RouteScheduleState extends State<RouteSchedule> {
       if (!mounted) return;
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(const SnackBar(content: Text('Driver queue cleared.')));
+      ).showSnackBar(SnackBar(content: Text(context.texts.t('tripRemoved'))));
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(
@@ -281,7 +282,7 @@ class _RouteScheduleState extends State<RouteSchedule> {
 
   String _routeTitle() {
     final r = _route;
-    if (r == null) return 'Route schedule';
+    if (r == null) return context.texts.t('routeSchedule');
     return '${r.startPoint} → ${r.endPoint}';
   }
 
@@ -309,7 +310,7 @@ class _RouteScheduleState extends State<RouteSchedule> {
             Expanded(
               child: OutlinedButton(
                 onPressed: () => _onClearQueue(routeId),
-                child: const Text('Clear queue'),
+                child: Text(context.texts.t('clearQueue')),
               ),
             ),
             const SizedBox(width: 8),
@@ -321,8 +322,8 @@ class _RouteScheduleState extends State<RouteSchedule> {
                     EdgeInsets.symmetric(horizontal: 8, vertical: 10),
                   ),
                 ),
-                child: const Text(
-                  'Queue all available',
+                child: Text(
+                  context.texts.t('queueAllAvailable'),
                   textAlign: TextAlign.center,
                   style: TextStyle(fontSize: 12),
                 ),
@@ -339,7 +340,7 @@ class _RouteScheduleState extends State<RouteSchedule> {
               return Padding(
                 padding: const EdgeInsets.symmetric(vertical: 12),
                 child: Text(
-                  'Queue is empty.',
+                  context.texts.t('queueEmpty'),
                   style: NavigoTextStyles.bodySmall,
                 ),
               );
@@ -378,7 +379,7 @@ class _RouteScheduleState extends State<RouteSchedule> {
         ),
         const SizedBox(height: 8),
         Text(
-          'Available drivers — tap to append',
+          context.texts.t('availableDriversAppend'),
           style: NavigoTextStyles.label,
         ),
         const SizedBox(height: 6),
@@ -408,7 +409,7 @@ class _RouteScheduleState extends State<RouteSchedule> {
 
               if (docs.isEmpty) {
                 return Text(
-                  'No available drivers',
+                  context.texts.t('noAvailableDrivers'),
                   style: NavigoTextStyles.bodySmall,
                 );
               }
@@ -449,12 +450,12 @@ class _RouteScheduleState extends State<RouteSchedule> {
         return await showDialog<bool>(
           context: context,
           builder: (ctx) => AlertDialog(
-            title: const Text('Delete trip'),
-            content: const Text('Remove this trip from the schedule?'),
+            title: Text(context.texts.t('deleteTrip')),
+            content: Text(context.texts.t('removeTripConfirm')),
             actions: [
               TextButton(
                 onPressed: () => Navigator.pop(ctx, false),
-                child: const Text('Cancel'),
+                child: Text(context.texts.t('cancel')),
               ),
               TextButton(
                 onPressed: () => Navigator.pop(ctx, true),
@@ -475,7 +476,7 @@ class _RouteScheduleState extends State<RouteSchedule> {
           if (!mounted) return;
           ScaffoldMessenger.of(
             context,
-          ).showSnackBar(const SnackBar(content: Text('Trip removed')));
+          ).showSnackBar(SnackBar(content: Text(context.texts.t('tripRemoved'))));
         } catch (e) {
           if (!mounted) return;
           ScaffoldMessenger.of(
@@ -557,7 +558,7 @@ class _RouteScheduleState extends State<RouteSchedule> {
                   ),
                   const SizedBox(height: 6),
                   NavigoDecorations.statusChip(
-                    label: slot.vehicleType == 'bus' ? 'Bus' : 'Micro',
+                    label: slot.vehicleType == 'bus' ? context.texts.t('bus') : context.texts.t('microBus'),
                     color: NavigoColors.primaryOrange,
                     padding: const EdgeInsets.symmetric(
                       horizontal: 8,
@@ -653,7 +654,7 @@ class _RouteScheduleState extends State<RouteSchedule> {
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 20),
               child: NavigoDecorations.homeStyleTitleBar(
-                title: 'Route Manager',
+                title: context.texts.t('routeManager'),
                 subtitle: _routeTitle(),
                 avatar: Row(
                   mainAxisSize: MainAxisSize.min,
@@ -697,9 +698,9 @@ class _RouteScheduleState extends State<RouteSchedule> {
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
-                  _filterChip('bus', 'Bus'),
+                  _filterChip('bus', context.texts.t('bus')),
                   const SizedBox(width: 8),
-                  _filterChip('micro', 'Micro Bus'),
+                  _filterChip('micro', context.texts.t('microBus')),
                   const Spacer(),
                   TextButton(
                     style: TextButton.styleFrom(
@@ -718,7 +719,7 @@ class _RouteScheduleState extends State<RouteSchedule> {
                             height: 18,
                             child: CircularProgressIndicator(strokeWidth: 2),
                           )
-                        : const Text('Assign 1'),
+                        : Text(context.texts.t('assign1')),
                   ),
                   const SizedBox(width: 4),
                   Material(
@@ -766,7 +767,7 @@ class _RouteScheduleState extends State<RouteSchedule> {
                   if (filtered.isEmpty) {
                     return Center(
                       child: Text(
-                        'No trips for this vehicle type',
+                        context.texts.t('noTripsForType'),
                         style: NavigoTextStyles.bodySmall,
                       ),
                     );
@@ -792,8 +793,8 @@ class _RouteScheduleState extends State<RouteSchedule> {
                     child: ElevatedButton(
                       onPressed: () => _openSlotEditor(),
                       style: NavigoDecorations.kPrimaryButtonLargeStyle,
-                      child: const Text(
-                        'Add trip',
+                      child: Text(
+                        context.texts.t('addTrip'),
                         style: NavigoTextStyles.button,
                       ),
                     ),

@@ -1,6 +1,7 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
+import '../localization/localization_x.dart';
 import '../models/notification_model.dart';
 import '../services/notification_service.dart';
 import '../theme/app_theme.dart';
@@ -18,7 +19,6 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
 
   String _searchQuery = '';
 
-  static const String _noNotificationsFound = "No notifications found";
 
   @override
   void dispose() {
@@ -60,8 +60,8 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
             ),
 
             NavigoDecorations.pageTitle(
-              title: "Notifications",
-              subtitle: "All notifications",
+              title: context.texts.t('notifications'),
+              subtitle: context.texts.t('allNotifications'),
             ),
 
             const SizedBox(height: 12),
@@ -76,7 +76,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                   });
                 },
                 decoration: NavigoDecorations.kInputDecoration.copyWith(
-                  hintText: "Search notifications...",
+                  hintText: context.texts.t('searchNotifications'),
                   filled: true,
                   fillColor: NavigoColors.surfaceWhite,
                   prefixIcon: const Icon(
@@ -91,9 +91,9 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
 
             Expanded(
               child: user == null
-                  ? const Center(
+                  ? Center(
                       child: Text(
-                        _noNotificationsFound,
+                        context.texts.t('noNotificationsFound'),
                         style: NavigoTextStyles.bodySmall,
                       ),
                     )
@@ -112,7 +112,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                         if (snapshot.hasError) {
                           return Center(
                             child: Text(
-                              "Failed to load notifications",
+                              context.texts.t('failedToLoadNotifications'),
                               style: NavigoTextStyles.bodySmall,
                             ),
                           );
@@ -126,15 +126,15 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                           return Center(
                             child: Column(
                               mainAxisAlignment: MainAxisAlignment.center,
-                              children: const [
-                                Icon(
+                              children: [
+                                const Icon(
                                   Icons.notifications_off_outlined,
                                   size: 48,
                                   color: NavigoColors.textMuted,
                                 ),
-                                SizedBox(height: 12),
+                                const SizedBox(height: 12),
                                 Text(
-                                  _noNotificationsFound,
+                                  context.texts.t('noNotificationsFound'),
                                   style: NavigoTextStyles.bodySmall,
                                 ),
                               ],

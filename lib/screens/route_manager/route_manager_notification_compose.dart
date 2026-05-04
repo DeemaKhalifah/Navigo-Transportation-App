@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 
 import '../../services/notification_service.dart';
 import '../../services/route_manager_route_id.dart';
+import '../../localization/localization_x.dart';
 import '../../theme/app_theme.dart';
 
 class RouteManagerNotificationCompose extends StatefulWidget {
@@ -204,8 +205,8 @@ class _RouteManagerNotificationComposeState
           children: [
             NavigoDecorations.topBar1(onBack: () => Navigator.pop(context)),
             NavigoDecorations.pageTitle(
-              title: 'Send notification',
-              subtitle: 'Message drivers on your route',
+              title: context.texts.t('sendNotification'),
+              subtitle: context.texts.t('messageDrivers'),
             ),
             const SizedBox(height: 12),
             Expanded(
@@ -265,7 +266,7 @@ class _RouteManagerNotificationComposeState
             textInputAction: TextInputAction.newline,
             style: NavigoTextStyles.fieldText,
             decoration: NavigoDecorations.kInputDecoration.copyWith(
-              hintText: 'Write the notification message...',
+              hintText: context.texts.t('writeNotificationMsg'),
               filled: true,
               fillColor: NavigoColors.surfaceWhite,
               alignLabelWithHint: true,
@@ -276,18 +277,18 @@ class _RouteManagerNotificationComposeState
             ),
           ),
           const SizedBox(height: 16),
-          Text('Receivers', style: NavigoTextStyles.titleSmall),
+          Text(context.texts.t('receivers'), style: NavigoTextStyles.titleSmall),
           const SizedBox(height: 10),
           Row(
             children: [
               NavigoDecorations.selectorChip(
-                label: 'All drivers',
+                label: context.texts.t('allDrivers'),
                 selected: _sendToAll,
                 onTap: () => setState(() => _sendToAll = true),
               ),
               const SizedBox(width: 8),
               NavigoDecorations.selectorChip(
-                label: 'Specific',
+                label: context.texts.t('specific'),
                 selected: !_sendToAll,
                 onTap: () => setState(() => _sendToAll = false),
               ),
@@ -300,7 +301,7 @@ class _RouteManagerNotificationComposeState
               padding: const EdgeInsets.all(16),
               decoration: NavigoDecorations.surfaceDecoration(),
               child: Text(
-                'No drivers are assigned to this route.',
+                context.texts.t('noDriversOnRoute'),
                 style: NavigoTextStyles.bodySmall,
               ),
             )
@@ -324,7 +325,7 @@ class _RouteManagerNotificationComposeState
                     )
                   : const Icon(Icons.send),
               label: Text(
-                _sending ? 'Sending...' : 'Send notification',
+                _sending ? context.texts.t('sending') : context.texts.t('sendNotification'),
                 style: NavigoTextStyles.button,
               ),
             ),

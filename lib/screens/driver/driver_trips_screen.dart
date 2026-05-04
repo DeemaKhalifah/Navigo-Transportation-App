@@ -1,5 +1,6 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 
+import '../../localization/localization_x.dart';
 import '../../models/schedule_slot.dart';
 import '../../models/trip_status.dart';
 import '../../services/driver_trips_service.dart';
@@ -55,6 +56,23 @@ class _DriverTripsScreenState extends State<DriverTripsScreen> {
         return Icons.cancel_outlined;
       default:
         return Icons.directions_bus;
+    }
+  }
+
+  String _localizedStatus(String status) {
+    switch (TripStatus.normalize(status)) {
+      case TripStatus.scheduled:
+        return context.texts.t('scheduled');
+      case TripStatus.completed:
+        return context.texts.t('completed');
+      case TripStatus.cancelled:
+        return context.texts.t('cancelled');
+      case TripStatus.onTrip:
+        return context.texts.t('onTrip');
+      case TripStatus.all:
+        return context.texts.t('all');
+      default:
+        return context.texts.t('scheduled');
     }
   }
 
@@ -116,9 +134,9 @@ class _DriverTripsScreenState extends State<DriverTripsScreen> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text('Trip Details', style: NavigoTextStyles.titleSmall),
+                  Text(context.texts.t('tripDetails'), style: NavigoTextStyles.titleSmall),
                   NavigoDecorations.statusChip(
-                    label: TripStatus.label(status),
+                    label: _localizedStatus(status),
                     color: _statusColor(status),
                   ),
                 ],
@@ -128,15 +146,15 @@ class _DriverTripsScreenState extends State<DriverTripsScreen> {
               Divider(color: NavigoColors.primaryOrange.withOpacity(0.3)),
               const SizedBox(height: 8),
 
-              _detailRow('Line', _tripsService.lineOf(trip)),
-              _detailRow('Date', _tripsService.dateTextOf(trip)),
-              _detailRow('Time', _tripsService.timeTextOf(trip)),
-              _detailRow('Price', _tripsService.priceTextOf(trip)),
+              _detailRow(context.texts.t('line'), _tripsService.lineOf(trip)),
+              _detailRow(context.texts.t('date'), _tripsService.dateTextOf(trip)),
+              _detailRow(context.texts.t('time'), _tripsService.timeTextOf(trip)),
+              _detailRow(context.texts.t('price'), _tripsService.priceTextOf(trip)),
               _detailRow(
-                'Booked Seats',
+                context.texts.t('bookedSeats'),
                 _tripsService.bookedSeatsOf(trip).toString(),
               ),
-              _detailRow('Vehicle', _tripsService.vehicleTextOf(trip)),
+              _detailRow(context.texts.t('vehicle'), _tripsService.vehicleTextOf(trip)),
 
               const SizedBox(height: 20),
 
@@ -189,9 +207,9 @@ class _DriverTripsScreenState extends State<DriverTripsScreen> {
               ),
               context: context,
             ),
-            const Padding(
+            Padding(
               padding: EdgeInsets.symmetric(horizontal: 20),
-              child: Text('Trip History', style: NavigoTextStyles.titleLarge),
+              child: Text(context.texts.t('tripHistory'), style: NavigoTextStyles.titleLarge),
             ),
             const SizedBox(height: 12),
 
@@ -201,22 +219,22 @@ class _DriverTripsScreenState extends State<DriverTripsScreen> {
                 scrollDirection: Axis.horizontal,
                 child: Row(
                   children: [
-                    _filterChip(label: 'All', value: TripStatus.all),
+                    _filterChip(label: context.texts.t('all'), value: TripStatus.all),
                     const SizedBox(width: 7),
                     _filterChip(
-                      label: 'Scheduled',
+                      label: context.texts.t('scheduled'),
                       value: TripStatus.scheduled,
                     ),
                     const SizedBox(width: 7),
-                    _filterChip(label: 'On Trip', value: TripStatus.onTrip),
+                    _filterChip(label: context.texts.t('onTrip'), value: TripStatus.onTrip),
                     const SizedBox(width: 7),
                     _filterChip(
-                      label: 'Completed',
+                      label: context.texts.t('completed'),
                       value: TripStatus.completed,
                     ),
                     const SizedBox(width: 7),
                     _filterChip(
-                      label: 'Cancelled',
+                      label: context.texts.t('cancelled'),
                       value: TripStatus.cancelled,
                     ),
                   ],
@@ -239,7 +257,7 @@ class _DriverTripsScreenState extends State<DriverTripsScreen> {
                       child: Padding(
                         padding: const EdgeInsets.all(20),
                         child: Text(
-                          'Failed to load trips.\n${snapshot.error}',
+                          '${context.texts.t('failedToLoadTripsDriver')}\n${snapshot.error}',
                           textAlign: TextAlign.center,
                           style: NavigoTextStyles.bodySmall,
                         ),
@@ -252,7 +270,7 @@ class _DriverTripsScreenState extends State<DriverTripsScreen> {
                   if (trips.isEmpty) {
                     return Center(
                       child: Text(
-                        'No trips found.',
+                        context.texts.t('noTripsFound'),
                         style: NavigoTextStyles.bodySmall,
                       ),
                     );
@@ -328,7 +346,7 @@ class _DriverTripsScreenState extends State<DriverTripsScreen> {
                               ),
 
                               NavigoDecorations.statusChip(
-                                label: TripStatus.label(status),
+                                label: _localizedStatus(status),
                                 color: _statusColor(status),
                                 padding: const EdgeInsets.symmetric(
                                   horizontal: 10,

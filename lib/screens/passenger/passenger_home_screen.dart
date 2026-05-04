@@ -1,4 +1,4 @@
-﻿import 'dart:async';
+import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
@@ -8,6 +8,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/services.dart';
 import 'dart:ui' as ui;
 
+import '../../localization/localization_x.dart';
 import '../../theme/app_theme.dart';
 import 'passenger_bottom_nav_bar.dart';
 import '../notifications_screen.dart';
@@ -172,7 +173,7 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> {
         Marker(
           markerId: const MarkerId('route_start'),
           position: start,
-          infoWindow: InfoWindow(title: 'Start', snippet: startPoint),
+          infoWindow: InfoWindow(title: context.texts.t('from'), snippet: startPoint),
           icon: BitmapDescriptor.defaultMarkerWithHue(
             BitmapDescriptor.hueGreen,
           ),
@@ -182,7 +183,7 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> {
         Marker(
           markerId: const MarkerId('route_end'),
           position: end,
-          infoWindow: InfoWindow(title: 'End', snippet: endPoint),
+          infoWindow: InfoWindow(title: context.texts.t('to'), snippet: endPoint),
           icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRed),
         ),
       );
@@ -271,10 +272,10 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> {
             markerId: const MarkerId('live_driver'),
             position: driverPos!,
             infoWindow: InfoWindow(
-              title: 'Driver',
+              title: context.texts.t('driver'),
               snippet: etaText == null
-                  ? 'Live location'
-                  : 'ETA to pickup: $etaText',
+                  ? context.texts.t('liveLocation')
+                  : '${context.texts.t('etaToPickup')}: $etaText',
             ),
             icon: BitmapDescriptor.defaultMarkerWithHue(
               BitmapDescriptor.hueOrange,
@@ -567,7 +568,7 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> {
           Marker(
             markerId: const MarkerId("current_location"),
             position: newPosition,
-            infoWindow: const InfoWindow(title: "My Location"),
+            infoWindow: InfoWindow(title: context.texts.t('myLocation')),
           ),
         );
       });
@@ -609,7 +610,7 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> {
         Marker(
           markerId: const MarkerId("current_location"),
           position: location,
-          infoWindow: const InfoWindow(title: "My Location"),
+          infoWindow: InfoWindow(title: context.texts.t('myLocation')),
         ),
       );
     });
@@ -684,7 +685,7 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> {
 
     if (filteredDrivers.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("No vehicles found for this line")),
+        SnackBar(content: Text(context.texts.t('noVehiclesFound'))),
       );
       return;
     }
@@ -779,30 +780,30 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> {
                     const SizedBox(height: 18),
                     _tripInfoRow(
                       Icons.confirmation_number,
-                      "Vehicle",
+                      context.texts.t('vehicle'),
                       driver['busNumber'] as String,
                     ),
                     _tripInfoRow(
                       Icons.directions_bus,
-                      "Type",
+                      context.texts.t('vehicleType'),
                       driver['vehicleType'] as String,
                     ),
-                    _tripInfoRow(Icons.route, "Line", driver['line'] as String),
+                    _tripInfoRow(Icons.route, context.texts.t('line'), driver['line'] as String),
                     _tripInfoRow(
                       Icons.event_seat,
-                      "Available seats",
+                      context.texts.t('availableSeats'),
                       "${driver['availableSeats']}",
                     ),
                     _tripInfoRow(
                       Icons.phone,
-                      "Phone",
+                      context.texts.t('phone'),
                       driver['phone'] as String,
                     ),
                     const SizedBox(height: 18),
                     Row(
                       children: [
-                        const Text(
-                          "Number of seats",
+                        Text(
+                          context.texts.t('numberOfSeats'),
                           style: TextStyle(
                             fontSize: 15,
                             fontWeight: FontWeight.w700,
@@ -895,8 +896,8 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> {
                             messenger.showSnackBar(
                               SnackBar(
                                 content: Text(
-                                  'Request sent to ${driver['name']}. '
-                                  'The driver can accept or decline in Requests.',
+                                  '${context.texts.t('requestSentTo')} ${driver['name']}. '
+                                  '${context.texts.t('driverAcceptDecline')}',
                                 ),
                               ),
                             );
@@ -912,8 +913,8 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> {
                           }
                         },
                         style: NavigoDecorations.kPrimaryButtonLargeStyle,
-                        child: const Text(
-                          "Confirm Trip",
+                        child: Text(
+                          context.texts.t('confirmTrip'),
                           style: NavigoTextStyles.button,
                         ),
                       ),
@@ -967,7 +968,7 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> {
     if (line == null || line.isEmpty) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Please select a line first")),
+        SnackBar(content: Text(context.texts.t('selectLineFirst'))),
       );
       return;
     }
@@ -1018,8 +1019,8 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> {
               child: Column(
                 children: [
                   NavigoDecorations.homeStyleTitleBar(
-                    title: "Hello, $_userName",
-                    subtitle: "Where would you like to go?",
+                    title: "${context.texts.t('hello')}, $_userName",
+                    subtitle: context.texts.t('whereToGo'),
                     avatar: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
@@ -1116,8 +1117,8 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> {
                               decoration: NavigoDecorations.kInputDecoration
                                   .copyWith(
                                     hintText: _isLoadingLines
-                                        ? "Loading routes..."
-                                        : "Search or select a route",
+                                        ? context.texts.t('loadingRoutes')
+                                        : context.texts.t('searchRoute'),
                                     filled: true,
                                     fillColor: NavigoColors.surfaceWhite,
                                     prefixIcon: const Icon(
@@ -1240,8 +1241,8 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> {
                     Expanded(
                       child: Text(
                         _trackingEtaText == null
-                            ? 'Tracking driver live...'
-                            : 'ETA to pickup: $_trackingEtaText',
+                            ? context.texts.t('trackingDriverLive')
+                            : '${context.texts.t('etaToPickup')}: $_trackingEtaText',
                         style: const TextStyle(
                           color: Colors.white,
                           fontWeight: FontWeight.w600,
@@ -1260,8 +1261,8 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> {
                           color: Colors.white24,
                           borderRadius: BorderRadius.circular(12),
                         ),
-                        child: const Text(
-                          'Stop',
+                        child: Text(
+                          context.texts.t('stop'),
                           style: TextStyle(
                             color: Colors.white,
                             fontWeight: FontWeight.bold,
@@ -1329,8 +1330,8 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> {
                           color: Colors.white24,
                           borderRadius: BorderRadius.circular(12),
                         ),
-                        child: const Text(
-                          'Close',
+                        child: Text(
+                          context.texts.t('close'),
                           style: TextStyle(
                             color: Colors.white,
                             fontWeight: FontWeight.bold,
@@ -1385,7 +1386,7 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> {
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
-                          "Line: ${_selectedLine ?? 'Not selected'}",
+                          "${context.texts.t('line')}: ${_selectedLine ?? context.texts.t('notSelected')}",
                           style: NavigoTextStyles.bodyMedium.copyWith(
                             color: NavigoColors.textDark,
                             fontSize: 15,
@@ -1406,7 +1407,7 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> {
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
-                          "Location: ${_selectedLocation ?? 'Not selected'}",
+                          "${context.texts.t('location')}: ${_selectedLocation ?? context.texts.t('notSelected')}",
                           style: NavigoTextStyles.bodyMedium.copyWith(
                             color: NavigoColors.textDark,
                             fontSize: 15,
@@ -1424,8 +1425,8 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> {
                           child: ElevatedButton(
                             onPressed: _showDriversNow,
                             style: NavigoDecorations.kPrimaryButtonLargeStyle,
-                            child: const Text(
-                              "Now",
+                            child: Text(
+                              context.texts.t('now'),
                               style: NavigoTextStyles.button,
                             ),
                           ),
@@ -1438,8 +1439,8 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> {
                           child: ElevatedButton(
                             onPressed: () => _openScheduleTrip(),
                             style: NavigoDecorations.kPrimaryButtonLargeStyle,
-                            child: const Text(
-                              "Schedule a trip",
+                            child: Text(
+                              context.texts.t('scheduleTrip'),
                               style: NavigoTextStyles.button,
                             ),
                           ),

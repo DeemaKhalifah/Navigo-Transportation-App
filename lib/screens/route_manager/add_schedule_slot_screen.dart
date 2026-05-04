@@ -1,8 +1,9 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:navigo/models/schedule_slot.dart';
 import 'package:navigo/services/schedule_slot_repository.dart';
 import 'package:navigo/services/slot_driver_assignment_service.dart';
 import 'package:navigo/theme/app_theme.dart';
+import '../../localization/localization_x.dart';
 import 'route_manager_notification_compose.dart';
 import 'route_manager_nav_bar.dart';
 
@@ -116,12 +117,12 @@ class _AddScheduleSlotScreenState extends State<AddScheduleSlotScreen> {
   }
 
   String _formatTime(TimeOfDay? time) {
-    if (time == null) return 'Select';
+    if (time == null) return context.texts.t('select');
     return time.format(context);
   }
 
   String _formatDate(DateTime? date) {
-    if (date == null) return 'Select date';
+    if (date == null) return context.texts.t('selectDate');
     return '${date.day}/${date.month}/${date.year}';
   }
 
@@ -231,15 +232,15 @@ class _AddScheduleSlotScreenState extends State<AddScheduleSlotScreen> {
   Future<void> _save() async {
     if (_selectedDate == null || _fromTime == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please choose date and time')),
+        SnackBar(content: Text(context.texts.t('chooseDateAndTime'))),
       );
       return;
     }
 
     if (_selectedType == 'bus' && _toTime == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please choose end time / last departure'),
+        SnackBar(
+          content: Text(context.texts.t('chooseEndTime')),
         ),
       );
       return;
@@ -249,7 +250,7 @@ class _AddScheduleSlotScreenState extends State<AddScheduleSlotScreen> {
     if (cap == null || cap <= 0) {
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(const SnackBar(content: Text('Please select capacity')));
+      ).showSnackBar(SnackBar(content: Text(context.texts.t('selectCapacity'))));
       return;
     }
 
@@ -268,8 +269,8 @@ class _AddScheduleSlotScreenState extends State<AddScheduleSlotScreen> {
       final t = int.tryParse(_tripLengthController.text.trim());
       if (t == null || t <= 0) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Enter trip length in minutes (e.g. 60)'),
+          SnackBar(
+            content: Text(context.texts.t('enterTripLength')),
           ),
         );
         return;
@@ -281,7 +282,7 @@ class _AddScheduleSlotScreenState extends State<AddScheduleSlotScreen> {
       final arr = _combine(_selectedDate!, _toTime!);
       if (!arr.isAfter(dep)) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('End time must be after start time')),
+          SnackBar(content: Text(context.texts.t('endTimeAfterStart'))),
         );
         return;
       }
@@ -294,7 +295,7 @@ class _AddScheduleSlotScreenState extends State<AddScheduleSlotScreen> {
       if (price == null) {
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(const SnackBar(content: Text('Invalid price')));
+        ).showSnackBar(SnackBar(content: Text(context.texts.t('invalidPrice'))));
         return;
       }
     }
@@ -308,8 +309,8 @@ class _AddScheduleSlotScreenState extends State<AddScheduleSlotScreen> {
 
     if (slots.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Check departure times for repeating bus trips'),
+        SnackBar(
+          content: Text(context.texts.t('checkDepartureTimes')),
         ),
       );
       return;
@@ -340,8 +341,8 @@ class _AddScheduleSlotScreenState extends State<AddScheduleSlotScreen> {
             SnackBar(
               content: Text(
                 slots.length > 1
-                    ? 'Saved ${slots.length} trips. No drivers in queue — assign manually.'
-                    : 'Trip saved. No drivers in queue — assign manually.',
+                    ? '${context.texts.t('savedTrips')} ${slots.length} ${context.texts.t('tripsLabel')}. ${context.texts.t('noDriversQueue')}'
+                    : '${context.texts.t('tripSaved')} ${context.texts.t('noDriversQueue')}',
               ),
             ),
           );
@@ -349,8 +350,8 @@ class _AddScheduleSlotScreenState extends State<AddScheduleSlotScreen> {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text(
-                'Saved ${slots.length} trips. $assigned auto-assigned; '
-                '$noQueue without queue driver.',
+                '${context.texts.t('savedTrips')} ${slots.length} ${context.texts.t('tripsLabel')}. $assigned ${context.texts.t('autoAssigned')}; '
+                '$noQueue ${context.texts.t('withoutQueueDriver')}.',
               ),
             ),
           );
@@ -359,8 +360,8 @@ class _AddScheduleSlotScreenState extends State<AddScheduleSlotScreen> {
             SnackBar(
               content: Text(
                 slots.length > 1
-                    ? 'Saved ${slots.length} trips. Drivers assigned from queue.'
-                    : 'Trip saved. Driver assigned from queue.',
+                    ? '${context.texts.t('savedTrips')} ${slots.length} ${context.texts.t('tripsLabel')}. ${context.texts.t('driversAssignedQueue')}'
+                    : '${context.texts.t('tripSaved')} ${context.texts.t('driverAssignedQueue')}',
               ),
             ),
           );
@@ -372,7 +373,7 @@ class _AddScheduleSlotScreenState extends State<AddScheduleSlotScreen> {
       if (!mounted) return;
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(SnackBar(content: Text('Could not save: $e')));
+      ).showSnackBar(SnackBar(content: Text('${context.texts.t('couldNotSave')}: $e')));
     } finally {
       if (mounted) setState(() => _saving = false);
     }
@@ -416,16 +417,16 @@ class _AddScheduleSlotScreenState extends State<AddScheduleSlotScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    widget.isEditing ? 'Edit trip' : 'Schedule a trip',
+                    widget.isEditing ? context.texts.t('editTrip') : context.texts.t('scheduleATrip'),
                     style: NavigoTextStyles.titleLarge,
                   ),
                   const SizedBox(height: 4),
                   Text(
                     isMicro
-                        ? 'Start time, date, and capacity'
+                        ? context.texts.t('microSubtitle')
                         : busRepeat
-                        ? 'First departure, last departure start, trip length, repeat interval'
-                        : 'Departure window, date, and capacity',
+                        ? context.texts.t('busRepeatSubtitle')
+                        : context.texts.t('busSubtitle'),
                     style: NavigoTextStyles.bodySmall,
                   ),
                 ],
@@ -445,13 +446,13 @@ class _AddScheduleSlotScreenState extends State<AddScheduleSlotScreen> {
                     Row(
                       children: [
                         NavigoDecorations.selectorChip(
-                          label: 'Bus',
+                          label: context.texts.t('bus'),
                           selected: _selectedType == 'bus',
                           onTap: () => setState(() => _selectedType = 'bus'),
                         ),
                         const SizedBox(width: 10),
                         NavigoDecorations.selectorChip(
-                          label: 'Micro Bus',
+                          label: context.texts.t('microBus'),
                           selected: _selectedType == 'micro',
                           onTap: () => setState(() => _selectedType = 'micro'),
                         ),
@@ -468,7 +469,7 @@ class _AddScheduleSlotScreenState extends State<AddScheduleSlotScreen> {
                         children: [
                           if (isMicro) ...[
                             _buildPickerBox(
-                              label: 'Start trip time',
+                              label: context.texts.t('startTripTime'),
                               value: _formatTime(_fromTime),
                               icon: Icons.access_time,
                               onTap: () => _pickTime(isFrom: true),
@@ -481,7 +482,7 @@ class _AddScheduleSlotScreenState extends State<AddScheduleSlotScreen> {
                               children: [
                                 Expanded(
                                   child: _buildPickerBox(
-                                    label: 'From',
+                                    label: context.texts.t('from'),
                                     value: _formatTime(_fromTime),
                                     icon: Icons.access_time,
                                     onTap: () => _pickTime(isFrom: true),
@@ -490,7 +491,7 @@ class _AddScheduleSlotScreenState extends State<AddScheduleSlotScreen> {
                                 const SizedBox(width: 10),
                                 Expanded(
                                   child: _buildPickerBox(
-                                    label: 'To',
+                                    label: context.texts.t('to'),
                                     value: _formatTime(_toTime),
                                     icon: Icons.access_time_filled,
                                     onTap: () => _pickTime(isFrom: false),
@@ -500,21 +501,21 @@ class _AddScheduleSlotScreenState extends State<AddScheduleSlotScreen> {
                             ),
                           ] else ...[
                             _buildPickerBox(
-                              label: 'First departure',
+                              label: context.texts.t('firstDeparture'),
                               value: _formatTime(_fromTime),
                               icon: Icons.access_time,
                               onTap: () => _pickTime(isFrom: true),
                             ),
                             const SizedBox(height: NavigoSizes.itemGap),
                             _buildPickerBox(
-                              label: 'Last departure (start time)',
+                              label: context.texts.t('lastDeparture'),
                               value: _formatTime(_toTime),
                               icon: Icons.access_time_filled,
                               onTap: () => _pickTime(isFrom: false),
                             ),
                             const SizedBox(height: NavigoSizes.itemGap),
                             Text(
-                              'Trip length (minutes)',
+                              context.texts.t('tripLengthMinutes'),
                               style: NavigoTextStyles.label,
                             ),
                             const SizedBox(height: 6),
@@ -530,7 +531,7 @@ class _AddScheduleSlotScreenState extends State<AddScheduleSlotScreen> {
                           if (!isMicro) ...[
                             const SizedBox(height: NavigoSizes.itemGap),
                             Text(
-                              'Repeat every (minutes, optional)',
+                              context.texts.t('repeatEvery'),
                               style: NavigoTextStyles.label,
                             ),
                             const SizedBox(height: 6),
@@ -540,7 +541,7 @@ class _AddScheduleSlotScreenState extends State<AddScheduleSlotScreen> {
                               style: NavigoTextStyles.fieldText,
                               decoration: NavigoDecorations.kInputDecoration
                                   .copyWith(
-                                    hintText: 'Leave empty for a single trip',
+                                    hintText: context.texts.t('leaveEmptySingle'),
                                   ),
                               onChanged: (_) => setState(() {}),
                             ),
@@ -548,7 +549,7 @@ class _AddScheduleSlotScreenState extends State<AddScheduleSlotScreen> {
 
                           const SizedBox(height: NavigoSizes.itemGap),
 
-                          Text('Date', style: NavigoTextStyles.label),
+                          Text(context.texts.t('date'), style: NavigoTextStyles.label),
                           const SizedBox(height: 6),
                           _buildPickerBox(
                             label: '',
@@ -560,7 +561,7 @@ class _AddScheduleSlotScreenState extends State<AddScheduleSlotScreen> {
                           const SizedBox(height: NavigoSizes.itemGap),
 
                           Text(
-                            'Capacity (seats)',
+                            context.texts.t('capacitySeats'),
                             style: NavigoTextStyles.label,
                           ),
                           const SizedBox(height: 6),
@@ -592,7 +593,7 @@ class _AddScheduleSlotScreenState extends State<AddScheduleSlotScreen> {
                           const SizedBox(height: NavigoSizes.itemGap),
 
                           Text(
-                            'Price override (optional)',
+                            context.texts.t('priceOverride'),
                             style: NavigoTextStyles.label,
                           ),
                           const SizedBox(height: 6),
@@ -604,7 +605,7 @@ class _AddScheduleSlotScreenState extends State<AddScheduleSlotScreen> {
                             style: NavigoTextStyles.fieldText,
                             decoration: NavigoDecorations.kInputDecoration
                                 .copyWith(
-                                  hintText: 'Leave empty to use route default',
+                                    hintText: context.texts.t('leaveEmptyDefault'),
                                 ),
                           ),
                         ],
@@ -629,7 +630,7 @@ class _AddScheduleSlotScreenState extends State<AddScheduleSlotScreen> {
                                 ),
                               )
                             : Text(
-                                widget.isEditing ? 'Save changes' : 'Save trip',
+                                widget.isEditing ? context.texts.t('saveChanges') : context.texts.t('saveTrip'),
                                 style: NavigoTextStyles.button,
                               ),
                       ),
@@ -650,8 +651,8 @@ class _AddScheduleSlotScreenState extends State<AddScheduleSlotScreen> {
                                 NavigoColors.accentRed,
                               ),
                             ),
-                        child: const Text(
-                          'Cancel',
+                        child: Text(
+                          context.texts.t('cancel'),
                           style: NavigoTextStyles.button,
                         ),
                       ),

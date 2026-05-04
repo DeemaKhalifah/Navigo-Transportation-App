@@ -1,6 +1,7 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 
 import 'package:navigo/controllers/app_controller_scope.dart';
+import '../../localization/localization_x.dart';
 import '../../theme/app_theme.dart';
 import 'phone_number_screen.dart';
 import '../route_manager/route_schedule.dart';
@@ -36,7 +37,7 @@ class _EmailLoginScreenState extends State<EmailLoginScreen> {
 
     if (email.isEmpty || password.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please enter email and password')),
+        SnackBar(content: Text(context.texts.t('enterEmailPassword'))),
       );
       return;
     }
@@ -55,9 +56,9 @@ class _EmailLoginScreenState extends State<EmailLoginScreen> {
         MaterialPageRoute(builder: (_) => const RouteSchedule()),
       );
     } else {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(auth.error ?? 'Login failed')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(auth.error ?? context.texts.t('loginFailed'))),
+      );
     }
   }
 
@@ -89,17 +90,20 @@ class _EmailLoginScreenState extends State<EmailLoginScreen> {
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           Text(
-                            'Route Manager Login',
+                            context.texts.t('routeManager'),
                             style: NavigoTextStyles.titleLarge,
                           ),
                           const SizedBox(height: 8),
                           Text(
-                            'Sign in using your route manager email and password.',
+                            context.texts.t('routeManagerLoginSubtitle'),
                             style: NavigoTextStyles.bodyMedium,
                           ),
                           const SizedBox(height: 20),
 
-                          Text('Email', style: NavigoTextStyles.label),
+                          Text(
+                            context.texts.t('email'),
+                            style: NavigoTextStyles.label,
+                          ),
                           const SizedBox(height: 8),
                           TextField(
                             controller: _emailController,
@@ -119,7 +123,10 @@ class _EmailLoginScreenState extends State<EmailLoginScreen> {
 
                           const SizedBox(height: 16),
 
-                          Text('Password', style: NavigoTextStyles.label),
+                          Text(
+                            context.texts.t('password'),
+                            style: NavigoTextStyles.label,
+                          ),
                           const SizedBox(height: 8),
                           TextField(
                             controller: _passwordController,
@@ -174,7 +181,7 @@ class _EmailLoginScreenState extends State<EmailLoginScreen> {
                                           MainAxisAlignment.center,
                                       children: [
                                         Text(
-                                          'Sign In',
+                                          context.texts.t('signIn'),
                                           style: NavigoTextStyles.button,
                                         ),
                                         const SizedBox(width: 10),
@@ -200,7 +207,7 @@ class _EmailLoginScreenState extends State<EmailLoginScreen> {
                                       );
                                     },
                               child: Text(
-                                'Back to user login',
+                                context.texts.t('backToUserLogin'),
                                 style: NavigoTextStyles.actionLink,
                               ),
                             ),

@@ -1,4 +1,5 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
+import '../../localization/localization_x.dart';
 import '../../theme/app_theme.dart';
 import '../authentication/phone_number_screen.dart';
 
@@ -82,12 +83,12 @@ class RoleSelectionScreen extends StatelessWidget {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Text(
-                      "Create Your Account",
+                      context.texts.t('createYourAccount'),
                       style: NavigoTextStyles.titleLarge,
                     ),
                     const SizedBox(height: 10),
                     Text(
-                      "Choose your role to continue",
+                      context.texts.t('chooseRoleContinue'),
                       textAlign: TextAlign.center,
                       style: NavigoTextStyles.bodySmall,
                     ),
@@ -96,8 +97,8 @@ class RoleSelectionScreen extends StatelessWidget {
                     // Passenger
                     _buildRoleButton(
                       context,
-                      "Passenger",
-                      "Browse routes and request trips",
+                      context.texts.t('passengerRole'),
+                      context.texts.t('passengerRoleDescription'),
                       Icons.person_outline,
                       'passenger',
                     ),
@@ -107,8 +108,8 @@ class RoleSelectionScreen extends StatelessWidget {
                     // Driver
                     _buildRoleButton(
                       context,
-                      "Driver",
-                      "Accept trips and manage availability",
+                      context.texts.t('driverRole'),
+                      context.texts.t('driverRoleDescription'),
                       Icons.drive_eta,
                       'driver',
                     ),
@@ -116,7 +117,7 @@ class RoleSelectionScreen extends StatelessWidget {
                     const SizedBox(height: 24),
 
                     Text(
-                      "Already have an account?",
+                      context.texts.t('alreadyHaveAccount'),
                       style: NavigoTextStyles.bodySmall,
                     ),
 
@@ -130,7 +131,7 @@ class RoleSelectionScreen extends StatelessWidget {
                         );
                       },
                       child: Text(
-                        "Sign in",
+                        context.texts.t('signIn'),
                         style: NavigoTextStyles.actionLink,
                       ),
                     ),

@@ -1,5 +1,6 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:navigo/screens/passenger/trip_history_screen.dart';
+import '../../localization/localization_x.dart';
 import '../../theme/app_theme.dart';
 import 'passenger_home_screen.dart';
 import 'schedule_screen.dart';
@@ -48,10 +49,10 @@ class PassengerBottomNavBar extends StatelessWidget {
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceAround,
             children: [
-              _buildItem(context, 0, Icons.home_outlined, "Home"),
-              _buildItem(context, 1, Icons.directions_bus_outlined, "Schedule"),
-              _buildItem(context, 2, Icons.receipt_long_outlined, "Trips"),
-              _buildItem(context, 3, Icons.person_outline, "Profile"),
+              _buildItem(context, 0, Icons.home_outlined, context.texts.t('home')),
+              _buildItem(context, 1, Icons.directions_bus_outlined, context.texts.t('schedule')),
+              _buildItem(context, 2, Icons.receipt_long_outlined, context.texts.t('trips')),
+              _buildItem(context, 3, Icons.person_outline, context.texts.t('profile')),
             ],
           ),
         ),

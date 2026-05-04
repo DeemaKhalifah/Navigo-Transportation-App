@@ -1,6 +1,7 @@
-﻿import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import '../../localization/localization_x.dart';
 import '../../theme/app_theme.dart';
 import 'otp_verification_screen.dart';
 
@@ -104,13 +105,13 @@ class _DriverSignupScreenState extends State<DriverSignupScreen> {
     if (_selectedRouteId == null || _selectedRouteId!.isEmpty) {
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(const SnackBar(content: Text('Select a route')));
+      ).showSnackBar(SnackBar(content: Text(context.texts.t('selectRoute'))));
       return;
     }
     if (_selectedCarType == null || _selectedCarType!.isEmpty) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Select vehicle type')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(context.texts.t('selectVehicleType'))),
+      );
       return;
     }
 
@@ -129,11 +130,7 @@ class _DriverSignupScreenState extends State<DriverSignupScreen> {
         if (!mounted) return;
         setState(() => _isLoading = false);
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text(
-              "This phone number is already used. Please use another number.",
-            ),
-          ),
+          SnackBar(content: Text(context.texts.t('phoneAlreadyUsed'))),
         );
         return;
       }
@@ -147,9 +144,11 @@ class _DriverSignupScreenState extends State<DriverSignupScreen> {
         verificationFailed: (FirebaseAuthException e) {
           if (!mounted) return;
           setState(() => _isLoading = false);
-          ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(SnackBar(content: Text("Error: ${e.message}")));
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('${context.texts.t('errorLabel')}: ${e.message}'),
+            ),
+          );
         },
         codeSent: (String verificationId, int? resendToken) {
           if (!mounted) return;
@@ -181,7 +180,9 @@ class _DriverSignupScreenState extends State<DriverSignupScreen> {
       if (!mounted) return;
       setState(() => _isLoading = false);
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Could not verify phone number: $e")),
+        SnackBar(
+          content: Text('${context.texts.t('couldNotVerifyPhone')}: $e'),
+        ),
       );
     }
   }
@@ -210,19 +211,19 @@ class _DriverSignupScreenState extends State<DriverSignupScreen> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            const Text(
-                              'Driver details',
+                            Text(
+                              context.texts.t('driverDetails'),
                               style: NavigoTextStyles.titleLarge,
                             ),
                             const SizedBox(height: 20),
-                            _label('Full name'),
+                            _label(context.texts.t('fullName')),
                             _inputField(
                               controller: _nameController,
-                              hint: 'e.g., Ahmad Saleh',
+                              hint: context.texts.t('exampleFullName'),
                               prefixIcon: Icons.person_outline,
                             ),
                             const SizedBox(height: 16),
-                            _label('Phone number'),
+                            _label(context.texts.t('phoneNumber')),
                             _inputField(
                               controller: _phoneController,
                               hint: '+97059 000 0000',
@@ -230,7 +231,7 @@ class _DriverSignupScreenState extends State<DriverSignupScreen> {
                               keyboard: TextInputType.phone,
                             ),
                             const SizedBox(height: 16),
-                            _label('Route (from Firestore)'),
+                            _label(context.texts.t('routeFromFirestore')),
                             if (_routesLoading)
                               const Padding(
                                 padding: EdgeInsets.all(12),
@@ -240,47 +241,51 @@ class _DriverSignupScreenState extends State<DriverSignupScreen> {
                               )
                             else if (_routesError != null)
                               Text(
-                                'Could not load routes: $_routesError',
+                                '${context.texts.t('couldNotLoadRoutes')}: $_routesError',
                                 style: NavigoTextStyles.bodySmall,
                               )
                             else if (_routeItems.isEmpty)
-                              const Text(
-                                'No routes found. Add documents under collection `route` first.',
+                              Text(
+                                context.texts.t('noRoutesFound'),
                                 style: NavigoTextStyles.bodySmall,
                               )
                             else
                               _dropdownField(
                                 value: _selectedRouteId,
-                                hint: 'Select route',
+                                hint: context.texts.t('selectRoute'),
                                 items: _routeItems,
                                 onChanged: (val) =>
                                     setState(() => _selectedRouteId = val),
                               ),
                             const SizedBox(height: 16),
-                            _label('Car number (plate)'),
+                            _label(context.texts.t('carNumberPlate')),
                             _inputField(
                               controller: _carNumberController,
-                              hint: 'e.g., 7-1234',
+                              hint: context.texts.t('examplePlateNumber'),
                               prefixIcon: Icons.confirmation_number_outlined,
                             ),
                             const SizedBox(height: 16),
-                            _label('Driving license number (optional)'),
+                            _label(context.texts.t('drivingLicenseOptional')),
                             _inputField(
                               controller: _licenseController,
-                              hint: 'License #',
+                              hint: context.texts.t('licenseNumberHint'),
                               prefixIcon: Icons.badge_outlined,
                               validator: (_) => null,
                             ),
                             const SizedBox(height: 16),
-                            _label('Car type'),
+                            _label(context.texts.t('carType')),
                             _dropdownField(
                               value: _selectedCarType,
-                              hint: 'Select car type',
+                              hint: context.texts.t('selectCarType'),
                               items: _carTypes
                                   .map(
                                     (e) => DropdownMenuItem(
                                       value: e,
-                                      child: Text(e),
+                                      child: Text(
+                                        e == 'Bus'
+                                            ? context.texts.t('bus')
+                                            : context.texts.t('microBus'),
+                                      ),
                                     ),
                                   )
                                   .toList(),
@@ -309,24 +314,26 @@ class _DriverSignupScreenState extends State<DriverSignupScreen> {
                                           color: NavigoColors.textLight,
                                         ),
                                       )
-                                    : const Row(
+                                    : Row(
                                         mainAxisAlignment:
                                             MainAxisAlignment.center,
                                         children: [
                                           Text(
-                                            'Continue to verify phone',
+                                            context.texts.t(
+                                              'continueToVerifyPhone',
+                                            ),
                                             style: NavigoTextStyles.button,
                                           ),
-                                          SizedBox(width: 10),
-                                          Icon(Icons.arrow_forward),
+                                          const SizedBox(width: 10),
+                                          const Icon(Icons.arrow_forward),
                                         ],
                                       ),
                               ),
                             ),
                             const SizedBox(height: 10),
-                            const Center(
+                            Center(
                               child: Text(
-                                'Your account may require approval.',
+                                context.texts.t('accountMayRequireApproval'),
                                 style: NavigoTextStyles.bodySmall,
                               ),
                             ),
@@ -364,7 +371,9 @@ class _DriverSignupScreenState extends State<DriverSignupScreen> {
       style: const TextStyle(color: Colors.black, fontSize: 16),
       validator:
           validator ??
-          (value) => value == null || value.isEmpty ? 'Required' : null,
+          (value) => value == null || value.isEmpty
+              ? context.texts.t('required')
+              : null,
       decoration: NavigoDecorations.kInputDecoration.copyWith(
         hintText: hint,
         prefixIcon: prefixIcon != null
@@ -392,7 +401,7 @@ class _DriverSignupScreenState extends State<DriverSignupScreen> {
       hint: Text(hint, style: const TextStyle(color: Colors.grey)),
       items: items,
       onChanged: onChanged,
-      validator: (v) => v == null ? 'Required' : null,
+      validator: (v) => v == null ? context.texts.t('required') : null,
       decoration: NavigoDecorations.kInputDecoration,
       icon: const Icon(Icons.keyboard_arrow_down),
     );

@@ -1,7 +1,8 @@
-﻿import 'package:flutter/gestures.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import '../../localization/localization_x.dart';
 import '../../theme/app_theme.dart';
 import 'otp_verification_screen.dart';
 
@@ -30,9 +31,9 @@ class _PassengerSignupScreenState extends State<PassengerSignupScreen> {
     final phone = _phoneController.text.trim();
 
     if (name.isEmpty || phone.isEmpty) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text("Please fill all fields")));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(context.texts.t('pleaseFillAllFields'))),
+      );
       return;
     }
 
@@ -49,11 +50,7 @@ class _PassengerSignupScreenState extends State<PassengerSignupScreen> {
         if (!mounted) return;
         setState(() => _isLoading = false);
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text(
-              "This phone number is already used. Please use another number.",
-            ),
-          ),
+          SnackBar(content: Text(context.texts.t('phoneAlreadyUsed'))),
         );
         return;
       }
@@ -61,7 +58,9 @@ class _PassengerSignupScreenState extends State<PassengerSignupScreen> {
       if (!mounted) return;
       setState(() => _isLoading = false);
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Could not verify phone number: $e")),
+        SnackBar(
+          content: Text('${context.texts.t('couldNotVerifyPhone')}: $e'),
+        ),
       );
       return;
     }
@@ -75,9 +74,11 @@ class _PassengerSignupScreenState extends State<PassengerSignupScreen> {
       verificationFailed: (FirebaseAuthException e) {
         if (!mounted) return;
         setState(() => _isLoading = false);
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text("Error: ${e.message}")));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('${context.texts.t('errorLabel')}: ${e.message}'),
+          ),
+        );
       },
       codeSent: (String verificationId, int? resendToken) {
         if (!mounted) return;
@@ -147,20 +148,20 @@ class _PassengerSignupScreenState extends State<PassengerSignupScreen> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          const Text(
-                            "Passenger details",
+                          Text(
+                            context.texts.t('passengerDetails'),
                             style: NavigoTextStyles.titleLarge,
                           ),
                           const SizedBox(height: 8),
-                          const Text(
-                            "Enter your full name and phone number to create your account.",
+                          Text(
+                            context.texts.t('passengerSignupSubtitle'),
                             style: NavigoTextStyles.bodyMedium,
                           ),
                           const SizedBox(height: 20),
 
                           /// Name Field
-                          const Text(
-                            "Full name",
+                          Text(
+                            context.texts.t('fullName'),
                             style: NavigoTextStyles.label,
                           ),
                           const SizedBox(height: 8),
@@ -171,7 +172,7 @@ class _PassengerSignupScreenState extends State<PassengerSignupScreen> {
                             style: NavigoTextStyles.fieldText,
                             decoration: NavigoDecorations.kInputDecoration
                                 .copyWith(
-                                  hintText: "e.g. mohammad ahmad",
+                                  hintText: context.texts.t('exampleFullName'),
                                   prefixIcon: const Icon(
                                     Icons.person_outline,
                                     color: NavigoColors.accentGreen,
@@ -185,8 +186,8 @@ class _PassengerSignupScreenState extends State<PassengerSignupScreen> {
                           const SizedBox(height: 16),
 
                           /// Phone Field
-                          const Text(
-                            "Phone number",
+                          Text(
+                            context.texts.t('phoneNumber'),
                             style: NavigoTextStyles.label,
                           ),
                           const SizedBox(height: 8),
@@ -232,9 +233,11 @@ class _PassengerSignupScreenState extends State<PassengerSignupScreen> {
                                       fontSize: 13,
                                     ),
                                     children: [
-                                      const TextSpan(text: "I agree to "),
                                       TextSpan(
-                                        text: "Terms",
+                                        text: '${context.texts.t('agreeTo')} ',
+                                      ),
+                                      TextSpan(
+                                        text: context.texts.t('terms'),
                                         style: const TextStyle(
                                           color: NavigoColors.primaryOrange,
                                           fontWeight: FontWeight.w500,
@@ -244,7 +247,7 @@ class _PassengerSignupScreenState extends State<PassengerSignupScreen> {
                                       ),
                                       const TextSpan(text: " & "),
                                       TextSpan(
-                                        text: "Privacy",
+                                        text: context.texts.t('privacy'),
                                         style: const TextStyle(
                                           color: NavigoColors.primaryOrange,
                                           fontWeight: FontWeight.w500,
@@ -281,13 +284,13 @@ class _PassengerSignupScreenState extends State<PassengerSignupScreen> {
                                   : Row(
                                       mainAxisAlignment:
                                           MainAxisAlignment.center,
-                                      children: const [
+                                      children: [
                                         Text(
-                                          "Create Account",
+                                          context.texts.t('createAccount'),
                                           style: NavigoTextStyles.button,
                                         ),
-                                        SizedBox(width: 10),
-                                        Icon(Icons.arrow_forward),
+                                        const SizedBox(width: 10),
+                                        const Icon(Icons.arrow_forward),
                                       ],
                                     ),
                             ),

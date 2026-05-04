@@ -1,5 +1,6 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import '../../localization/localization_x.dart';
 import '../../theme/app_theme.dart';
 import 'otp_verification_screen.dart';
 import 'email_login.dart';
@@ -28,9 +29,9 @@ class _PhoneNumberScreenState extends State<PhoneNumberScreen> {
     final phoneNumber = _phoneController.text.trim();
 
     if (phoneNumber.isEmpty) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text("Enter a phone number")));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(context.texts.t('enterPhoneNumberSnack'))),
+      );
       return;
     }
 
@@ -43,9 +44,13 @@ class _PhoneNumberScreenState extends State<PhoneNumberScreen> {
         verificationFailed: (FirebaseAuthException e) {
           if (!mounted) return;
           setState(() => _isSending = false);
-          ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(SnackBar(content: Text("Error: ${e.message ?? ''}")));
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                '${context.texts.t('errorLabel')}: ${e.message ?? ''}',
+              ),
+            ),
+          );
         },
         codeSent: (String verificationId, int? resendToken) {
           if (!mounted) return;
@@ -73,9 +78,9 @@ class _PhoneNumberScreenState extends State<PhoneNumberScreen> {
     } catch (e) {
       if (!mounted) return;
       setState(() => _isSending = false);
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text("Failed to send OTP: $e")));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('${context.texts.t('failedToSendOtp')}: $e')),
+      );
     }
   }
 
@@ -109,16 +114,19 @@ class _PhoneNumberScreenState extends State<PhoneNumberScreen> {
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             Text(
-                              "Enter your phone number",
+                              context.texts.t('enterPhoneNumber'),
                               style: NavigoTextStyles.titleLarge,
                             ),
                             const SizedBox(height: 8),
                             Text(
-                              "We'll send you a one-time code (OTP) to verify your number.",
+                              context.texts.t('phoneOtpSubtitle'),
                               style: NavigoTextStyles.bodyMedium,
                             ),
                             const SizedBox(height: 20),
-                            Text("Phone number", style: NavigoTextStyles.label),
+                            Text(
+                              context.texts.t('phoneNumber'),
+                              style: NavigoTextStyles.label,
+                            ),
                             const SizedBox(height: 8),
                             TextField(
                               controller: _phoneController,
@@ -159,7 +167,7 @@ class _PhoneNumberScreenState extends State<PhoneNumberScreen> {
                                             MainAxisAlignment.center,
                                         children: [
                                           Text(
-                                            "Send Verification Code",
+                                            context.texts.t('sendCode'),
                                             style: NavigoTextStyles.button,
                                           ),
                                           const SizedBox(width: 10),
@@ -180,7 +188,7 @@ class _PhoneNumberScreenState extends State<PhoneNumberScreen> {
                                   );
                                 },
                                 child: Text(
-                                  "Sign in with email",
+                                  "${context.texts.t('signIn')} (${context.texts.t('email')})",
                                   style: NavigoTextStyles.actionLink,
                                 ),
                               ),

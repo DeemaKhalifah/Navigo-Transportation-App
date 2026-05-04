@@ -1,5 +1,6 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import '../../localization/localization_x.dart';
 import '../../services/trip_driver_request_service.dart';
 import '../../theme/app_theme.dart';
 import '../driver/driver_profile_screen.dart';
@@ -59,8 +60,8 @@ class _DriverBottomNavBarState extends State<DriverBottomNavBar> {
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceAround,
             children: [
-              _buildItem(context, 0, Icons.home_outlined, "Home"),
-              _buildItem(context, 1, Icons.receipt_long_outlined, "Trips"),
+              _buildItem(context, 0, Icons.home_outlined, context.texts.t('home')),
+              _buildItem(context, 1, Icons.directions_bus_outlined, context.texts.t('trips')),
               StreamBuilder<int>(
                 stream: _requestService.watchPendingCountForDriver(driverId),
                 initialData: 0,
@@ -75,13 +76,13 @@ class _DriverBottomNavBarState extends State<DriverBottomNavBar> {
                     child: NavigoDecorations.navItem(
                       icon: Icons.notifications_none,
                       iconWidget: iconWidget,
-                      label: "Requests",
+                      label: context.texts.t('requests'),
                       isActive: widget.currentIndex == 2,
                     ),
                   );
                 },
               ),
-              _buildItem(context, 3, Icons.person_outline, "Profile"),
+              _buildItem(context, 3, Icons.person_outline, context.texts.t('profile')),
             ],
           ),
         ),

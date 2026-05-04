@@ -1,4 +1,5 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
+import '../../localization/localization_x.dart';
 import '../../theme/app_theme.dart';
 import 'phone_number_screen.dart';
 
@@ -41,14 +42,14 @@ class SignupApprovalScreen extends StatelessWidget {
                   const SizedBox(height: 20),
 
                   Text(
-                    "Request received",
+                    context.texts.t('requestReceived'),
                     style: NavigoTextStyles.titleMedium,
                   ),
 
                   const SizedBox(height: 10),
 
                   Text(
-                    "Your account is pending approval.\nWe'll notify you once it's verified.",
+                    context.texts.t('accountPendingApproval'),
                     textAlign: TextAlign.center,
                     style: NavigoTextStyles.bodySmall,
                   ),
@@ -72,7 +73,7 @@ class SignupApprovalScreen extends StatelessWidget {
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
                           Text(
-                            "Back to Sign in",
+                            context.texts.t('backToSignIn'),
                             style: NavigoTextStyles.button,
                           ),
                           const SizedBox(width: 10),

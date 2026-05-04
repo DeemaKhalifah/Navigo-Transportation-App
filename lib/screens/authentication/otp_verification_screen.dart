@@ -1,9 +1,10 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 
+import '../../localization/localization_x.dart';
 import '../../theme/app_theme.dart';
 import '../../services/passenger_trip_repository.dart';
 import '../passenger/passenger_home_screen.dart';
@@ -180,19 +181,20 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
   }
 
   Future<void> _onContinue() async {
+    final texts = context.texts;
     final otp = _otpControllers.map((e) => e.text).join().trim();
 
     if (otp.length != 6) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Enter a valid 6-digit OTP")),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(texts.t('validSixDigitOtp'))));
       return;
     }
 
     if (widget.verificationId.trim().isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Verification ID is missing.")),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(texts.t('verificationIdMissing'))));
       return;
     }
 
@@ -210,7 +212,7 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
 
       final user = userCredential.user;
       if (user == null) {
-        throw Exception('User not found after verification.');
+        throw Exception(texts.t('userNotFoundVerification'));
       }
 
       final uid = user.uid;
@@ -259,9 +261,10 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
       if (widget.role == 'passenger') {
         await FirebaseFirestore.instance.collection('passengers').doc(uid).set({
           'passengerId': uid,
-          'fullName': [firstName, lastName]
-              .where((part) => part.trim().isNotEmpty)
-              .join(' '),
+          'fullName': [
+            firstName,
+            lastName,
+          ].where((part) => part.trim().isNotEmpty).join(' '),
           'phoneNumber': widget.phoneNumber,
           'latitude': null,
           'longitude': null,
@@ -327,17 +330,17 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
       } else {
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(const SnackBar(content: Text("User role not found")));
+        ).showSnackBar(SnackBar(content: Text(texts.t('userRoleNotFound'))));
       }
     } on FirebaseAuthException catch (e) {
-      String message = e.message ?? 'Verification failed';
+      String message = e.message ?? texts.t('verificationFailed');
 
       if (e.code == 'invalid-verification-code') {
-        message = 'The OTP code is incorrect.';
+        message = texts.t('otpIncorrect');
       } else if (e.code == 'session-expired') {
-        message = 'The OTP code has expired. Please request a new one.';
+        message = texts.t('otpExpired');
       } else if (e.code == 'invalid-verification-id') {
-        message = 'Verification session is invalid. Please try again.';
+        message = texts.t('verificationSessionInvalid');
       }
 
       if (!mounted) return;
@@ -349,7 +352,7 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
       if (!mounted) return;
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(SnackBar(content: Text('Error: $e')));
+      ).showSnackBar(SnackBar(content: Text('${texts.t('errorLabel')}: $e')));
     } finally {
       if (mounted) {
         setState(() => _isLoading = false);
@@ -358,9 +361,9 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
   }
 
   void _resendCode() {
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(const SnackBar(content: Text("Resend not implemented yet")));
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(context.texts.t('resendNotImplemented'))),
+    );
   }
 
   Widget _buildOtpTextField(int index) {
@@ -432,13 +435,13 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          const Text(
-                            "Verify phone number",
+                          Text(
+                            context.texts.t('verifyPhoneNumber'),
                             style: NavigoTextStyles.titleLarge,
                           ),
                           const SizedBox(height: 10),
                           Text(
-                            "Enter the 6-digit code sent to ${widget.phoneNumber}",
+                            '${context.texts.t('enterSixDigitCodeSentTo')} ${widget.phoneNumber}',
                             textAlign: TextAlign.center,
                             style: NavigoTextStyles.bodySmall,
                           ),
@@ -459,14 +462,14 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
                           Row(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              const Text(
-                                "Didn't receive SMS? ",
+                              Text(
+                                '${context.texts.t('didntReceiveSms')} ',
                                 style: NavigoTextStyles.bodySmall,
                               ),
                               GestureDetector(
                                 onTap: _resendCode,
-                                child: const Text(
-                                  "Resend Code",
+                                child: Text(
+                                  context.texts.t('resendCode'),
                                   style: NavigoTextStyles.buttonOrangeLink,
                                 ),
                               ),
@@ -491,27 +494,27 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
                                   : Row(
                                       mainAxisAlignment:
                                           MainAxisAlignment.center,
-                                      children: const [
+                                      children: [
                                         Text(
-                                          "Continue",
+                                          context.texts.t('continue'),
                                           style: NavigoTextStyles.button,
                                         ),
-                                        SizedBox(width: 10),
-                                        Icon(Icons.arrow_forward),
+                                        const SizedBox(width: 10),
+                                        const Icon(Icons.arrow_forward),
                                       ],
                                     ),
                             ),
                           ),
                           const SizedBox(height: 12),
-                          const Text(
-                            "note: OTP expires in 2 minutes.",
+                          Text(
+                            context.texts.t('otpExpiresNote'),
                             style: NavigoTextStyles.bodySmall,
                           ),
                           const SizedBox(height: 12),
                           GestureDetector(
                             onTap: () => Navigator.pop(context),
-                            child: const Text(
-                              "Change phone number",
+                            child: Text(
+                              context.texts.t('changePhoneNumber'),
                               style: NavigoTextStyles.actionLink,
                             ),
                           ),

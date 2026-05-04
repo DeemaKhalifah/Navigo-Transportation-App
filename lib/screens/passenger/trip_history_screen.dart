@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../localization/localization_x.dart';
 import '../../models/schedule_slot.dart';
 import '../../models/trip_status.dart';
 import '../../services/passenger_trip_history_service.dart';
@@ -58,6 +59,23 @@ class _TripHistoryScreenState extends State<TripHistoryScreen> {
     }
   }
 
+  String _localizedStatus(String status) {
+    switch (TripStatus.normalize(status)) {
+      case TripStatus.scheduled:
+        return context.texts.t('scheduled');
+      case TripStatus.completed:
+        return context.texts.t('completed');
+      case TripStatus.cancelled:
+        return context.texts.t('cancelled');
+      case TripStatus.onTrip:
+        return context.texts.t('onTrip');
+      case TripStatus.all:
+        return context.texts.t('all');
+      default:
+        return context.texts.t('scheduled');
+    }
+  }
+
   Widget _filterChip({required String label, required String value}) {
     final selected = _filterStatus == value;
 
@@ -96,7 +114,7 @@ class _TripHistoryScreenState extends State<TripHistoryScreen> {
             ),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 20),
-              child: Text('Trip History', style: NavigoTextStyles.titleLarge),
+              child: Text(context.texts.t('tripHistory'), style: NavigoTextStyles.titleLarge),
             ),
             const SizedBox(height: 12),
             Padding(
@@ -105,22 +123,22 @@ class _TripHistoryScreenState extends State<TripHistoryScreen> {
                 scrollDirection: Axis.horizontal,
                 child: Row(
                   children: [
-                    _filterChip(label: 'All', value: TripStatus.all),
+                    _filterChip(label: context.texts.t('all'), value: TripStatus.all),
                     const SizedBox(width: 7),
                     _filterChip(
-                      label: 'Scheduled',
+                      label: context.texts.t('scheduled'),
                       value: TripStatus.scheduled,
                     ),
                     const SizedBox(width: 7),
-                    _filterChip(label: 'On Trip', value: TripStatus.onTrip),
+                    _filterChip(label: context.texts.t('onTrip'), value: TripStatus.onTrip),
                     const SizedBox(width: 7),
                     _filterChip(
-                      label: 'Completed',
+                      label: context.texts.t('completed'),
                       value: TripStatus.completed,
                     ),
                     const SizedBox(width: 7),
                     _filterChip(
-                      label: 'Cancelled',
+                      label: context.texts.t('cancelled'),
                       value: TripStatus.cancelled,
                     ),
                   ],
@@ -141,7 +159,7 @@ class _TripHistoryScreenState extends State<TripHistoryScreen> {
                       child: Padding(
                         padding: const EdgeInsets.all(20),
                         child: Text(
-                          'Failed to load trip history.\n${snapshot.error}',
+                          '${context.texts.t('failedToLoadTrips')}\n${snapshot.error}',
                           textAlign: TextAlign.center,
                           style: NavigoTextStyles.bodySmall,
                         ),
@@ -154,7 +172,7 @@ class _TripHistoryScreenState extends State<TripHistoryScreen> {
                   if (slots.isEmpty) {
                     return Center(
                       child: Text(
-                        'No trips found.',
+                        context.texts.t('noTripsFound'),
                         style: NavigoTextStyles.bodySmall,
                       ),
                     );
@@ -228,7 +246,7 @@ class _TripHistoryScreenState extends State<TripHistoryScreen> {
                                 ),
                               ),
                               NavigoDecorations.statusChip(
-                                label: TripStatus.label(status),
+                                label: _localizedStatus(status),
                                 color: _statusColor(status),
                                 padding: const EdgeInsets.symmetric(
                                   horizontal: 10,
@@ -290,6 +308,23 @@ class _TripHistoryDetailsSheetState extends State<_TripHistoryDetailsSheet> {
     });
   }
 
+  String _localizedStatus(String status) {
+    switch (TripStatus.normalize(status)) {
+      case TripStatus.scheduled:
+        return context.texts.t('scheduled');
+      case TripStatus.completed:
+        return context.texts.t('completed');
+      case TripStatus.cancelled:
+        return context.texts.t('cancelled');
+      case TripStatus.onTrip:
+        return context.texts.t('onTrip');
+      case TripStatus.all:
+        return context.texts.t('all');
+      default:
+        return context.texts.t('scheduled');
+    }
+  }
+
   Color _statusColor(String status) {
     switch (TripStatus.normalize(status)) {
       case TripStatus.completed:
@@ -345,9 +380,9 @@ class _TripHistoryDetailsSheetState extends State<_TripHistoryDetailsSheet> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text('Trip Details', style: NavigoTextStyles.titleSmall),
+              Text(context.texts.t('tripDetails'), style: NavigoTextStyles.titleSmall),
               NavigoDecorations.statusChip(
-                label: TripStatus.label(status),
+                label: _localizedStatus(status),
                 color: _statusColor(status),
               ),
             ],
@@ -357,22 +392,22 @@ class _TripHistoryDetailsSheetState extends State<_TripHistoryDetailsSheet> {
           const SizedBox(height: 8),
 
           // Only show: Line, Date, Departure, Arrival, Vehicle, Plate Number, Driver Phone
-          _row('Line', widget.historyService.lineOf(widget.slot)),
+          _row(context.texts.t('line'), widget.historyService.lineOf(widget.slot)),
           _row(
-            'Date',
+            context.texts.t('date'),
             PassengerTripHistoryService.formatDate(widget.slot.departureAt),
           ),
           _row(
-            'Departure',
+            context.texts.t('departure'),
             PassengerTripHistoryService.formatTime(widget.slot.departureAt),
           ),
           _row(
-            'Arrival',
+            context.texts.t('arrival'),
             PassengerTripHistoryService.formatTime(widget.slot.arrivalAt),
           ),
-          _row('Vehicle', widget.historyService.vehicleTypeTextOf(widget.slot)),
-          _row('Vehicle Plate No.', _loadingDriverInfo ? '...' : _plateNumber),
-          _row('Driver Phone', _loadingDriverInfo ? '...' : _driverPhone),
+          _row(context.texts.t('vehicle'), widget.historyService.vehicleTypeTextOf(widget.slot)),
+          _row(context.texts.t('vehiclePlateNo'), _loadingDriverInfo ? '...' : _plateNumber),
+          _row(context.texts.t('driverPhone'), _loadingDriverInfo ? '...' : _driverPhone),
 
           const SizedBox(height: 20),
 
@@ -398,7 +433,7 @@ class _TripHistoryDetailsSheetState extends State<_TripHistoryDetailsSheet> {
                 },
                 style: NavigoDecorations.kPrimaryButtonLargeStyle,
                 icon: const Icon(Icons.route, size: 20),
-                label: const Text('View Route', style: NavigoTextStyles.button),
+                label: Text(context.texts.t('viewRoute'), style: NavigoTextStyles.button),
               ),
             ),
 
@@ -412,8 +447,8 @@ class _TripHistoryDetailsSheetState extends State<_TripHistoryDetailsSheet> {
                   Navigator.pop(context);
                   if (widget.slot.driverId.trim().isEmpty) {
                     ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('No driver assigned for this trip yet.'),
+                      SnackBar(
+                        content: Text(context.texts.t('noDriverAssigned')),
                       ),
                     );
                     return;
@@ -429,8 +464,8 @@ class _TripHistoryDetailsSheetState extends State<_TripHistoryDetailsSheet> {
                 },
                 style: NavigoDecorations.kPrimaryButtonLargeStyle,
                 icon: const Icon(Icons.gps_fixed, size: 20),
-                label: const Text(
-                  'Track Live Trip',
+                label: Text(
+                  context.texts.t('trackLiveTrip'),
                   style: NavigoTextStyles.button,
                 ),
               ),

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../controllers/support_report_controller.dart';
+import '../../localization/localization_x.dart';
 import '../../theme/app_theme.dart';
 
 class HelpSupportScreen extends StatefulWidget {
@@ -61,9 +62,9 @@ class _HelpSupportScreenState extends State<HelpSupportScreen> {
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
               child: Row(
-                children: const [
+                children: [
                   Text(
-                    "Help & Support",
+                    context.texts.t('helpSupportTitle'),
                     style: NavigoTextStyles.titleLarge,
                   ),
                 ],
@@ -80,7 +81,7 @@ class _HelpSupportScreenState extends State<HelpSupportScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        "Having an issue? Send your complaint to the route manager.",
+                        context.texts.t('supportSubtitle'),
                         style: NavigoTextStyles.titleSmall,
                       ),
                       const SizedBox(height: 10),
@@ -90,7 +91,7 @@ class _HelpSupportScreenState extends State<HelpSupportScreen> {
                         maxLines: 6,
                         style: NavigoTextStyles.titleMedium,
                         decoration: NavigoDecorations.kInputDecoration.copyWith(
-                          hintText: "Write your complaint here...",
+                          hintText: context.texts.t('writeComplaint'),
                         ),
                       ),
 
@@ -111,7 +112,7 @@ class _HelpSupportScreenState extends State<HelpSupportScreen> {
                                     color: Colors.white,
                                   ),
                                 )
-                              : const Text("Submit"),
+                              : Text(context.texts.t('submit')),
                         ),
                       ),
                     ],

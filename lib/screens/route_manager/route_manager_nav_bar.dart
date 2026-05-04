@@ -1,4 +1,5 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
+import '../../localization/localization_x.dart';
 import '../../services/support_report_service.dart';
 import '../../theme/app_theme.dart';
 import 'manager_profile.dart';
@@ -56,10 +57,10 @@ class _RouteManagerNavBarState extends State<RouteManagerNavBar> {
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceAround,
             children: [
-              _buildItem(context, 0, Icons.schedule, "Schedule"),
-              _buildItem(context, 1, Icons.assignment, "Assign"),
+              _buildItem(context, 0, Icons.schedule, context.texts.t('schedule')),
+              _buildItem(context, 1, Icons.assignment, context.texts.t('assign')),
               _buildReportsItem(context),
-              _buildItem(context, 3, Icons.person, "Profile"),
+              _buildItem(context, 3, Icons.person, context.texts.t('profile')),
             ],
           ),
         ),
@@ -101,7 +102,7 @@ class _RouteManagerNavBarState extends State<RouteManagerNavBar> {
           child: NavigoDecorations.navItem(
             icon: Icons.bar_chart,
             iconWidget: icon,
-            label: "Reports",
+            label: context.texts.t('reports'),
             isActive: isActive,
           ),
         );

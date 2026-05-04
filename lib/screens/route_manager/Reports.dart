@@ -1,5 +1,6 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 
+import '../../localization/localization_x.dart';
 import '../../models/support_report.dart';
 import '../../services/support_report_service.dart';
 import '../../theme/app_theme.dart';
@@ -81,15 +82,15 @@ class _ReportsState extends State<Reports> {
                     ),
                   ),
                   const SizedBox(height: 14),
-                  Text('Report details', style: NavigoTextStyles.titleLarge),
+                  Text(context.texts.t('reportDetails'), style: NavigoTextStyles.titleLarge),
                   const SizedBox(height: 12),
-                  _detailRow('From', report.senderName),
-                  _detailRow('Role', report.senderRole),
-                  _detailRow('Route', report.routeLabel),
-                  _detailRow('Date', _formatDate(report.createdAt)),
-                  _detailRow('Status', report.status),
+                  _detailRow(context.texts.t('from'), report.senderName),
+                  _detailRow(context.texts.t('role'), report.senderRole),
+                  _detailRow(context.texts.t('route'), report.routeLabel),
+                  _detailRow(context.texts.t('date'), _formatDate(report.createdAt)),
+                  _detailRow(context.texts.t('status'), report.status),
                   const SizedBox(height: 14),
-                  Text('Message', style: NavigoTextStyles.titleSmall),
+                  Text(context.texts.t('message'), style: NavigoTextStyles.titleSmall),
                   const SizedBox(height: 8),
                   Expanded(
                     child: SingleChildScrollView(
@@ -144,7 +145,7 @@ class _ReportsState extends State<Reports> {
     if (selectedReports.isEmpty) {
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(const SnackBar(content: Text("No reports selected!")));
+      ).showSnackBar(SnackBar(content: Text(context.texts.t('noReportsSelected'))));
       return;
     }
 
@@ -160,7 +161,7 @@ class _ReportsState extends State<Reports> {
       });
 
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Reports sent to admin successfully!")),
+        SnackBar(content: Text(context.texts.t('reportsSentSuccess'))),
       );
     } catch (e) {
       if (!mounted) return;
@@ -209,10 +210,10 @@ class _ReportsState extends State<Reports> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text("Reports", style: NavigoTextStyles.titleLarge),
+                  Text(context.texts.t('reports'), style: NavigoTextStyles.titleLarge),
                   const SizedBox(height: 4),
                   Text(
-                    "Review and forward passenger and driver reports",
+                    context.texts.t('reportsSubtitle'),
                     style: NavigoTextStyles.bodySmall,
                   ),
                 ],
@@ -229,7 +230,7 @@ class _ReportsState extends State<Reports> {
                 controller: searchController,
                 style: NavigoTextStyles.fieldText,
                 decoration: NavigoDecorations.kInputDecoration.copyWith(
-                  hintText: "Search reports...",
+                  hintText: context.texts.t('searchReports'),
                   filled: true,
                   fillColor: NavigoColors.surfaceWhite,
                   prefixIcon: const Icon(
@@ -260,7 +261,7 @@ class _ReportsState extends State<Reports> {
                   if (snapshot.hasError) {
                     return Center(
                       child: Text(
-                        "Failed to load reports",
+                        context.texts.t('failedToLoadReports'),
                         style: NavigoTextStyles.bodyMedium,
                       ),
                     );
@@ -271,7 +272,7 @@ class _ReportsState extends State<Reports> {
                   if (reports.isEmpty) {
                     return Center(
                       child: Text(
-                        "No reports yet",
+                        context.texts.t('noReportsYet'),
                         style: NavigoTextStyles.bodyMedium,
                       ),
                     );
@@ -347,18 +348,18 @@ class _ReportsState extends State<Reports> {
                                     children: [
                                       Text(
                                         report.senderName.isEmpty
-                                            ? 'Unknown user'
+                                            ? context.texts.t('unknownUser')
                                             : report.senderName,
                                         style: titleStyle,
                                       ),
                                       const SizedBox(height: 4),
                                       Text(
-                                        'Role: ${report.senderRole}',
+                                        '${context.texts.t('role')}: ${report.senderRole}',
                                         style: metaStyle,
                                       ),
                                       const SizedBox(height: 4),
                                       Text(
-                                        'Route: ${report.routeLabel}',
+                                        '${context.texts.t('route')}: ${report.routeLabel}',
                                         style: metaStyle,
                                       ),
                                     ],
@@ -409,8 +410,8 @@ class _ReportsState extends State<Reports> {
                       style: NavigoDecorations.kPrimaryButtonLargeStyle,
                       child: _sending
                           ? const CircularProgressIndicator(color: Colors.white)
-                          : const Text(
-                              "Send to Admin",
+                          : Text(
+                              context.texts.t('sendToAdmin'),
                               style: NavigoTextStyles.button,
                             ),
                     ),
