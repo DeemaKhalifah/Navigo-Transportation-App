@@ -2,10 +2,10 @@ import 'dart:convert';
 import 'dart:math' as math;
 
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/foundation.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:http/http.dart' as http;
 
-import 'geocoding_service.dart';
 import 'schedule_slot_repository.dart';
 
 class RoutePathInfo {
@@ -46,10 +46,6 @@ class RoutePathInfo {
   }
 
   Map<String, dynamic> toFirestoreRouteMap() {
-    final pathMaps = path
-        .map((point) => {'lat': point.latitude, 'lng': point.longitude})
-        .toList();
-
     return {
       'startLocation': {
         'lat': startLocation.latitude,
@@ -59,8 +55,6 @@ class RoutePathInfo {
         'lat': endLocation.latitude,
         'lng': endLocation.longitude,
       },
-      'routePath': pathMaps,
-      'path': pathMaps,
       'routePolyline': encodedPolyline,
       'etaMinutes': etaMinutes,
       'etaText': etaText,
@@ -82,22 +76,147 @@ class GoogleRoutePathService {
 
   final FirebaseFirestore _db;
   final http.Client _client;
+  static final Map<String, RoutePathInfo> _memoryCache = {};
+  static final Map<String, Future<RoutePathInfo>> _inflight = {};
 
   static const String _apiKey = String.fromEnvironment(
     'GOOGLE_MAPS_API_KEY',
-    defaultValue: 'AIzaSyBJL6teACIpsbYRXHpeynNht5qbL0-BTjw',
+    defaultValue: '',
   );
+  static const LatLng _fixedStart = LatLng(31.903, 35.206);
+  static const LatLng _fixedEnd = LatLng(31.9582684, 35.1801401);
+
+  static String _coordsKey(LatLng start, LatLng end) =>
+      '${start.latitude.toStringAsFixed(6)},${start.longitude.toStringAsFixed(6)}->${end.latitude.toStringAsFixed(6)},${end.longitude.toStringAsFixed(6)}';
+
+  Future<RoutePathInfo> getOrFetchRoutePathForRoute({
+    required String routeId,
+    required String startPoint,
+    required String endPoint,
+    String? tripId,
+  }) async {
+    final safeRouteId = routeId.trim();
+    final safeTripId = tripId?.trim() ?? '';
+    final cacheKey = safeTripId.isEmpty
+        ? 'route:$safeRouteId'
+        : 'route:$safeRouteId:trip:$safeTripId';
+    final cached = _memoryCache[cacheKey];
+    if (cached != null) {
+      return cached;
+    }
+
+    final inflight = _inflight[cacheKey];
+    if (inflight != null) {
+      return inflight;
+    }
+
+    final future = _resolveRoutePathForRoute(
+      routeId: safeRouteId,
+      startPoint: startPoint,
+      endPoint: endPoint,
+      cacheKey: cacheKey,
+    );
+    _inflight[cacheKey] = future;
+    try {
+      final resolved = await future;
+      _memoryCache[cacheKey] = resolved;
+      return resolved;
+    } finally {
+      _inflight.remove(cacheKey);
+    }
+  }
+
+  Future<RoutePathInfo> _resolveRoutePathForRoute({
+    required String routeId,
+    required String startPoint,
+    required String endPoint,
+    required String cacheKey,
+  }) async {
+    if (routeId.isNotEmpty) {
+      final doc = await _db.collection('route').doc(routeId).get();
+      final data = doc.data();
+      if (doc.exists && data != null) {
+        final encoded = (data['routePolyline'] ?? '').toString().trim();
+        if (encoded.isNotEmpty) {
+          final start = _fixedStart;
+          final end = _fixedEnd;
+          debugPrint(
+            '[Directions] using Firebase routePolyline routeId=$routeId',
+          );
+          final distanceMeters = (data['distanceMeters'] as num?)?.toInt() ??
+              _estimateMeters(start, end);
+          final etaMinutes = (data['etaMinutes'] as num?)?.toInt() ??
+              math.max(1, (_estimateSeconds(start, end) / 60).ceil());
+          final info = RoutePathInfo(
+            startLocation: start,
+            endLocation: end,
+            path: decodePolyline(encoded),
+            etaMinutes: etaMinutes,
+            etaText: data['etaText']?.toString() ?? _formatEta(etaMinutes),
+            distanceMeters: distanceMeters,
+            distanceText: data['distanceText']?.toString() ??
+                _formatDistance(distanceMeters),
+            encodedPolyline: encoded,
+            provider: 'firebase_cached',
+          );
+          _memoryCache[cacheKey] = info;
+          return info;
+        }
+      }
+    }
+
+    debugPrint('[Directions] API call for routeId=$routeId');
+    final info = await fetchRoutePath(startPoint: startPoint, endPoint: endPoint);
+    if (routeId.isNotEmpty) {
+      await saveRoutePath(routeId: routeId, info: info);
+    }
+    return info;
+  }
 
   Future<RoutePathInfo> fetchRoutePath({
     required String startPoint,
     required String endPoint,
   }) async {
-    final start = await GeocodingService.geocodeAddress(startPoint);
-    final end = await GeocodingService.geocodeAddress(endPoint);
+    return fetchRoutePathByCoordinates(start: _fixedStart, end: _fixedEnd);
+  }
 
-    if (start == null || end == null) {
-      throw Exception('Could not geocode route start or end point.');
+  Future<RoutePathInfo> fetchRoutePathByCoordinates({
+    required LatLng start,
+    required LatLng end,
+  }) async {
+    final fixedStart = _fixedStart;
+    final fixedEnd = _fixedEnd;
+    final key = 'coords:${_coordsKey(fixedStart, fixedEnd)}';
+    final cached = _memoryCache[key];
+    if (cached != null) return cached;
+
+    final inflight = _inflight[key];
+    if (inflight != null) return inflight;
+
+    final future = _fetchRoutePathByCoordinatesInternal(
+      start: fixedStart,
+      end: fixedEnd,
+    );
+    _inflight[key] = future;
+    try {
+      final resolved = await future;
+      _memoryCache[key] = resolved;
+      return resolved;
+    } finally {
+      _inflight.remove(key);
     }
+  }
+
+  Future<RoutePathInfo> _fetchRoutePathByCoordinatesInternal({
+    required LatLng start,
+    required LatLng end,
+  }) async {
+    if (_apiKey.trim().isEmpty) {
+      throw Exception(
+        'Missing GOOGLE_MAPS_API_KEY. Pass it with --dart-define=GOOGLE_MAPS_API_KEY=YOUR_KEY',
+      );
+    }
+    debugPrint('[Directions] API call for coordinates ${_coordsKey(start, end)}');
 
     final fromRoutesApi = await _fetchFromRoutesApi(start, end);
     if (fromRoutesApi != null) return fromRoutesApi;
@@ -361,9 +480,6 @@ class GoogleRoutePathService {
     Map<String, dynamic> slot,
     RoutePathInfo info,
   ) {
-    final pathMaps = info.path
-        .map((point) => {'lat': point.latitude, 'lng': point.longitude})
-        .toList();
     final module = info.toRouteModuleMap();
 
     slot['etaMinutes'] = info.etaMinutes;
@@ -372,7 +488,6 @@ class GoogleRoutePathService {
     slot['distanceKm'] = info.distanceKm;
     slot['distanceText'] = info.distanceText;
     slot['routePolyline'] = info.encodedPolyline;
-    slot['routePath'] = pathMaps;
     slot['routeModule'] = module;
     slot['estimatedArrivalAt'] = _estimatedArrival(slot, info.etaMinutes);
   }
@@ -443,7 +558,7 @@ class GoogleRoutePathService {
     return '${(meters / 1000).toStringAsFixed(1)} km';
   }
 
-  static List<LatLng> _decodePolyline(String encoded) {
+  static List<LatLng> decodePolyline(String encoded) {
     final points = <LatLng>[];
     var index = 0;
     var lat = 0;
@@ -474,4 +589,6 @@ class GoogleRoutePathService {
 
     return points;
   }
+
+  static List<LatLng> _decodePolyline(String encoded) => decodePolyline(encoded);
 }

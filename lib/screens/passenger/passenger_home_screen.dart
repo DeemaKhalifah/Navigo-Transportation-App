@@ -25,12 +25,14 @@ class PassengerHomeScreen extends StatefulWidget {
     super.key,
     this.routeStartPoint,
     this.routeEndPoint,
+    this.routeId,
     this.trackDriverId,
   });
 
   /// When provided, a polyline is drawn between these two points (View Route).
   final String? routeStartPoint;
   final String? routeEndPoint;
+  final String? routeId;
 
   /// When provided, live-track this driver on the map.
   final String? trackDriverId;
@@ -71,11 +73,12 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> {
   StreamSubscription<DocumentSnapshot>? _liveDriverSub;
   StreamSubscription<Position>? _passengerLocationSub;
   bool _isLiveTracking = false;
-  String? _trackingDriverId;
   LatLng? _trackedDriverPosition;
   LatLng? _passengerTrackingPosition;
   String? _trackingEtaText;
   bool _manualPickupSelected = false;
+  String? _activeRouteRenderKey;
+  List<LatLng> _decodedRoutePoints = const [];
 
   @override
   void initState() {
@@ -89,7 +92,11 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> {
 
     // Handle View Route if parameters are set
     if (widget.routeStartPoint != null && widget.routeEndPoint != null) {
-      _drawRoutePolyline(widget.routeStartPoint!, widget.routeEndPoint!);
+      _drawRoutePolyline(
+        widget.routeStartPoint!,
+        widget.routeEndPoint!,
+        routeId: widget.routeId,
+      );
     }
 
     // Handle Track Live Trip if driverId is set
@@ -117,6 +124,12 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> {
     String endPoint, {
     String? routeId,
   }) async {
+    final renderKey = '${routeId?.trim() ?? ''}|$startPoint|$endPoint';
+    if (_activeRouteRenderKey == renderKey && _decodedRoutePoints.isNotEmpty) {
+      debugPrint('[Map] reuse decoded polyline renderKey=$renderKey');
+      _fitBoundsForPoints(_decodedRoutePoints);
+      return;
+    }
     RoutePathInfo? routeInfo;
     LatLng? startLatLng;
     LatLng? endLatLng;
@@ -127,7 +140,7 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> {
               startPoint: startPoint,
               endPoint: endPoint,
             )
-          : await _routePathService.syncRoutePathForRoute(
+          : await _routePathService.getOrFetchRoutePathForRoute(
               routeId: routeId,
               startPoint: startPoint,
               endPoint: endPoint,
@@ -151,6 +164,8 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> {
     final start = startLatLng;
     final end = endLatLng;
     final routePoints = routeInfo?.path ?? [start, end];
+    _decodedRoutePoints = routePoints;
+    _activeRouteRenderKey = renderKey;
 
     setState(() {
       _polylines.clear();
@@ -227,7 +242,6 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> {
 
     setState(() {
       _isLiveTracking = true;
-      _trackingDriverId = driverId;
       _trackedDriverPosition = null;
       _trackingEtaText = null;
     });
@@ -298,7 +312,6 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> {
     if (!mounted) return;
     setState(() {
       _isLiveTracking = false;
-      _trackingDriverId = null;
       _trackedDriverPosition = null;
       _trackingEtaText = null;
       _markers.removeWhere((m) => m.markerId.value == 'live_driver');
@@ -349,6 +362,7 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> {
     if (_passengerLocationSub != null) return;
     final allowed = await _ensureLocationPermission();
     if (!allowed) return;
+    debugPrint('[Geolocator] starting passenger location stream');
 
     _passengerLocationSub =
         Geolocator.getPositionStream(
@@ -369,10 +383,15 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> {
               }
 
               if (!mounted) return;
-              setState(() {
-                _passengerTrackingPosition = location;
-                _initialPosition = location;
-              });
+              final changed =
+                  _passengerTrackingPosition?.latitude != location.latitude ||
+                  _passengerTrackingPosition?.longitude != location.longitude;
+              if (changed) {
+                setState(() {
+                  _passengerTrackingPosition = location;
+                  _initialPosition = location;
+                });
+              }
               _refreshTrackingEta();
             }
           },
@@ -982,6 +1001,7 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> {
 
   @override
   Widget build(BuildContext context) {
+    debugPrint('[Map] PassengerHomeScreen build');
     return Scaffold(
       backgroundColor: NavigoColors.backgroundLight,
       bottomNavigationBar: const PassengerBottomNavBar(currentIndex: 0),

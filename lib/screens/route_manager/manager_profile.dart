@@ -21,22 +21,28 @@ class _ManagerProfileState extends State<ManagerProfile> {
   final ManagerProfileController controller = ManagerProfileController();
 
   @override
-  void initState() {
-    super.initState();
-    controller.addListener(_refresh);
-    controller.init();
-  }
+void initState() {
+  super.initState();
+
+  controller.addListener(_refresh);
+
+  WidgetsBinding.instance.addPostFrameCallback((_) {
+    if (mounted) {
+      controller.init();
+    }
+  });
+}
 
   void _refresh() {
     if (mounted) setState(() {});
   }
 
   @override
-  void dispose() {
-    controller.removeListener(_refresh);
-    controller.dispose();
-    super.dispose();
-  }
+void dispose() {
+  controller.removeListener(_refresh);
+  controller.dispose();
+  super.dispose();
+}
 
   void _showSnack(String msg) {
     if (!mounted) return;
@@ -91,221 +97,228 @@ class _ManagerProfileState extends State<ManagerProfile> {
   }
 
   Future<void> _changePassword() async {
-    final currentPasswordController = TextEditingController();
-    final newPasswordController = TextEditingController();
-    final confirmPasswordController = TextEditingController();
+  final currentPasswordController = TextEditingController();
+  final newPasswordController = TextEditingController();
+  final confirmPasswordController = TextEditingController();
 
-    bool obscureCurrent = true;
-    bool obscureNew = true;
-    bool obscureConfirm = true;
-    bool isChanging = false;
+  bool obscureCurrent = true;
+  bool obscureNew = true;
+  bool obscureConfirm = true;
+  bool isChanging = false;
 
-    try {
-      await showDialog(
-        context: context,
-        barrierDismissible: false,
-        builder: (dialogContext) {
-          return StatefulBuilder(
-            builder: (stfContext, setDialogState) {
-              Future<void> handleChangePassword() async {
-                if (isChanging) return;
+  await showDialog(
+    context: context,
+    barrierDismissible: false,
+    builder: (dialogContext) {
+      return StatefulBuilder(
+        builder: (context, setDialogState) {
+          Future<void> handleChangePassword() async {
+            if (isChanging) return;
 
-                setDialogState(() => isChanging = true);
+            setDialogState(() => isChanging = true);
 
-                final error = await controller.changePassword(
-                  currentPasswordController.text,
-                  newPasswordController.text,
-                  confirmPasswordController.text,
-                );
+            final error = await controller.changePassword(
+              currentPasswordController.text,
+              newPasswordController.text,
+              confirmPasswordController.text,
+            );
 
-                if (!mounted) return;
+            if (!mounted) return;
 
-                if (error == null) {
-                  Navigator.of(dialogContext).pop();
+            if (error == null) {
+              Navigator.of(dialogContext).pop();
 
-                  _showSnack(context.texts.t('passwordChanged'));
+              _showSnack(context.texts.t('passwordChanged'));
 
-                  await controller.logout();
+              await controller.logout();
 
-                  if (!mounted) return;
+              if (!mounted) return;
 
-                  Navigator.of(context).pushAndRemoveUntil(
-                    MaterialPageRoute(builder: (_) => const EmailLoginScreen()),
-                    (route) => false,
-                  );
-                } else {
-                  setDialogState(() => isChanging = false);
-                  _showSnack(error);
-                }
+              Navigator.of(context).pushAndRemoveUntil(
+                MaterialPageRoute(builder: (_) => const EmailLoginScreen()),
+                (route) => false,
+              );
+            } else {
+              if (Navigator.of(dialogContext).canPop()) {
+                setDialogState(() => isChanging = false);
               }
+              _showSnack(error);
+            }
+          }
 
-              return AlertDialog(
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                backgroundColor: NavigoColors.lightorange,
-                title: Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: NavigoDecorations.iconCircleDecoration(
-                        NavigoColors.primaryOrange,
-                      ),
-                      child: const Icon(
-                        Icons.lock_outline,
-                        color: NavigoColors.primaryOrange,
-                        size: 20,
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Text(
-                      context.texts.t('changePassword'),
-                      style: NavigoTextStyles.titleSmall,
-                    ),
-                  ],
-                ),
-                content: SingleChildScrollView(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const SizedBox(height: 8),
-                      TextField(
-                        controller: currentPasswordController,
-                        obscureText: obscureCurrent,
-                        enabled: !isChanging,
-                        style: NavigoTextStyles.bodyMedium.copyWith(
-                          color: NavigoColors.textDark,
-                          fontWeight: FontWeight.w500,
-                        ),
-                        decoration: NavigoDecorations.kInputDecoration.copyWith(
-                          hintText: context.texts.t('currentPassword'),
-                          prefixIcon: const Icon(
-                            Icons.lock,
-                            color: NavigoColors.textMuted,
-                          ),
-                          suffixIcon: IconButton(
-                            icon: Icon(
-                              obscureCurrent
-                                  ? Icons.visibility_off
-                                  : Icons.visibility,
-                              color: NavigoColors.textMuted,
-                            ),
-                            onPressed: isChanging
-                                ? null
-                                : () {
-                                    setDialogState(
-                                      () => obscureCurrent = !obscureCurrent,
-                                    );
-                                  },
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 14),
-                      TextField(
-                        controller: newPasswordController,
-                        obscureText: obscureNew,
-                        enabled: !isChanging,
-                        style: NavigoTextStyles.bodyMedium.copyWith(
-                          color: NavigoColors.textDark,
-                          fontWeight: FontWeight.w500,
-                        ),
-                        decoration: NavigoDecorations.kInputDecoration.copyWith(
-                          hintText: context.texts.t('newPassword'),
-                          prefixIcon: const Icon(
-                            Icons.lock_open,
-                            color: NavigoColors.accentGreen,
-                          ),
-                          suffixIcon: IconButton(
-                            icon: Icon(
-                              obscureNew
-                                  ? Icons.visibility_off
-                                  : Icons.visibility,
-                              color: NavigoColors.textMuted,
-                            ),
-                            onPressed: isChanging
-                                ? null
-                                : () {
-                                    setDialogState(
-                                      () => obscureNew = !obscureNew,
-                                    );
-                                  },
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 14),
-                      TextField(
-                        controller: confirmPasswordController,
-                        obscureText: obscureConfirm,
-                        enabled: !isChanging,
-                        style: NavigoTextStyles.bodyMedium.copyWith(
-                          color: NavigoColors.textDark,
-                          fontWeight: FontWeight.w500,
-                        ),
-                        decoration: NavigoDecorations.kInputDecoration.copyWith(
-                          hintText: context.texts.t('confirmNewPassword'),
-                          prefixIcon: const Icon(
-                            Icons.lock_open,
-                            color: NavigoColors.accentGreen,
-                          ),
-                          suffixIcon: IconButton(
-                            icon: Icon(
-                              obscureConfirm
-                                  ? Icons.visibility_off
-                                  : Icons.visibility,
-                              color: NavigoColors.textMuted,
-                            ),
-                            onPressed: isChanging
-                                ? null
-                                : () {
-                                    setDialogState(
-                                      () => obscureConfirm = !obscureConfirm,
-                                    );
-                                  },
-                          ),
-                        ),
-                      ),
-                    ],
+          void closeDialog() {
+            FocusManager.instance.primaryFocus?.unfocus();
+            Navigator.of(dialogContext).pop();
+          }
+
+          return AlertDialog(
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(20),
+            ),
+            backgroundColor: NavigoColors.lightorange,
+            title: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: NavigoDecorations.iconCircleDecoration(
+                    NavigoColors.primaryOrange,
+                  ),
+                  child: const Icon(
+                    Icons.lock_outline,
+                    color: NavigoColors.primaryOrange,
+                    size: 20,
                   ),
                 ),
-                actions: [
-                  TextButton(
-                    onPressed: isChanging
-                        ? null
-                        : () => Navigator.of(dialogContext).pop(),
-                    child: Text(
-                      context.texts.t('cancel'),
-                      style: NavigoTextStyles.bodyMedium.copyWith(
-                        fontWeight: FontWeight.w600,
+                const SizedBox(width: 12),
+                Text(
+                  context.texts.t('changePassword'),
+                  style: NavigoTextStyles.titleSmall,
+                ),
+                const Spacer(),
+                IconButton(
+                  onPressed: isChanging ? null : closeDialog,
+                  icon: const Icon(
+                    Icons.close,
+                    color: NavigoColors.textMuted,
+                    size: 20,
+                  ),
+                ),
+              ],
+            ),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const SizedBox(height: 8),
+
+                  /// 🔴 CURRENT PASSWORD
+                  TextField(
+                    controller: currentPasswordController,
+                    obscureText: obscureCurrent,
+                    enabled: !isChanging,
+                    style: const TextStyle(color: Colors.black), // ✅ FIX
+                    cursorColor: Colors.black,
+                    decoration: NavigoDecorations.kInputDecoration.copyWith(
+                      hintText: context.texts.t('currentPassword'),
+                      hintStyle: const TextStyle(color: Colors.grey),
+                      prefixIcon: const Icon(
+                        Icons.lock,
                         color: NavigoColors.textMuted,
                       ),
+                      suffixIcon: IconButton(
+                        icon: Icon(
+                          obscureCurrent
+                              ? Icons.visibility_off
+                              : Icons.visibility,
+                          color: NavigoColors.textMuted,
+                        ),
+                        onPressed: isChanging
+                            ? null
+                            : () {
+                                setDialogState(() {
+                                  obscureCurrent = !obscureCurrent;
+                                });
+                              },
+                      ),
                     ),
                   ),
-                  ElevatedButton(
-                    onPressed: isChanging ? null : handleChangePassword,
-                    style: NavigoDecorations.kPrimaryButtonLargeStyle,
-                    child: isChanging
-                        ? const SizedBox(
-                            width: 20,
-                            height: 20,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              color: NavigoColors.textLight,
-                            ),
-                          )
-                        : Text(context.texts.t('change')),
+
+                  const SizedBox(height: 14),
+
+                  /// 🔴 NEW PASSWORD
+                  TextField(
+                    controller: newPasswordController,
+                    obscureText: obscureNew,
+                    enabled: !isChanging,
+                    style: const TextStyle(color: Colors.black), // ✅ FIX
+                    cursorColor: Colors.black,
+                    decoration: NavigoDecorations.kInputDecoration.copyWith(
+                      hintText: context.texts.t('newPassword'),
+                      hintStyle: const TextStyle(color: Colors.grey),
+                      prefixIcon: const Icon(
+                        Icons.lock_open,
+                        color: NavigoColors.accentGreen,
+                      ),
+                      suffixIcon: IconButton(
+                        icon: Icon(
+                          obscureNew
+                              ? Icons.visibility_off
+                              : Icons.visibility,
+                          color: NavigoColors.textMuted,
+                        ),
+                        onPressed: isChanging
+                            ? null
+                            : () {
+                                setDialogState(() {
+                                  obscureNew = !obscureNew;
+                                });
+                              },
+                      ),
+                    ),
+                  ),
+
+                  const SizedBox(height: 14),
+
+                  /// 🔴 CONFIRM PASSWORD
+                  TextField(
+                    controller: confirmPasswordController,
+                    obscureText: obscureConfirm,
+                    enabled: !isChanging,
+                    style: const TextStyle(color: Colors.black), // ✅ FIX
+                    cursorColor: Colors.black,
+                    decoration: NavigoDecorations.kInputDecoration.copyWith(
+                      hintText: context.texts.t('confirmNewPassword'),
+                      hintStyle: const TextStyle(color: Colors.grey),
+                      prefixIcon: const Icon(
+                        Icons.lock_open,
+                        color: NavigoColors.accentGreen,
+                      ),
+                      suffixIcon: IconButton(
+                        icon: Icon(
+                          obscureConfirm
+                              ? Icons.visibility_off
+                              : Icons.visibility,
+                          color: NavigoColors.textMuted,
+                        ),
+                        onPressed: isChanging
+                            ? null
+                            : () {
+                                setDialogState(() {
+                                  obscureConfirm = !obscureConfirm;
+                                });
+                              },
+                      ),
+                    ),
                   ),
                 ],
-              );
-            },
+              ),
+            ),
+            actions: [
+              ElevatedButton(
+                onPressed: isChanging ? null : handleChangePassword,
+                style: NavigoDecorations.kPrimaryButtonLargeStyle,
+                child: isChanging
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: NavigoColors.textLight,
+                        ),
+                      )
+                    : Text(context.texts.t('change')),
+              ),
+            ],
           );
         },
       );
-    } finally {
-      currentPasswordController.dispose();
-      newPasswordController.dispose();
-      confirmPasswordController.dispose();
-    }
-  }
+    },
+  );
+
+  currentPasswordController.dispose();
+  newPasswordController.dispose();
+  confirmPasswordController.dispose();
+}
 
   Widget _buildProfileImage({
     BoxFit fit = BoxFit.cover,

@@ -62,6 +62,7 @@ class AppTexts {
       'sendCode': 'Send Code',
       'pleaseEnterPhone': 'Please enter your phone number',
       'invalidPhone': 'Please enter a valid phone number',
+      'rememberMe': 'Remember Me',
       'codeSentTo': 'Code sent to',
       'phoneOtpSubtitle':
           "We'll send you a one-time code (OTP) to verify your number.",
@@ -439,6 +440,7 @@ class AppTexts {
       'sendCode': 'إرسال الرمز',
       'pleaseEnterPhone': 'يرجى إدخال رقم الهاتف',
       'invalidPhone': 'يرجى إدخال رقم هاتف صحيح',
+      'rememberMe': 'تذكرني',
       'codeSentTo': 'تم إرسال الرمز إلى',
       'phoneOtpSubtitle': 'سنرسل لك رمزاً لمرة واحدة (OTP) للتحقق من رقمك.',
       'enterPhoneNumberSnack': 'أدخل رقم الهاتف',

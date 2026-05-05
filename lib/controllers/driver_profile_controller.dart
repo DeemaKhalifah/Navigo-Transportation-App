@@ -5,10 +5,10 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_storage/firebase_storage.dart';
 
 import '../models/driver_status.dart';
 import '../services/driver_queue_repository.dart';
+import '../services/profile_image_storage_service.dart';
 
 class DriverProfileController extends ChangeNotifier {
   final TextEditingController nameController = TextEditingController();
@@ -16,9 +16,12 @@ class DriverProfileController extends ChangeNotifier {
 
   final ImagePicker _picker = ImagePicker();
   final DriverQueueRepository _queueRepo = DriverQueueRepository();
+  final ProfileImageStorageService _profileImageStorageService =
+      ProfileImageStorageService();
 
   File? image;
   String? imageUrl;
+  String? _resolvedImageUrl;
 
   bool isEditing = false;
   bool isLoading = true;
@@ -101,6 +104,9 @@ class DriverProfileController extends ChangeNotifier {
         nameController.text = '$firstName $lastName'.trim();
         phoneController.text = (data['phone'] ?? '').toString();
         imageUrl = data['image']?.toString();
+        _resolvedImageUrl = await _profileImageStorageService.getImageUrl(
+          imageUrl,
+        );
       }
 
       final driverSnap = await driverDocRef!.get();
@@ -136,16 +142,13 @@ class DriverProfileController extends ChangeNotifier {
     }
   }
 
-  Future<String?> _uploadProfileImage() async {
-    if (image == null || currentUser == null) return imageUrl;
-
-    final storageRef = FirebaseStorage.instance
-        .ref()
-        .child('profile_images')
-        .child('${currentUser!.uid}.jpg');
-
-    await storageRef.putFile(image!);
-    return storageRef.getDownloadURL();
+  Future<String?> _uploadProfileImageId() async {
+    if (currentUser == null) return null;
+    if (image == null) return imageUrl;
+    return _profileImageStorageService.uploadProfileImage(
+      uid: currentUser!.uid,
+      file: image!,
+    );
   }
 
   Future<String?> saveProfile() async {
@@ -165,13 +168,13 @@ class DriverProfileController extends ChangeNotifier {
       final firstName = names.isNotEmpty ? names.first : '';
       final lastName = names.length > 1 ? names.sublist(1).join(' ') : '';
 
-      final uploadedImageUrl = await _uploadProfileImage();
+      final uploadedImageId = await _uploadProfileImageId();
 
       await userDocRef!.set({
         'firstName': firstName,
         'lastName': lastName,
         'phone': phoneController.text.trim(),
-        'image': uploadedImageUrl,
+        'image': uploadedImageId,
         'role': 'driver',
         'updatedAt': FieldValue.serverTimestamp(),
       }, SetOptions(merge: true));
@@ -180,11 +183,12 @@ class DriverProfileController extends ChangeNotifier {
             'firstName': firstName,
             'lastName': lastName,
             'phone': phoneController.text.trim(),
-            'image': uploadedImageUrl,
+            'image': uploadedImageId,
             'updatedAt': FieldValue.serverTimestamp(),
           }, SetOptions(merge: true));
 
-      imageUrl = uploadedImageUrl;
+      imageUrl = uploadedImageId;
+      _resolvedImageUrl = await _profileImageStorageService.getImageUrl(imageUrl);
       isEditing = false;
 
       return null;
@@ -346,8 +350,8 @@ class DriverProfileController extends ChangeNotifier {
   ImageProvider get profileImageProvider {
     if (image != null) return FileImage(image!);
 
-    if (imageUrl != null && imageUrl!.isNotEmpty) {
-      return NetworkImage(imageUrl!);
+    if (_resolvedImageUrl != null && _resolvedImageUrl!.isNotEmpty) {
+      return NetworkImage(_resolvedImageUrl!);
     }
 
     return const AssetImage('assets/images/logo.png');

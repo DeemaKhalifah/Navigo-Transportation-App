@@ -425,6 +425,7 @@ class _TripHistoryDetailsSheetState extends State<_TripHistoryDetailsSheet> {
                     context,
                     MaterialPageRoute(
                       builder: (_) => PassengerHomeScreen(
+                        routeId: widget.slot.routeId,
                         routeStartPoint: startPoint,
                         routeEndPoint: endPoint,
                       ),

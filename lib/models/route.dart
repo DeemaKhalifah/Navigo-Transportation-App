@@ -51,7 +51,6 @@ class RouteModel {
       if (distanceKm != null) "distanceKm": distanceKm,
       if (distanceText != null) "distanceText": distanceText,
       if (routePolyline != null) "routePolyline": routePolyline,
-      if (routePath.isNotEmpty) "routePath": routePath,
       if (routeModule != null) "routeModule": routeModule,
     };
   }

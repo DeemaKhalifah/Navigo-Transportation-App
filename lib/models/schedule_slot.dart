@@ -90,11 +90,6 @@ class ScheduleSlot {
     if (routePolyline != null && routePolyline!.trim().isNotEmpty) {
       m['routePolyline'] = routePolyline;
     }
-    if (routePath.isNotEmpty) {
-      m['routePath'] = routePath
-          .map((point) => {'lat': point['lat'], 'lng': point['lng']})
-          .toList();
-    }
     if (routeModule != null && routeModule!.isNotEmpty) {
       m['routeModule'] = routeModule;
     }

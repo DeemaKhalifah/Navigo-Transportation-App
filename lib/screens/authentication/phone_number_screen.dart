@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../../localization/localization_x.dart';
+import '../../services/phone_login_storage_service.dart';
 import '../../theme/app_theme.dart';
 import 'otp_verification_screen.dart';
 import 'email_login.dart';
@@ -23,7 +24,29 @@ class PhoneNumberScreen extends StatefulWidget {
 
 class _PhoneNumberScreenState extends State<PhoneNumberScreen> {
   final TextEditingController _phoneController = TextEditingController();
+  final PhoneLoginStorageService _phoneLoginStorageService =
+      PhoneLoginStorageService();
   bool _isSending = false;
+  bool _rememberMe = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadRememberedPhoneNumber();
+  }
+
+  Future<void> _loadRememberedPhoneNumber() async {
+    final savedPhone =
+        await _phoneLoginStorageService.getRememberedPhoneNumber();
+    if (!mounted) return;
+
+    if (savedPhone != null && savedPhone.trim().isNotEmpty) {
+      _phoneController.text = savedPhone;
+      setState(() => _rememberMe = true);
+    } else {
+      setState(() => _rememberMe = false);
+    }
+  }
 
   Future<void> _sendOtp() async {
     final phoneNumber = _phoneController.text.trim();
@@ -35,6 +58,13 @@ class _PhoneNumberScreenState extends State<PhoneNumberScreen> {
       return;
     }
 
+    if (_rememberMe) {
+      await _phoneLoginStorageService.saveRememberedPhoneNumber(phoneNumber);
+    } else {
+      await _phoneLoginStorageService.clearRememberedPhoneNumber();
+    }
+
+    if (!mounted) return;
     setState(() => _isSending = true);
 
     try {
@@ -144,6 +174,20 @@ class _PhoneNumberScreenState extends State<PhoneNumberScreen> {
                                       onPressed: () => _phoneController.clear(),
                                     ),
                                   ),
+                            ),
+                            const SizedBox(height: 8),
+                            CheckboxListTile(
+                              value: _rememberMe,
+                              onChanged: (value) {
+                                setState(() => _rememberMe = value ?? false);
+                              },
+                              controlAffinity: ListTileControlAffinity.leading,
+                              contentPadding: EdgeInsets.zero,
+                              dense: true,
+                              title: Text(
+                                context.texts.t('rememberMe'),
+                                style: NavigoTextStyles.bodyMedium,
+                              ),
                             ),
                             const SizedBox(height: 25),
                             SizedBox(

@@ -9,7 +9,12 @@ import 'controllers/language_controller.dart';
 import 'firebase_options.dart';
 import 'localization/app_texts.dart';
 import 'navigation/app_navigator.dart';
-import 'screens/welcome_flow/welcome.dart';
+import 'screens/authentication/phone_number_screen.dart';
+import 'screens/authentication/signup_approval.dart';
+import 'screens/driver/driver_home_screen.dart';
+import 'screens/passenger/passenger_home_screen.dart';
+import 'screens/route_manager/route_schedule.dart';
+import 'services/auth_session_service.dart';
 import 'services/push_notification_service.dart';
 import 'theme/app_theme.dart';
 
@@ -123,22 +128,36 @@ class SplashScreen extends StatefulWidget {
 }
 
 class _SplashScreenState extends State<SplashScreen> {
+  final AuthSessionService _authSessionService = AuthSessionService();
+
   @override
   void initState() {
     super.initState();
-    startApp();
+    _startApp();
   }
 
-  Future<void> startApp() async {
-    await Future.delayed(const Duration(seconds: 3));
+  Future<void> _startApp() async {
+    AppSessionDestination destination = AppSessionDestination.phoneLogin;
+
+    try {
+      destination = await _authSessionService.resolveStartupDestination();
+    } catch (_) {
+      destination = AppSessionDestination.phoneLogin;
+    }
 
     if (!mounted) return;
 
-    Navigator.pushReplacement(
-      context,
-      MaterialPageRoute(
-        builder: (context) => const OnboardingScreen(),
-      ),
+    final Widget targetScreen = switch (destination) {
+      AppSessionDestination.passengerHome => const PassengerHomeScreen(),
+      AppSessionDestination.driverHome => const DriverHomeScreen(),
+      AppSessionDestination.driverApproval => const SignupApprovalScreen(),
+      AppSessionDestination.routeManagerHome => const RouteSchedule(),
+      AppSessionDestination.phoneLogin => const PhoneNumberScreen(),
+    };
+
+    Navigator.of(context).pushAndRemoveUntil(
+      MaterialPageRoute(builder: (_) => targetScreen),
+      (route) => false,
     );
   }
 
@@ -178,6 +197,15 @@ class _SplashScreenState extends State<SplashScreen> {
                 Text(
                   "Smart Transportation Platform",
                   style: NavigoTextStyles.bodyMedium,
+                ),
+                const SizedBox(height: 20),
+                const SizedBox(
+                  width: 24,
+                  height: 24,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2.4,
+                    color: NavigoColors.primaryOrange,
+                  ),
                 ),
               ],
             ),

@@ -14,7 +14,7 @@ Future<String?> resolveManagedRouteId() async {
 
   final firestore = FirebaseFirestore.instance;
 
-  final rmSnap = await firestore.collection('route_manager').doc(uid).get();
+  final rmSnap = await firestore.collection('route_manger').doc(uid).get();
   final fromRM = _nonEmptyRouteId(rmSnap.data()?['routeId']);
   if (fromRM != null) return fromRM;
 

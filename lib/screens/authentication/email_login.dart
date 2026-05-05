@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'package:navigo/controllers/app_controller_scope.dart';
 import '../../localization/localization_x.dart';
+import '../../services/phone_login_storage_service.dart';
 import '../../theme/app_theme.dart';
 import 'phone_number_screen.dart';
 import '../route_manager/route_schedule.dart';
@@ -16,9 +17,29 @@ class EmailLoginScreen extends StatefulWidget {
 class _EmailLoginScreenState extends State<EmailLoginScreen> {
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
+  final PhoneLoginStorageService _storageService = PhoneLoginStorageService();
 
   bool _obscurePassword = true;
   bool _localLoading = false;
+  bool _rememberMe = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadRememberedEmail();
+  }
+
+  Future<void> _loadRememberedEmail() async {
+    final savedEmail = await _storageService.getRememberedRouteManagerEmail();
+    if (!mounted) return;
+
+    if (savedEmail != null && savedEmail.trim().isNotEmpty) {
+      _emailController.text = savedEmail;
+      setState(() => _rememberMe = true);
+    } else {
+      setState(() => _rememberMe = false);
+    }
+  }
 
   @override
   void dispose() {
@@ -41,6 +62,13 @@ class _EmailLoginScreenState extends State<EmailLoginScreen> {
       );
       return;
     }
+
+    if (_rememberMe) {
+      await _storageService.saveRememberedRouteManagerEmail(email);
+    } else {
+      await _storageService.clearRememberedRouteManagerEmail();
+    }
+    if (!mounted) return;
 
     setState(() => _localLoading = true);
 
@@ -120,6 +148,7 @@ class _EmailLoginScreenState extends State<EmailLoginScreen> {
                                   ),
                                 ),
                           ),
+                         
 
                           const SizedBox(height: 16),
 
@@ -158,7 +187,24 @@ class _EmailLoginScreenState extends State<EmailLoginScreen> {
                                   ),
                                 ),
                           ),
-
+ const SizedBox(height: 8),
+                          CheckboxListTile(
+                            value: _rememberMe,
+                            onChanged: isLoading
+                                ? null
+                                : (value) {
+                                    setState(
+                                      () => _rememberMe = value ?? false,
+                                    );
+                                  },
+                            controlAffinity: ListTileControlAffinity.leading,
+                            contentPadding: EdgeInsets.zero,
+                            dense: true,
+                            title: Text(
+                              context.texts.t('rememberMe'),
+                              style: NavigoTextStyles.bodyMedium,
+                            ),
+                          ),
                           const SizedBox(height: 25),
 
                           SizedBox(

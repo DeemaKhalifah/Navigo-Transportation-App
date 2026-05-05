@@ -2,8 +2,10 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../services/local_storage_service.dart';
+import '../services/profile_image_storage_service.dart';
 import '../services/user_api_service.dart';
 
 /// Manages passenger profile editing state and operations.
@@ -13,8 +15,12 @@ class ProfileController extends ChangeNotifier {
   final TextEditingController phoneController = TextEditingController();
   final ImagePicker _picker = ImagePicker();
   final UserApiService _userApi = UserApiService();
+  final ProfileImageStorageService _profileImageStorageService =
+      ProfileImageStorageService();
 
   File? image;
+  String? imageId;
+  String? _resolvedImageUrl;
   bool isEditing = false;
   bool isSaving = false;
   bool isLoading = false;
@@ -38,6 +44,8 @@ class ProfileController extends ChangeNotifier {
         nameController.text =
             "${data['firstName'] ?? ''} ${data['lastName'] ?? ''}".trim();
         phoneController.text = data['phone'] ?? '';
+        imageId = data['image']?.toString();
+        _resolvedImageUrl = await _profileImageStorageService.getImageUrl(imageId);
       }
     } catch (e) {
       debugPrint("Error loading user data: $e");
@@ -78,6 +86,20 @@ class ProfileController extends ChangeNotifier {
         phone: phoneController.text.trim(),
       );
 
+      if (success && image != null) {
+        final uploadedImageId = await _profileImageStorageService
+            .uploadProfileImage(uid: currentUser!.uid, file: image!);
+        await FirebaseFirestore.instance
+            .collection('users')
+            .doc(currentUser!.uid)
+            .set({
+              'image': uploadedImageId,
+              'updatedAt': FieldValue.serverTimestamp(),
+            }, SetOptions(merge: true));
+        imageId = uploadedImageId;
+        _resolvedImageUrl = await _profileImageStorageService.getImageUrl(imageId);
+      }
+
       isSaving = false;
       notifyListeners();
       return success ? null : 'Failed to update profile';
@@ -91,6 +113,14 @@ class ProfileController extends ChangeNotifier {
   Future<void> logout() async {
     await LocalStorageService.clearSelectedLine();
     await FirebaseAuth.instance.signOut();
+  }
+
+  ImageProvider get profileImageProvider {
+    if (image != null) return FileImage(image!);
+    if (_resolvedImageUrl != null && _resolvedImageUrl!.isNotEmpty) {
+      return NetworkImage(_resolvedImageUrl!);
+    }
+    return const AssetImage("assets/images/logo.png");
   }
 
   @override

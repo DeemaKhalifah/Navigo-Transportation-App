@@ -390,9 +390,7 @@ class DriverLiveTripService {
           final startLng = _readLongitude(routeData, 'start');
           final endLat = _readLatitude(routeData, 'end');
           final endLng = _readLongitude(routeData, 'end');
-          final routePath = _parseRoutePath(
-            routeData['routePath'] ?? routeData['path'],
-          );
+          final routePolyline = (routeData['routePolyline'] ?? '').toString();
 
           return {
             'resolvedRouteId': resolvedRouteId,
@@ -405,7 +403,7 @@ class DriverLiveTripService {
             'startLng': startLng,
             'endLat': endLat,
             'endLng': endLng,
-            'routePath': routePath,
+            'routePolyline': routePolyline,
             'etaMinutes': routeData['etaMinutes'],
             'etaText': routeData['etaText'],
           };
@@ -674,19 +672,6 @@ class DriverLiveTripService {
     if (value is num) return value.toDouble();
     if (value is String) return double.tryParse(value);
     return null;
-  }
-
-  List<Map<String, double>> _parseRoutePath(dynamic raw) {
-    if (raw is! List) return const [];
-    final points = <Map<String, double>>[];
-    for (final item in raw) {
-      if (item is! Map) continue;
-      final lat = _toDouble(item['lat']);
-      final lng = _toDouble(item['lng']);
-      if (lat == null || lng == null) continue;
-      points.add({'lat': lat, 'lng': lng});
-    }
-    return points;
   }
 
   String lineText(RouteModel route) {

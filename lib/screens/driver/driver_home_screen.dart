@@ -11,6 +11,7 @@ import '../../models/trip_status.dart';
 import '../../models/driver_status.dart';
 import '../../services/driver_live_trip_service.dart';
 import '../../services/driver_trips_service.dart';
+import '../../services/google_route_path_service.dart';
 import '../../services/notification_service.dart';
 import '../../localization/localization_x.dart';
 import '../../theme/app_theme.dart';
@@ -58,6 +59,9 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
   String? _activeRouteId;
   String? _etaText;
   String? _tripLine;
+  String _activeRoutePolyline = '';
+  List<LatLng> _decodedTripPath = const [];
+  String? _locationStreamDriverId;
 
   // ── Passenger pin data ──────────────────────────────────────────────────────
   List<Map<String, dynamic>> _passengerPins = [];
@@ -185,15 +189,15 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
           final startLng = data['startLng'] as double?;
           final endLat = data['endLat'] as double?;
           final endLng = data['endLng'] as double?;
-          final routePath = <LatLng>[];
-          for (final point in data['routePath'] as List? ?? const []) {
-            if (point is! Map) continue;
-            final lat = point['lat'];
-            final lng = point['lng'];
-            if (lat is num && lng is num) {
-              routePath.add(LatLng(lat.toDouble(), lng.toDouble()));
-            }
+          final routePolyline = (data['routePolyline'] ?? '').toString();
+          if (routePolyline.trim().isNotEmpty &&
+              routePolyline != _activeRoutePolyline) {
+            _activeRoutePolyline = routePolyline;
+            _decodedTripPath = GoogleRoutePathService.decodePolyline(
+              routePolyline,
+            );
           }
+          final routePath = _decodedTripPath;
 
           _polylines.clear();
           if (routePath.isNotEmpty) {
@@ -225,7 +229,12 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
             toLat: endLat,
             toLng: endLng,
           );
-          if (mounted && !_isDisposed) setState(() => _etaText = eta);
+          if (mounted && !_isDisposed) {
+            final etaChanged = _etaText != eta;
+            if (etaChanged) {
+              setState(() => _etaText = eta);
+            }
+          }
         });
 
     _passengersSub = _liveService
@@ -240,6 +249,7 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
   void _stopLiveTracking() {
     _locationSub?.cancel();
     _locationSub = null;
+    _locationStreamDriverId = null;
     _liveDataSub?.cancel();
     _liveDataSub = null;
     _passengersSub?.cancel();
@@ -248,6 +258,8 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
     _activeRouteId = null;
     _tripLine = null;
     _etaText = null;
+    _activeRoutePolyline = '';
+    _decodedTripPath = const [];
     _passengerPins = [];
     _polylines.clear();
     _markers.removeWhere(
@@ -284,23 +296,7 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
       );
 
       _updateDriverMarker(LatLng(current.latitude, current.longitude));
-
-      _locationSub?.cancel();
-      _locationSub =
-          Geolocator.getPositionStream(
-            locationSettings: const LocationSettings(
-              accuracy: LocationAccuracy.high,
-              distanceFilter: 10,
-            ),
-          ).listen((pos) async {
-            if (_isDisposed) return;
-            await _liveService.updateDriverLocation(
-              driverId: driverId,
-              latitude: pos.latitude,
-              longitude: pos.longitude,
-            );
-            _updateDriverMarker(LatLng(pos.latitude, pos.longitude));
-          });
+      await _ensureDriverLocationStream(driverId);
     } catch (e) {
       debugPrint('GPS publish error: $e');
     } finally {
@@ -333,26 +329,38 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
           latitude: pos.latitude,
           longitude: pos.longitude,
         );
-
-        _locationSub ??=
-            Geolocator.getPositionStream(
-              locationSettings: const LocationSettings(
-                accuracy: LocationAccuracy.high,
-                distanceFilter: 10,
-              ),
-            ).listen((livePos) async {
-              if (_isDisposed) return;
-              await _liveService.updateDriverLocation(
-                driverId: driverId,
-                latitude: livePos.latitude,
-                longitude: livePos.longitude,
-              );
-              _updateDriverMarker(LatLng(livePos.latitude, livePos.longitude));
-            });
+        await _ensureDriverLocationStream(driverId);
       }
     } catch (e) {
       debugPrint('Location error: $e');
     }
+  }
+
+  Future<void> _ensureDriverLocationStream(String driverId) async {
+    final safeDriverId = driverId.trim();
+    if (safeDriverId.isEmpty) return;
+    if (_locationSub != null && _locationStreamDriverId == safeDriverId) {
+      return;
+    }
+    await _locationSub?.cancel();
+    _locationSub = null;
+    _locationStreamDriverId = safeDriverId;
+    debugPrint('[Geolocator] starting driver location stream');
+    _locationSub =
+        Geolocator.getPositionStream(
+          locationSettings: const LocationSettings(
+            accuracy: LocationAccuracy.high,
+            distanceFilter: 10,
+          ),
+        ).listen((pos) async {
+          if (_isDisposed) return;
+          await _liveService.updateDriverLocation(
+            driverId: safeDriverId,
+            latitude: pos.latitude,
+            longitude: pos.longitude,
+          );
+          _updateDriverMarker(LatLng(pos.latitude, pos.longitude));
+        });
   }
 
   void _updateDriverMarker(LatLng pos) {
@@ -426,6 +434,7 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
     try {
       _locationSub?.cancel();
       _locationSub = null;
+      _locationStreamDriverId = null;
 
       await _liveService.completeTrip(
         routeId: _activeRouteId ?? '',
@@ -453,6 +462,7 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
   // ── Build ────────────────────────────────────────────────────────────────────
   @override
   Widget build(BuildContext context) {
+    debugPrint('[Map] DriverHomeScreen build');
     final bool hasActiveTrip = _activeSlot != null;
     final bool isAvailable = _driverStatus == DriverStatus.available;
     final bool isOffline = _driverStatus == DriverStatus.offline;

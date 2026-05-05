@@ -86,11 +86,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
     double? width,
     double? height,
   }) {
-    final imageProvider = _controller.image != null
-        ? FileImage(_controller.image!)
-        : const AssetImage("assets/images/logo.png") as ImageProvider;
-
-    return Image(image: imageProvider, fit: fit, width: width, height: height);
+    return Image(
+      image: _controller.profileImageProvider,
+      fit: fit,
+      width: width,
+      height: height,
+    );
   }
 
   @override
