@@ -4,7 +4,6 @@ import 'package:flutter/services.dart';
 import '../../localization/localization_x.dart';
 import '../../services/phone_login_storage_service.dart';
 import '../../theme/app_theme.dart';
-import '../../utils/form_validation.dart';
 import '../../widgets/app_message.dart';
 import '../../widgets/responsive.dart';
 import 'otp_verification_screen.dart';
@@ -33,6 +32,7 @@ class _PhoneNumberScreenState extends State<PhoneNumberScreen> {
       PhoneLoginStorageService();
   bool _isSending = false;
   bool _rememberMe = false;
+  int? _resendToken;
 
   @override
   void initState() {
@@ -46,17 +46,10 @@ class _PhoneNumberScreenState extends State<PhoneNumberScreen> {
     if (!mounted) return;
 
     if (savedPhone != null && savedPhone.trim().isNotEmpty) {
-      final text = savedPhone.trim();
-      if (text.startsWith('+970') && text.length >= 13) {
-        _phonePrefix = '+970';
-        _phoneDigitsController.text = text.substring(4);
-      } else if (text.startsWith('+972') && text.length >= 13) {
-        _phonePrefix = '+972';
-        _phoneDigitsController.text = text.substring(4);
-      } else {
-        // Fallback: keep only digits, max 9.
-        _phoneDigitsController.text =
-            text.replaceAll(RegExp(r'\D'), '').substring(0, 9);
+      final formatted = _formatPhoneForFirebase(savedPhone);
+      if (formatted != null && formatted.startsWith('+')) {
+        _phonePrefix = formatted.startsWith('+972') ? '+972' : '+970';
+        _phoneDigitsController.text = formatted.substring(4);
       }
       setState(() => _rememberMe = true);
     } else {
@@ -64,24 +57,91 @@ class _PhoneNumberScreenState extends State<PhoneNumberScreen> {
     }
   }
 
-  String get _fullPhoneNumber =>
-      '$_phonePrefix${_phoneDigitsController.text.trim()}';
+  String? _formatPhoneForFirebase(String raw) {
+    final cleaned = raw
+        .trim()
+        .replaceAll(RegExp(r'[\s\-\(\)\[\]\{\}]'), '');
+
+    // Accept already formatted E.164-style values.
+    if (cleaned.startsWith('+970') || cleaned.startsWith('+972')) {
+      return cleaned;
+    }
+
+    // Accept local Palestinian mobile formats:
+    // 059xxxxxxxx -> +97059xxxxxxx
+    // 59xxxxxxxx  -> +97059xxxxxxx
+    if (cleaned.startsWith('059')) {
+      return '+970${cleaned.substring(1)}';
+    }
+    if (cleaned.startsWith('59')) {
+      return '+970$cleaned';
+    }
+
+    // Fallback: if user used the prefix dropdown + entered digits.
+    final digitsOnly = cleaned.replaceAll(RegExp(r'\D'), '');
+    if (digitsOnly.isNotEmpty) {
+      if (digitsOnly.startsWith('059') && digitsOnly.length >= 10) {
+        return '+970${digitsOnly.substring(1)}';
+      }
+      if (digitsOnly.startsWith('59') && digitsOnly.length >= 9) {
+        return '$_phonePrefix${digitsOnly.substring(0, 9)}';
+      }
+      if (digitsOnly.length == 9) {
+        return '$_phonePrefix$digitsOnly';
+      }
+    }
+
+    return null;
+  }
+
+  String _rawPhoneInput() {
+    // "Raw" input in this UI is prefix + digits; still log it to help debugging.
+    return '$_phonePrefix${_phoneDigitsController.text}';
+  }
+
+  String? _validatePalestinianMobile(String formatted) {
+    // +97059xxxxxxx or +97259xxxxxxx (9 digits after country code).
+    final ok = RegExp(r'^\+(970|972)59\d{7}$').hasMatch(formatted);
+    return ok ? null : 'Invalid phone number. Use +97059xxxxxxx or +97259xxxxxxx';
+  }
+
+  void _showPhoneErrorForCode(String code) {
+    final message = switch (code) {
+      'invalid-phone-number' => 'Invalid phone number.',
+      'app-not-authorized' => 'App is not authorized for phone auth.',
+      'captcha-check-failed' => 'Captcha check failed. Try again.',
+      'too-many-requests' => 'Too many requests. Please try later.',
+      _ => 'Failed to send OTP. Please try again.',
+    };
+    AppMessage.showError(context, message);
+  }
 
   Future<void> _sendOtp() async {
-    final phoneNumber = _fullPhoneNumber;
+    final rawPhone = _rawPhoneInput();
+    final rawDigits = _phoneDigitsController.text;
+    final candidate = rawDigits.startsWith('0')
+        ? rawDigits
+        : '$_phonePrefix$rawDigits';
+    final formattedPhone = _formatPhoneForFirebase(candidate) ?? '';
+
+    debugPrint('OTP raw phone: $rawPhone');
+    debugPrint('OTP formatted phone: $formattedPhone');
 
     if (_phoneDigitsController.text.trim().isEmpty) {
       AppMessage.showError(context, context.texts.t('enterPhoneNumberSnack'));
       return;
     }
 
-    if (AppFormValidators.palestinianPhone(context, phoneNumber) != null) {
-      AppMessage.showError(context, context.texts.t('enterPhoneNumberSnack'));
+    final formatError = formattedPhone.isEmpty
+        ? 'Invalid phone number.'
+        : _validatePalestinianMobile(formattedPhone);
+    if (formatError != null) {
+      AppMessage.showError(context, formatError);
       return;
     }
 
     if (_rememberMe) {
-      await _phoneLoginStorageService.saveRememberedPhoneNumber(phoneNumber);
+      await _phoneLoginStorageService.saveRememberedPhoneNumber(formattedPhone);
     } else {
       await _phoneLoginStorageService.clearRememberedPhoneNumber();
     }
@@ -91,27 +151,54 @@ class _PhoneNumberScreenState extends State<PhoneNumberScreen> {
 
     try {
       await FirebaseAuth.instance.verifyPhoneNumber(
-        phoneNumber: phoneNumber,
-        verificationCompleted: (PhoneAuthCredential credential) async {},
+        phoneNumber: formattedPhone,
+        verificationCompleted: (PhoneAuthCredential credential) async {
+          debugPrint('OTP verificationCompleted for $formattedPhone');
+          try {
+            await FirebaseAuth.instance.signInWithCredential(credential);
+            if (!mounted) return;
+            Navigator.pushReplacement(
+              context,
+              MaterialPageRoute(
+                builder: (_) => OtpVerificationScreen(
+                  phoneNumber: formattedPhone,
+                  verificationId: '',
+                  resendToken: _resendToken,
+                  fullName: widget.fullName,
+                  role: widget.role,
+                  driverData: widget.driverData,
+                  autoCredential: credential,
+                ),
+              ),
+            );
+          } on FirebaseAuthException catch (e) {
+            debugPrint('verificationCompleted exception code: ${e.code}');
+            debugPrint('verificationCompleted exception message: ${e.message}');
+            if (!mounted) return;
+            _showPhoneErrorForCode(e.code);
+          }
+        },
         verificationFailed: (FirebaseAuthException e) {
+          debugPrint('verifyPhoneNumber failed code: ${e.code}');
+          debugPrint('verifyPhoneNumber failed message: ${e.message}');
           if (!mounted) return;
           setState(() => _isSending = false);
-          AppMessage.showError(
-            context,
-            '${context.texts.t('errorLabel')}: ${e.message ?? e.code}',
-          );
+          _showPhoneErrorForCode(e.code);
         },
         codeSent: (String verificationId, int? resendToken) {
           if (!mounted) return;
 
+          debugPrint('OTP codeSent verificationId: $verificationId');
           setState(() => _isSending = false);
+          _resendToken = resendToken;
 
           Navigator.push(
             context,
             MaterialPageRoute(
               builder: (_) => OtpVerificationScreen(
-                phoneNumber: phoneNumber,
+                phoneNumber: formattedPhone,
                 verificationId: verificationId,
+                resendToken: resendToken,
                 fullName: widget.fullName,
                 role: widget.role,
                 driverData: widget.driverData,
@@ -120,6 +207,7 @@ class _PhoneNumberScreenState extends State<PhoneNumberScreen> {
           );
         },
         codeAutoRetrievalTimeout: (String verificationId) {
+          debugPrint('OTP codeAutoRetrievalTimeout verificationId: $verificationId');
           if (!mounted) return;
           setState(() => _isSending = false);
         },

@@ -3,6 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:flutter/services.dart';
 
 import '../../localization/localization_x.dart';
 import '../../theme/app_theme.dart';
@@ -17,17 +18,21 @@ import 'signup_approval.dart';
 class OtpVerificationScreen extends StatefulWidget {
   final String phoneNumber;
   final String verificationId;
+  final int? resendToken;
   final String? fullName;
   final String? role;
   final Map<String, dynamic>? driverData;
+  final PhoneAuthCredential? autoCredential;
 
   const OtpVerificationScreen({
     super.key,
     required this.phoneNumber,
     required this.verificationId,
+    this.resendToken,
     this.fullName,
     this.role,
     this.driverData,
+    this.autoCredential,
   });
 
   @override
@@ -38,6 +43,8 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
   final PassengerTripRepository _passengerTripRepository =
       PassengerTripRepository();
 
+  late String _verificationId;
+  int? _resendToken;
   final List<TextEditingController> _otpControllers = List.generate(
     6,
     (_) => TextEditingController(),
@@ -45,6 +52,23 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
   final List<FocusNode> _focusNodes = List.generate(6, (_) => FocusNode());
 
   bool _isLoading = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _verificationId = widget.verificationId;
+    _resendToken = widget.resendToken;
+
+    debugPrint('OTP screen phone: ${widget.phoneNumber}');
+    debugPrint('OTP screen initial verificationId: $_verificationId');
+
+    final auto = widget.autoCredential;
+    if (auto != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) async {
+        await _signInAndContinue(autoVerifiedCredential: auto);
+      });
+    }
+  }
 
   Future<void> _capturePassengerLoginLocation() async {
     try {
@@ -205,30 +229,16 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
     }
   }
 
-  Future<void> _onContinue() async {
+  Future<void> _signInAndContinue({
+    required PhoneAuthCredential autoVerifiedCredential,
+    String? otp,
+  }) async {
     final texts = context.texts;
-    final otp = _otpControllers.map((e) => e.text).join().trim();
-
-    if (otp.length != 6) {
-      AppMessage.showError(context, texts.t('validSixDigitOtp'));
-      return;
-    }
-
-    if (widget.verificationId.trim().isEmpty) {
-      AppMessage.showError(context, texts.t('verificationIdMissing'));
-      return;
-    }
-
     setState(() => _isLoading = true);
 
     try {
-      final credential = PhoneAuthProvider.credential(
-        verificationId: widget.verificationId,
-        smsCode: otp,
-      );
-
       final userCredential = await FirebaseAuth.instance.signInWithCredential(
-        credential,
+        autoVerifiedCredential,
       );
 
       final user = userCredential.user;
@@ -352,15 +362,15 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
         AppMessage.showError(context, texts.t('userRoleNotFound'));
       }
     } on FirebaseAuthException catch (e) {
-      String message = e.message ?? texts.t('verificationFailed');
+      debugPrint('OTP sign-in exception code: ${e.code}');
+      debugPrint('OTP sign-in exception message: ${e.message}');
 
-      if (e.code == 'invalid-verification-code') {
-        message = texts.t('otpIncorrect');
-      } else if (e.code == 'session-expired') {
-        message = texts.t('otpExpired');
-      } else if (e.code == 'invalid-verification-id') {
-        message = texts.t('verificationSessionInvalid');
-      }
+      final message = switch (e.code) {
+        'invalid-verification-code' => 'Invalid verification code.',
+        'session-expired' => 'Session expired. Please resend the code.',
+        'too-many-requests' => 'Too many requests. Please try later.',
+        _ => e.message ?? texts.t('verificationFailed'),
+      };
 
       if (!mounted) return;
       AppMessage.showError(context, message);
@@ -375,8 +385,103 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
     }
   }
 
-  void _resendCode() {
-    AppMessage.showInfo(context, context.texts.t('resendNotImplemented'));
+  Future<void> _onContinue() async {
+    final texts = context.texts;
+    final otp = _otpControllers.map((e) => e.text).join().trim();
+
+    if (otp.length != 6) {
+      AppMessage.showError(context, texts.t('validSixDigitOtp'));
+      return;
+    }
+
+    if (_verificationId.trim().isEmpty) {
+      AppMessage.showError(context, texts.t('verificationIdMissing'));
+      return;
+    }
+
+    setState(() => _isLoading = true);
+
+    try {
+      final credential = PhoneAuthProvider.credential(
+        verificationId: _verificationId,
+        smsCode: otp,
+      );
+      await _signInAndContinue(autoVerifiedCredential: credential, otp: otp);
+    } on FirebaseAuthException catch (e) {
+      debugPrint('OTP continue exception code: ${e.code}');
+      debugPrint('OTP continue exception message: ${e.message}');
+
+      final message = switch (e.code) {
+        'invalid-verification-code' => 'Invalid verification code.',
+        'session-expired' => 'Session expired. Please resend the code.',
+        'too-many-requests' => 'Too many requests. Please try later.',
+        _ => e.message ?? texts.t('verificationFailed'),
+      };
+
+      if (!mounted) return;
+      AppMessage.showError(context, message);
+    } catch (e) {
+      debugPrint('OTP verification error: $e');
+      if (!mounted) return;
+      AppMessage.showError(context, '${texts.t('errorLabel')}: $e');
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    }
+  }
+
+  void _showResendErrorForCode(String code) {
+    final message = switch (code) {
+      'invalid-phone-number' => 'Invalid phone number.',
+      'app-not-authorized' => 'App is not authorized for phone auth.',
+      'captcha-check-failed' => 'Captcha check failed. Try again.',
+      'too-many-requests' => 'Too many requests. Please try later.',
+      _ => 'Failed to resend code. Please try again.',
+    };
+    AppMessage.showError(context, message);
+  }
+
+  Future<void> _resendCode() async {
+    if (_isLoading) return;
+
+    setState(() => _isLoading = true);
+    try {
+      await FirebaseAuth.instance.verifyPhoneNumber(
+        phoneNumber: widget.phoneNumber,
+        forceResendingToken: _resendToken,
+        verificationCompleted: (PhoneAuthCredential credential) async {
+          debugPrint('OTP resend verificationCompleted');
+          await _signInAndContinue(autoVerifiedCredential: credential);
+        },
+        verificationFailed: (FirebaseAuthException e) {
+          debugPrint('OTP resend failed code: ${e.code}');
+          debugPrint('OTP resend failed message: ${e.message}');
+          if (!mounted) return;
+          _showResendErrorForCode(e.code);
+        },
+        codeSent: (String verificationId, int? resendToken) {
+          debugPrint('OTP resend codeSent verificationId: $verificationId');
+          if (!mounted) return;
+          setState(() {
+            _verificationId = verificationId;
+            _resendToken = resendToken;
+            _isLoading = false;
+          });
+          AppMessage.showInfo(context, context.texts.t('codeResent'));
+        },
+        codeAutoRetrievalTimeout: (String verificationId) {
+          debugPrint('OTP resend timeout verificationId: $verificationId');
+          if (!mounted) return;
+          setState(() => _isLoading = false);
+        },
+      );
+    } catch (e) {
+      debugPrint('OTP resend error: $e');
+      if (!mounted) return;
+      AppMessage.showError(context, '${context.texts.t('errorLabel')}: $e');
+      setState(() => _isLoading = false);
+    }
   }
 
   Widget _buildOtpTextField(int index) {
@@ -389,6 +494,10 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
         textAlign: TextAlign.center,
         textAlignVertical: TextAlignVertical.center,
         maxLength: 1,
+        inputFormatters: [
+          FilteringTextInputFormatter.digitsOnly,
+          LengthLimitingTextInputFormatter(1),
+        ],
         style: NavigoTextStyles.fieldText.copyWith(fontWeight: FontWeight.bold),
         decoration: InputDecoration(
           counterText: "",
