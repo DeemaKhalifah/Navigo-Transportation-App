@@ -602,7 +602,7 @@ class _AddScheduleSlotScreenState extends State<AddScheduleSlotScreen> {
                                   : null;
 
                               return DropdownButtonFormField<String>(
-                                value: selectedCapacity,
+                                initialValue: selectedCapacity,
                                 decoration: NavigoDecorations.kInputDecoration,
                                 style: NavigoTextStyles.fieldText,
                                 items: capacityItems,

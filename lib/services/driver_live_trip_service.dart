@@ -8,14 +8,20 @@ import '../controllers/driver_proximity_controller.dart';
 import '../models/driver_status.dart';
 import '../models/route.dart';
 import '../models/schedule_slot.dart';
+import 'route_driver_queue_service.dart';
+import 'slot_driver_assignment_service.dart';
 
 class DriverLiveTripService {
   DriverLiveTripService({FirebaseFirestore? firestore, FirebaseAuth? auth})
     : _db = firestore ?? FirebaseFirestore.instance,
-      _auth = auth ?? FirebaseAuth.instance;
+      _auth = auth ?? FirebaseAuth.instance,
+      _queueSvc = RouteDriverQueueService(firestore: firestore),
+      _slotAssign = SlotDriverAssignmentService(firestore: firestore);
 
   final FirebaseFirestore _db;
   final FirebaseAuth _auth;
+  final RouteDriverQueueService _queueSvc;
+  final SlotDriverAssignmentService _slotAssign;
   final DriverProximityController _proximityController =
       DriverProximityController();
 
@@ -216,6 +222,9 @@ class DriverLiveTripService {
       'currentRouteId': FieldValue.delete(),
       'currentTripId': FieldValue.delete(),
     }, SetOptions(merge: true));
+
+    await _queueSvc.syncQueueWithOnlineAvailableDrivers(resolvedRouteId);
+    await _slotAssign.autoAssignUpcomingUnassignedSlots(routeId: resolvedRouteId);
   }
 
   Future<void> cancelTrip({
@@ -286,6 +295,9 @@ class DriverLiveTripService {
       'currentRouteId': FieldValue.delete(),
       'currentTripId': FieldValue.delete(),
     }, SetOptions(merge: true));
+
+    await _queueSvc.syncQueueWithOnlineAvailableDrivers(resolvedRouteId);
+    await _slotAssign.autoAssignUpcomingUnassignedSlots(routeId: resolvedRouteId);
   }
 
   Future<void> updateDriverLocation({

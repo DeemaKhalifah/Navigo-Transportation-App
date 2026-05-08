@@ -66,6 +66,18 @@ class ScheduleSlot {
   DateTime get serviceDate =>
       DateTime(departureAt.year, departureAt.month, departureAt.day);
 
+  static String normalizeVehicleType(String? value) {
+    final v = (value ?? '')
+        .toLowerCase()
+        .replaceAll(RegExp(r'[\s_-]+'), '')
+        .trim();
+
+    if (v.contains('micro')) return 'microbus';
+    if (v.contains('bus') && !v.contains('micro')) return 'bus';
+
+    return v;
+  }
+
   Map<String, dynamic> toMap() {
     final m = <String, dynamic>{
       'slotId': slotId,
@@ -73,8 +85,9 @@ class ScheduleSlot {
       'departureAt': Timestamp.fromDate(departureAt),
       'arrivalAt': Timestamp.fromDate(arrivalAt),
       'capacity': capacity,
-      'vehicleType': vehicleType,
-      'driverId': driverId,
+      'vehicleType': normalizeVehicleType(vehicleType),
+      // Canonical unassigned value in Firestore is null (never empty string).
+      'driverId': driverId.trim().isEmpty ? null : driverId.trim(),
       'passengersIds': passengerBookings,
       'status': status, // ✅ added
     };
@@ -116,7 +129,7 @@ class ScheduleSlot {
       arrivalAt: arrivalAt,
       price: (map['price'] as num?)?.toDouble(),
       capacity: (map['capacity'] as num?)?.toInt() ?? 0,
-      vehicleType: map['vehicleType'] as String? ?? 'bus',
+      vehicleType: normalizeVehicleType(map['vehicleType'] as String? ?? 'bus'),
       driverId: map['driverId'] as String? ?? '',
       passengerBookings: _parsePassengerBookings(map['passengersIds']),
       frequencyMinutes: (map['frequencyMinutes'] as num?)?.toInt(),

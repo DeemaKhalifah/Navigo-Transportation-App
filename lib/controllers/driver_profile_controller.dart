@@ -251,7 +251,11 @@ class DriverProfileController extends ChangeNotifier {
 
       // Queue stores `drivers/{docId}` ids (not auth uid), because drivers may
       // be saved under an auto-id document with `userId == uid`.
-      await _queueRepo.joinQueue(routeId, driverDocRef!.id);
+      await _queueRepo.onDriverStatusUpdated(
+        routeId: routeId,
+        driverId: driverDocRef!.id,
+        status: DriverStatus.available,
+      );
 
       driverStatus = DriverStatus.available;
       return null;
@@ -302,7 +306,11 @@ class DriverProfileController extends ChangeNotifier {
           }, SetOptions(merge: true));
 
       if (routeId != null && routeId.isNotEmpty) {
-        await _queueRepo.leaveQueue(routeId, driverDocRef!.id);
+        await _queueRepo.onDriverStatusUpdated(
+          routeId: routeId,
+          driverId: driverDocRef!.id,
+          status: DriverStatus.offline,
+        );
       }
 
       driverStatus = DriverStatus.offline;
@@ -328,7 +336,11 @@ class DriverProfileController extends ChangeNotifier {
         final routeId = driverSnap.data()?['routeId']?.toString();
 
         if (routeId != null && routeId.isNotEmpty) {
-          await _queueRepo.leaveQueue(routeId, ref.id);
+          await _queueRepo.onDriverStatusUpdated(
+            routeId: routeId,
+            driverId: ref.id,
+            status: DriverStatus.offline,
+          );
         }
 
         await ref.set({

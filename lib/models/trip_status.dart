@@ -2,6 +2,7 @@
 abstract class TripStatus {
   static const all = 'all';
   static const scheduled = 'scheduled';
+  static const waitingDriver = 'waiting_driver';
   static const completed = 'completed';
   static const cancelled = 'cancelled';
   static const onTrip = 'onTrip';
@@ -9,6 +10,7 @@ abstract class TripStatus {
   static bool isValid(String? s) {
     return s == all ||
         s == scheduled ||
+        s == waitingDriver ||
         s == completed ||
         s == cancelled ||
         s == onTrip;
@@ -25,6 +27,7 @@ abstract class TripStatus {
 
     if (s == 'all') return all;
     if (s == 'scheduled') return scheduled;
+    if (s == 'waitingdriver') return waitingDriver;
     if (s == 'completed') return completed;
     if (s == 'cancelled') return cancelled;
     if (s == 'ontrip') return onTrip;
@@ -38,6 +41,8 @@ abstract class TripStatus {
     switch (normalize(status)) {
       case scheduled:
         return 'Scheduled';
+      case waitingDriver:
+        return 'Waiting Driver';
       case completed:
         return 'Completed';
       case cancelled:

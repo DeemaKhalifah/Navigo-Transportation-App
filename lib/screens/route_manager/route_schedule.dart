@@ -34,6 +34,7 @@ class _RouteScheduleState extends State<RouteSchedule> {
   String _selectedType = 'bus';
   bool _autoAssignBusy = false;
   DateTime _lastAutoAssign = DateTime.fromMillisecondsSinceEpoch(0);
+  bool _queueRefreshing = false;
 
   String? _routeId;
   RouteModel? _route;
@@ -182,6 +183,20 @@ class _RouteScheduleState extends State<RouteSchedule> {
     }
   }
 
+  Future<void> _refreshQueueNow(String routeId) async {
+    if (_queueRefreshing) return;
+    _queueRefreshing = true;
+    try {
+      await _queueSvc.syncQueueWithOnlineAvailableDrivers(routeId);
+      await _autoAssignNow();
+    } catch (e) {
+      debugPrint('Queue refresh failed: $e');
+    } finally {
+      _queueRefreshing = false;
+      if (mounted) setState(() {});
+    }
+  }
+
   void _openDriverQueueBottomSheet() {
     final rid = _routeId;
     if (rid == null) return;
@@ -233,6 +248,20 @@ class _RouteScheduleState extends State<RouteSchedule> {
                         ),
                       ),
                       IconButton(
+                        onPressed: _queueRefreshing
+                            ? null
+                            : () => _refreshQueueNow(rid),
+                        icon: _queueRefreshing
+                            ? const SizedBox(
+                                width: 16,
+                                height: 16,
+                                child: CircularProgressIndicator(strokeWidth: 2),
+                              )
+                            : const Icon(Icons.refresh),
+                        color: NavigoColors.accentGreen,
+                        tooltip: 'Refresh queue',
+                      ),
+                      IconButton(
                         onPressed: () => Navigator.pop(ctx),
                         icon: const Icon(Icons.close),
                         color: NavigoColors.textMuted,
@@ -269,6 +298,36 @@ class _RouteScheduleState extends State<RouteSchedule> {
     );
   }
 
+  bool _matchesSelectedType(String rawVehicleType) {
+    final normalized = rawVehicleType.trim().toLowerCase().replaceAll(
+      RegExp(r'[\s_-]+'),
+      '',
+    );
+    if (_selectedType == 'bus') {
+      return normalized == 'bus';
+    }
+    if (_selectedType == 'micro') {
+      return normalized == 'micro' || normalized == 'microbus';
+    }
+    return false;
+  }
+
+  String _vehicleTypeLabel(ScheduleSlot slot) {
+    final raw = slot.vehicleType.trim();
+    final normalized = raw.toLowerCase().replaceAll(
+      RegExp(r'[\s_-]+'),
+      '',
+    );
+
+    if (normalized == 'bus') return context.texts.t('bus');
+    if (normalized == 'micro' || normalized == 'microbus') {
+      return context.texts.t('microBus');
+    }
+
+    // Fallback to Firestore value for any custom/new vehicle types.
+    return raw.isEmpty ? context.texts.t('bus') : raw;
+  }
+
   Widget _buildDriverQueuePanel(String routeId) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -289,6 +348,9 @@ class _RouteScheduleState extends State<RouteSchedule> {
           builder: (context, qSnap) {
             final ids = qSnap.data ?? [];
             if (ids.isEmpty) {
+              // Retry once when stream shows empty, to rebuild queue from driver
+              // statuses and avoid stale "empty queue" UI.
+              unawaited(_refreshQueueNow(routeId));
               return Padding(
                 padding: const EdgeInsets.symmetric(vertical: 12),
                 child: Text(
@@ -448,9 +510,7 @@ class _RouteScheduleState extends State<RouteSchedule> {
                   ),
                   const SizedBox(height: 6),
                   NavigoDecorations.statusChip(
-                    label: slot.vehicleType == 'bus'
-                        ? context.texts.t('bus')
-                        : context.texts.t('microBus'),
+                    label: _vehicleTypeLabel(slot),
                     color: NavigoColors.primaryOrange,
                     padding: const EdgeInsets.symmetric(
                       horizontal: 8,
@@ -640,7 +700,7 @@ class _RouteScheduleState extends State<RouteSchedule> {
                   });
 
                   final filtered = snapshot.data!
-                      .where((s) => s.vehicleType == _selectedType)
+                      .where((s) => _matchesSelectedType(s.vehicleType))
                       .toList();
 
                   if (filtered.isEmpty) {

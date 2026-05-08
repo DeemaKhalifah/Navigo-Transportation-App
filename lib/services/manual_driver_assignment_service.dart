@@ -37,14 +37,25 @@ class ManualDriverAssignmentService {
         throw StateError('Driver not found');
       }
       final newData = newSnap.data()!;
-      if (newData['status'] != DriverStatus.available) {
+      final newStatus = DriverStatus.normalize(newData['status'] as String?);
+      if (newStatus != DriverStatus.available &&
+          newStatus != DriverStatus.assigned) {
         throw StateError('Driver is not available');
       }
       if ((newData['routeId'] as String? ?? '') != routeId) {
         throw StateError('Driver is not assigned to this route');
       }
+      final newVehicleType = (newData['vehicleType'] as String? ?? '').trim();
 
       final slotMap = Map<String, dynamic>.from(list[idx]);
+      final slotStatus = (slotMap['status'] as String? ?? '').trim();
+      if (slotStatus != 'scheduled') {
+        throw StateError('Only scheduled trips can be assigned');
+      }
+      final slotVehicleType = (slotMap['vehicleType'] as String? ?? '').trim();
+      if (slotVehicleType != newVehicleType) {
+        throw StateError('Vehicle type mismatch');
+      }
       final oldId = slotMap['driverId'] as String? ?? '';
       if (oldId.isNotEmpty && oldId != newDriverId) {
         txn.update(drivers.doc(oldId), {'status': DriverStatus.available});
@@ -55,6 +66,7 @@ class ManualDriverAssignmentService {
 
       final q = RouteDriverQueueService.parseIds(rData['driverQueueIds']);
       q.removeWhere((id) => id == newDriverId);
+      q.add(newDriverId);
 
       txn.update(routeRef, {'scheduleSlots': list, 'driverQueueIds': q});
       txn.update(newRef, {'status': DriverStatus.assigned});
