@@ -10,8 +10,8 @@ import '../../services/passenger_trip_repository.dart';
 import '../passenger/passenger_home_screen.dart';
 import '../driver/driver_home_screen.dart';
 import '../../models/driver_status.dart';
-import '../../models/vehicle.dart';
 import '../../services/vehicle_seat_count.dart';
+import '../../widgets/app_message.dart';
 import 'signup_approval.dart';
 
 class OtpVerificationScreen extends StatefulWidget {
@@ -81,144 +81,141 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
     super.dispose();
   }
 
- Future<void> _handleDriverFlow({
-  required String uid,
-  required String firstName,
-  required String lastName,
-}) async {
-  final driverInfo = widget.driverData ?? {};
-  final fs = FirebaseFirestore.instance;
+  Future<void> _handleDriverFlow({
+    required String uid,
+    required String firstName,
+    required String lastName,
+  }) async {
+    final driverInfo = widget.driverData ?? {};
+    final fs = FirebaseFirestore.instance;
 
-  String vehicleId = (driverInfo['vehicleId'] as String?)?.trim() ?? '';
-  final String plate = (driverInfo['plateNumber'] as String?)?.trim() ?? '';
+    String vehicleId = (driverInfo['vehicleId'] as String?)?.trim() ?? '';
+    final String plate = (driverInfo['plateNumber'] as String?)?.trim() ?? '';
 
-  final String vehicleType =
-      (driverInfo['vehicleType'] as String?)?.trim().isNotEmpty == true
-          ? (driverInfo['vehicleType'] as String).trim()
-          : 'bus';
+    final String vehicleType =
+        (driverInfo['vehicleType'] as String?)?.trim().isNotEmpty == true
+        ? (driverInfo['vehicleType'] as String).trim()
+        : 'bus';
 
-  final int capacity =
-      (driverInfo['capacity'] as num?)?.toInt() ??
-      defaultSeatCountForVehicleType(vehicleType);
+    final int capacity =
+        (driverInfo['capacity'] as num?)?.toInt() ??
+        defaultSeatCountForVehicleType(vehicleType);
 
-  final String vehicleClass =
-      (driverInfo['vehicleClass'] as String?)?.trim().isNotEmpty == true
-          ? (driverInfo['vehicleClass'] as String).trim()
-          : vehicleType == 'microbus'
-              ? 'microbus-7'
-              : 'bus-$capacity';
+    final String vehicleClass =
+        (driverInfo['vehicleClass'] as String?)?.trim().isNotEmpty == true
+        ? (driverInfo['vehicleClass'] as String).trim()
+        : vehicleType == 'microbus'
+        ? 'microbus-7'
+        : 'bus-$capacity';
 
-  final String license =
-      (driverInfo['licenseNumber'] as String?)?.trim() ?? '';
+    final String license =
+        (driverInfo['licenseNumber'] as String?)?.trim() ?? '';
 
-  final String routeId =
-      (driverInfo['routeId'] as String?)?.trim() ??
-      (driverInfo['route'] as String?)?.trim() ??
-      '';
+    final String routeId =
+        (driverInfo['routeId'] as String?)?.trim() ??
+        (driverInfo['route'] as String?)?.trim() ??
+        '';
 
-  final String driverStatus =
-      (driverInfo['status'] as String?)?.trim().isNotEmpty == true
-          ? (driverInfo['status'] as String).trim()
-          : DriverStatus.offline;
+    final String driverStatus =
+        (driverInfo['status'] as String?)?.trim().isNotEmpty == true
+        ? (driverInfo['status'] as String).trim()
+        : DriverStatus.offline;
 
-  final bool isApproved = driverInfo['isApproved'] == true;
+    final bool isApproved = driverInfo['isApproved'] == true;
 
-  if (vehicleId.isEmpty) {
-    final vehicleRef = fs.collection('vehicles').doc();
-    vehicleId = vehicleRef.id;
+    if (vehicleId.isEmpty) {
+      final vehicleRef = fs.collection('vehicles').doc();
+      vehicleId = vehicleRef.id;
 
-    final batch = fs.batch();
+      final batch = fs.batch();
 
-    batch.set(vehicleRef, {
-      'vehicleId': vehicleId,
-      'type': vehicleType,
-      'vehicleType': vehicleType,
-      'vehicleClass': vehicleClass,
-      'plateNumber': plate,
-      'seatCount': capacity,
-      'capacity': capacity,
-      'licenseNumber': license,
-      'driverId': uid,
-      'createdAt': FieldValue.serverTimestamp(),
-      'updatedAt': FieldValue.serverTimestamp(),
-    });
+      batch.set(vehicleRef, {
+        'vehicleId': vehicleId,
+        'type': vehicleType,
+        'vehicleType': vehicleType,
+        'vehicleClass': vehicleClass,
+        'plateNumber': plate,
+        'seatCount': capacity,
+        'capacity': capacity,
+        'licenseNumber': license,
+        'driverId': uid,
+        'createdAt': FieldValue.serverTimestamp(),
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
 
-    batch.set(fs.collection('drivers').doc(uid), {
-      'userId': uid,
-      'firstName': firstName,
-      'lastName': lastName,
-      'phone': widget.phoneNumber,
-      'image': null,
-      'role': 'driver',
-      'isVerified': true,
-      'isOnline': false,
-      'vehicleId': vehicleId,
-      'routeId': routeId,
-      'status': driverStatus,
-      'isApproved': isApproved,
-      'latitude': null,
-      'longitude': null,
-      'location': null,
-      'lastLocationUpdate': null,
-      'createdAt': FieldValue.serverTimestamp(),
-      'updatedAt': FieldValue.serverTimestamp(),
-    });
+      batch.set(fs.collection('drivers').doc(uid), {
+        'userId': uid,
+        'firstName': firstName,
+        'lastName': lastName,
+        'phone': widget.phoneNumber,
+        'image': null,
+        'role': 'driver',
+        'isVerified': true,
+        'isOnline': false,
+        'vehicleId': vehicleId,
+        'routeId': routeId,
+        'status': driverStatus,
+        'isApproved': isApproved,
+        'latitude': null,
+        'longitude': null,
+        'location': null,
+        'lastLocationUpdate': null,
+        'createdAt': FieldValue.serverTimestamp(),
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
 
-    await batch.commit();
-  } else {
-    await fs.collection('drivers').doc(uid).set({
-      'userId': uid,
-      'firstName': firstName,
-      'lastName': lastName,
-      'phone': widget.phoneNumber,
-      'image': null,
-      'role': 'driver',
-      'isVerified': true,
-      'isOnline': false,
-      'vehicleId': vehicleId,
-      'routeId': routeId,
-      'status': driverStatus,
-      'isApproved': isApproved,
-      'latitude': null,
-      'longitude': null,
-      'location': null,
-      'lastLocationUpdate': null,
-      'updatedAt': FieldValue.serverTimestamp(),
-    }, SetOptions(merge: true));
+      await batch.commit();
+    } else {
+      await fs.collection('drivers').doc(uid).set({
+        'userId': uid,
+        'firstName': firstName,
+        'lastName': lastName,
+        'phone': widget.phoneNumber,
+        'image': null,
+        'role': 'driver',
+        'isVerified': true,
+        'isOnline': false,
+        'vehicleId': vehicleId,
+        'routeId': routeId,
+        'status': driverStatus,
+        'isApproved': isApproved,
+        'latitude': null,
+        'longitude': null,
+        'location': null,
+        'lastLocationUpdate': null,
+        'updatedAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+    }
+
+    final driverDoc = await fs.collection('drivers').doc(uid).get();
+    final bool approved = driverDoc.data()?['isApproved'] == true;
+
+    if (!mounted) return;
+
+    if (approved) {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (_) => const DriverHomeScreen()),
+      );
+    } else {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (_) => const SignupApprovalScreen()),
+      );
+    }
   }
 
-  final driverDoc = await fs.collection('drivers').doc(uid).get();
-  final bool approved = driverDoc.data()?['isApproved'] == true;
-
-  if (!mounted) return;
-
-  if (approved) {
-    Navigator.pushReplacement(
-      context,
-      MaterialPageRoute(builder: (_) => const DriverHomeScreen()),
-    );
-  } else {
-    Navigator.pushReplacement(
-      context,
-      MaterialPageRoute(builder: (_) => const SignupApprovalScreen()),
-    );
-  }
-}
   Future<void> _onContinue() async {
     final texts = context.texts;
     final otp = _otpControllers.map((e) => e.text).join().trim();
 
     if (otp.length != 6) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(texts.t('validSixDigitOtp'))));
+      AppMessage.showError(context, texts.t('validSixDigitOtp'));
       return;
     }
 
     if (widget.verificationId.trim().isEmpty) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(texts.t('verificationIdMissing'))));
+      AppMessage.showError(context, texts.t('verificationIdMissing'));
       return;
     }
 
@@ -352,9 +349,7 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
           );
         }
       } else {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(texts.t('userRoleNotFound'))));
+        AppMessage.showError(context, texts.t('userRoleNotFound'));
       }
     } on FirebaseAuthException catch (e) {
       String message = e.message ?? texts.t('verificationFailed');
@@ -368,15 +363,11 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
       }
 
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(message)));
+      AppMessage.showError(context, message);
     } catch (e) {
       debugPrint('OTP verification error: $e');
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('${texts.t('errorLabel')}: $e')));
+      AppMessage.showError(context, '${texts.t('errorLabel')}: $e');
     } finally {
       if (mounted) {
         setState(() => _isLoading = false);
@@ -385,9 +376,7 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
   }
 
   void _resendCode() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(context.texts.t('resendNotImplemented'))),
-    );
+    AppMessage.showInfo(context, context.texts.t('resendNotImplemented'));
   }
 
   Widget _buildOtpTextField(int index) {

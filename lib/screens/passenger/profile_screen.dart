@@ -4,6 +4,7 @@ import 'package:image_picker/image_picker.dart';
 import '../../controllers/profile_controller.dart';
 import '../../localization/localization_x.dart';
 import '../../theme/app_theme.dart';
+import '../../widgets/app_message.dart';
 import '../../widgets/language_toggle_switch.dart';
 import 'passenger_bottom_nav_bar.dart';
 import 'passenger_home_screen.dart';
@@ -67,11 +68,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final error = await _controller.saveProfile();
     if (!mounted) return;
     if (error != null) {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(error)));
+      AppMessage.showError(context, error);
     } else {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(context.texts.t('profileUpdated'))));
+      AppMessage.showSuccess(context, context.texts.t('profileUpdated'));
     }
   }
 
@@ -112,20 +111,21 @@ class _ProfileScreenState extends State<ProfileScreen> {
             NavigoDecorations.topBar(
               onBack: () => Navigator.pushReplacement(
                 context,
-                MaterialPageRoute(
-                    builder: (_) => const PassengerHomeScreen()),
+                MaterialPageRoute(builder: (_) => const PassengerHomeScreen()),
               ),
               context: context,
             ),
 
             /// TITLE
             Padding(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text(context.texts.t('profile'), style: NavigoTextStyles.titleLarge),
+                  Text(
+                    context.texts.t('profile'),
+                    style: NavigoTextStyles.titleLarge,
+                  ),
                   IconButton(
                     onPressed: _controller.toggleEdit,
                     icon: Icon(
@@ -170,8 +170,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                   padding: const EdgeInsets.all(6),
                                   decoration:
                                       NavigoDecorations.iconCircleDecoration(
-                                    NavigoColors.accentGreen,
-                                  ),
+                                        NavigoColors.accentGreen,
+                                      ),
                                   child: const Icon(
                                     Icons.camera_alt,
                                     size: 16,
@@ -211,8 +211,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           width: double.infinity,
                           child: ElevatedButton(
                             onPressed: _handleSaveProfile,
-                            style:
-                                NavigoDecorations.kPrimaryButtonLargeStyle,
+                            style: NavigoDecorations.kPrimaryButtonLargeStyle,
                             child: Text(context.texts.t('save')),
                           ),
                         ),

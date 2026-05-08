@@ -7,7 +7,7 @@ import 'language_controller.dart';
 ///
 /// Screens (views) should read controllers from context instead of importing
 /// globals from `main.dart`.
-class AppControllerScope extends InheritedWidget {
+class AppControllerScope extends InheritedNotifier<LanguageController> {
   final AuthController authController;
   final LanguageController languageController;
 
@@ -16,19 +16,22 @@ class AppControllerScope extends InheritedWidget {
     required this.authController,
     required this.languageController,
     required super.child,
-  });
+  }) : super(notifier: languageController);
 
   static AppControllerScope of(BuildContext context) {
-    final scope =
-        context.dependOnInheritedWidgetOfExactType<AppControllerScope>();
+    final scope = context
+        .dependOnInheritedWidgetOfExactType<AppControllerScope>();
     assert(scope != null, 'AppControllerScope not found in widget tree');
     return scope!;
   }
 
   @override
   bool updateShouldNotify(covariant AppControllerScope oldWidget) {
+    // The language controller instance usually stays the same while its locale
+    // changes. InheritedNotifier makes dependents rebuild on notifyListeners(),
+    // and this keeps auth/controller replacement behavior intact too.
     return authController != oldWidget.authController ||
-        languageController != oldWidget.languageController;
+        languageController != oldWidget.languageController ||
+        super.updateShouldNotify(oldWidget);
   }
 }
-

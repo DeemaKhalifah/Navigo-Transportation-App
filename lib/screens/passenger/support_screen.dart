@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../controllers/support_report_controller.dart';
 import '../../localization/localization_x.dart';
 import '../../theme/app_theme.dart';
+import '../../widgets/app_message.dart';
 
 class HelpSupportScreen extends StatefulWidget {
   const HelpSupportScreen({super.key});
@@ -30,13 +31,9 @@ class _HelpSupportScreenState extends State<HelpSupportScreen> {
     if (!mounted) return;
 
     if (error == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Complaint sent to route manager")),
-      );
+      AppMessage.showSuccess(context, 'Complaint sent to route manager');
     } else if (error.trim().isNotEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(error)),
-      );
+      AppMessage.showError(context, error);
     }
   }
 
@@ -100,8 +97,9 @@ class _HelpSupportScreenState extends State<HelpSupportScreen> {
                       SizedBox(
                         width: double.infinity,
                         child: ElevatedButton(
-                          onPressed:
-                              _controller.isSending ? null : _submitComplaint,
+                          onPressed: _controller.isSending
+                              ? null
+                              : _submitComplaint,
                           style: NavigoDecorations.kPrimaryButtonLargeStyle,
                           child: _controller.isSending
                               ? const SizedBox(

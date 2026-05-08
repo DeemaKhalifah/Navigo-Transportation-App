@@ -1,9 +1,12 @@
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../localization/localization_x.dart';
 import '../../theme/app_theme.dart';
+import '../../utils/form_validation.dart';
+import '../../widgets/app_message.dart';
 import 'otp_verification_screen.dart';
 
 class PassengerSignupScreen extends StatefulWidget {
@@ -14,31 +17,33 @@ class PassengerSignupScreen extends StatefulWidget {
 }
 
 class _PassengerSignupScreenState extends State<PassengerSignupScreen> {
+  final _formKey = GlobalKey<FormState>();
   final TextEditingController _nameController = TextEditingController();
-  final TextEditingController _phoneController = TextEditingController();
+  final TextEditingController _phoneDigitsController = TextEditingController();
+  String _phonePrefix = '+970';
   bool _agreeToTerms = false;
   bool _isLoading = false;
 
   @override
   void dispose() {
     _nameController.dispose();
-    _phoneController.dispose();
+    _phoneDigitsController.dispose();
     super.dispose();
   }
 
   void _submit() async {
-    final name = _nameController.text.trim();
-    final phone = _phoneController.text.trim();
+    final isValid = _formKey.currentState?.validate() ?? false;
+    if (!isValid) return;
 
-    if (name.isEmpty || phone.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(context.texts.t('pleaseFillAllFields'))),
-      );
+    if (!_agreeToTerms) {
+      AppMessage.showError(context, context.texts.t('pleaseAgreeToTerms'));
       return;
     }
 
     setState(() => _isLoading = true);
-    final formattedPhone = _formatPhoneNumber(phone);
+    final name = _nameController.text.trim();
+    final formattedPhone =
+        '$_phonePrefix${_phoneDigitsController.text.trim()}';
 
     try {
       final exists = await FirebaseFirestore.instance
@@ -49,18 +54,15 @@ class _PassengerSignupScreenState extends State<PassengerSignupScreen> {
       if (exists.docs.isNotEmpty) {
         if (!mounted) return;
         setState(() => _isLoading = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(context.texts.t('phoneAlreadyUsed'))),
-        );
+        AppMessage.showError(context, context.texts.t('phoneAlreadyUsed'));
         return;
       }
     } catch (e) {
       if (!mounted) return;
       setState(() => _isLoading = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('${context.texts.t('couldNotVerifyPhone')}: $e'),
-        ),
+      AppMessage.showError(
+        context,
+        '${context.texts.t('couldNotVerifyPhone')}: $e',
       );
       return;
     }
@@ -74,10 +76,9 @@ class _PassengerSignupScreenState extends State<PassengerSignupScreen> {
       verificationFailed: (FirebaseAuthException e) {
         if (!mounted) return;
         setState(() => _isLoading = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('${context.texts.t('errorLabel')}: ${e.message}'),
-          ),
+        AppMessage.showError(
+          context,
+          '${context.texts.t('errorLabel')}: ${e.message ?? e.code}',
         );
       },
       codeSent: (String verificationId, int? resendToken) {
@@ -102,27 +103,6 @@ class _PassengerSignupScreenState extends State<PassengerSignupScreen> {
     );
   }
 
-  String _formatPhoneNumber(String phone) {
-    String cleaned = phone.replaceAll(RegExp(r'\s+'), '');
-
-    // ✅ Already international
-    if (cleaned.startsWith('+970') || cleaned.startsWith('+972')) {
-      return cleaned;
-    }
-
-    // ✅ Local Palestinian format
-    if (cleaned.startsWith('0')) {
-      return '+970${cleaned.substring(1)}';
-    }
-
-    // ✅ Starts with 5 (e.g. 59xxxxxxx)
-    if (cleaned.startsWith('5')) {
-      return '+970$cleaned';
-    }
-
-    return cleaned;
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -144,158 +124,221 @@ class _PassengerSignupScreenState extends State<PassengerSignupScreen> {
                     child: Container(
                       padding: const EdgeInsets.all(20),
                       decoration: NavigoDecorations.kCardDecoration,
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(
-                            context.texts.t('passengerDetails'),
-                            style: NavigoTextStyles.titleLarge,
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            context.texts.t('passengerSignupSubtitle'),
-                            style: NavigoTextStyles.bodyMedium,
-                          ),
-                          const SizedBox(height: 20),
+                      child: Form(
+                        key: _formKey,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              context.texts.t('passengerDetails'),
+                              style: NavigoTextStyles.titleLarge,
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              context.texts.t('passengerSignupSubtitle'),
+                              style: NavigoTextStyles.bodyMedium,
+                            ),
+                            const SizedBox(height: 20),
 
-                          /// Name Field
-                          Text(
-                            context.texts.t('fullName'),
-                            style: NavigoTextStyles.label,
-                          ),
-                          const SizedBox(height: 8),
-                          TextField(
-                            controller: _nameController,
-                            keyboardType: TextInputType.name,
-                            // ← Forces black text in the name field
-                            style: NavigoTextStyles.fieldText,
-                            decoration: NavigoDecorations.kInputDecoration
-                                .copyWith(
-                                  hintText: context.texts.t('exampleFullName'),
-                                  prefixIcon: const Icon(
-                                    Icons.person_outline,
-                                    color: NavigoColors.accentGreen,
-                                  ),
-                                  suffixIcon: IconButton(
-                                    icon: const Icon(Icons.clear),
-                                    onPressed: () => _nameController.clear(),
-                                  ),
+                            Text(
+                              context.texts.t('fullName'),
+                              style: NavigoTextStyles.label,
+                            ),
+                            const SizedBox(height: 8),
+                            TextFormField(
+                              controller: _nameController,
+                              keyboardType: TextInputType.name,
+                              style: NavigoTextStyles.fieldText,
+                              inputFormatters: [
+                                FilteringTextInputFormatter.allow(
+                                  RegExp(r"[a-zA-Z\u0600-\u06FF\s'-]"),
                                 ),
-                          ),
-                          const SizedBox(height: 16),
-
-                          /// Phone Field
-                          Text(
-                            context.texts.t('phoneNumber'),
-                            style: NavigoTextStyles.label,
-                          ),
-                          const SizedBox(height: 8),
-                          TextField(
-                            controller: _phoneController,
-                            keyboardType: TextInputType.phone,
-                            // ← Forces black text in the phone field
-                            style: NavigoTextStyles.fieldText,
-                            decoration: NavigoDecorations.kInputDecoration
-                                .copyWith(
-                                  hintText: "+97059 000 0000",
-                                  prefixIcon: const Icon(
-                                    Icons.phone_outlined,
-                                    color: NavigoColors.accentGreen,
-                                  ),
-                                  suffixIcon: IconButton(
-                                    icon: const Icon(Icons.clear),
-                                    onPressed: () => _phoneController.clear(),
-                                  ),
-                                ),
-                          ),
-                          const SizedBox(height: 16),
-
-                          /// Terms Checkbox
-                          Row(
-                            children: [
-                              Checkbox(
-                                value: _agreeToTerms,
-                                onChanged: (value) {
-                                  setState(() {
-                                    _agreeToTerms = value ?? false;
-                                  });
-                                },
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(4),
-                                ),
-                              ),
-                              Expanded(
-                                child: RichText(
-                                  text: TextSpan(
-                                    style: NavigoTextStyles.bodyMedium.copyWith(
-                                      color: NavigoColors.textDark,
-                                      fontSize: 13,
+                              ],
+                              validator: (v) =>
+                                  AppFormValidators.fullName(context, v),
+                              decoration: NavigoDecorations.kInputDecoration
+                                  .copyWith(
+                                    hintText:
+                                        context.texts.t('exampleFullName'),
+                                    prefixIcon: const Icon(
+                                      Icons.person_outline,
+                                      color: NavigoColors.accentGreen,
                                     ),
-                                    children: [
-                                      TextSpan(
-                                        text: '${context.texts.t('agreeTo')} ',
-                                      ),
-                                      TextSpan(
-                                        text: context.texts.t('terms'),
-                                        style: const TextStyle(
-                                          color: NavigoColors.primaryOrange,
-                                          fontWeight: FontWeight.w500,
+                                    suffixIcon: IconButton(
+                                      icon: const Icon(Icons.clear),
+                                      onPressed: () => _nameController.clear(),
+                                    ),
+                                  ),
+                            ),
+                            const SizedBox(height: 16),
+
+                            Text(
+                              context.texts.t('phoneNumber'),
+                              style: NavigoTextStyles.label,
+                            ),
+                            const SizedBox(height: 8),
+                            Row(
+                              children: [
+                                SizedBox(
+                                  width: 110,
+                                  child: DropdownButtonFormField<String>(
+                                    value: _phonePrefix,
+                                    style: const TextStyle(color: Colors.grey),
+                                    items: const [
+                                      DropdownMenuItem(
+                                        value: '+970',
+                                        child: Text(
+                                          '+970',
+                                          style: TextStyle(color: Colors.grey),
                                         ),
-                                        recognizer: TapGestureRecognizer()
-                                          ..onTap = () {},
                                       ),
-                                      const TextSpan(text: " & "),
-                                      TextSpan(
-                                        text: context.texts.t('privacy'),
-                                        style: const TextStyle(
-                                          color: NavigoColors.primaryOrange,
-                                          fontWeight: FontWeight.w500,
+                                      DropdownMenuItem(
+                                        value: '+972',
+                                        child: Text(
+                                          '+972',
+                                          style: TextStyle(color: Colors.grey),
                                         ),
-                                        recognizer: TapGestureRecognizer()
-                                          ..onTap = () {},
                                       ),
                                     ],
+                                    onChanged: (v) {
+                                      if (v == null) return;
+                                      setState(() => _phonePrefix = v);
+                                    },
+                                    decoration: NavigoDecorations
+                                        .kInputDecoration
+                                        .copyWith(
+                                          contentPadding:
+                                              const EdgeInsets.symmetric(
+                                                horizontal: 12,
+                                                vertical: 14,
+                                              ),
+                                        ),
                                   ),
                                 ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 20),
-
-                          /// Create Account Button
-                          SizedBox(
-                            width: double.infinity,
-                            height: NavigoSizes.buttonHeightLarge,
-                            child: ElevatedButton(
-                              style: NavigoDecorations.kPrimaryButtonLargeStyle,
-                              onPressed: (_agreeToTerms && !_isLoading)
-                                  ? _submit
-                                  : null,
-                              child: _isLoading
-                                  ? const SizedBox(
-                                      height: 24,
-                                      width: 24,
-                                      child: CircularProgressIndicator(
-                                        color: NavigoColors.textLight,
-                                        strokeWidth: 2,
-                                      ),
-                                    )
-                                  : Row(
-                                      mainAxisAlignment:
-                                          MainAxisAlignment.center,
-                                      children: [
-                                        Text(
-                                          context.texts.t('createAccount'),
-                                          style: NavigoTextStyles.button,
+                                const SizedBox(width: 10),
+                                Expanded(
+                                  child: TextFormField(
+                                    controller: _phoneDigitsController,
+                                    keyboardType: TextInputType.phone,
+                                    style: NavigoTextStyles.fieldText,
+                                    inputFormatters: [
+                                      FilteringTextInputFormatter.digitsOnly,
+                                      LengthLimitingTextInputFormatter(9),
+                                    ],
+                                    validator: (_) => AppFormValidators
+                                        .palestinianPhone(
+                                          context,
+                                          '$_phonePrefix${_phoneDigitsController.text.trim()}',
                                         ),
-                                        const SizedBox(width: 10),
-                                        const Icon(Icons.arrow_forward),
+                                    decoration: NavigoDecorations
+                                        .kInputDecoration
+                                        .copyWith(
+                                          hintText: "590000000",
+                                          prefixIcon: const Icon(
+                                            Icons.phone_outlined,
+                                            color: NavigoColors.accentGreen,
+                                          ),
+                                          suffixIcon: IconButton(
+                                            icon: const Icon(Icons.clear),
+                                            onPressed: () =>
+                                                _phoneDigitsController.clear(),
+                                          ),
+                                        ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 16),
+
+                            Row(
+                              children: [
+                                Checkbox(
+                                  value: _agreeToTerms,
+                                  onChanged: (value) {
+                                    setState(() {
+                                      _agreeToTerms = value ?? false;
+                                    });
+                                  },
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(4),
+                                  ),
+                                ),
+                                Expanded(
+                                  child: RichText(
+                                    text: TextSpan(
+                                      style:
+                                          NavigoTextStyles.bodyMedium.copyWith(
+                                            color: NavigoColors.textDark,
+                                            fontSize: 13,
+                                          ),
+                                      children: [
+                                        TextSpan(
+                                          text:
+                                              '${context.texts.t('agreeTo')} ',
+                                        ),
+                                        TextSpan(
+                                          text: context.texts.t('terms'),
+                                          style: const TextStyle(
+                                            color: NavigoColors.primaryOrange,
+                                            fontWeight: FontWeight.w500,
+                                          ),
+                                          recognizer: TapGestureRecognizer()
+                                            ..onTap = () {},
+                                        ),
+                                        const TextSpan(text: " & "),
+                                        TextSpan(
+                                          text: context.texts.t('privacy'),
+                                          style: const TextStyle(
+                                            color: NavigoColors.primaryOrange,
+                                            fontWeight: FontWeight.w500,
+                                          ),
+                                          recognizer: TapGestureRecognizer()
+                                            ..onTap = () {},
+                                        ),
                                       ],
                                     ),
+                                  ),
+                                ),
+                              ],
                             ),
-                          ),
-                        ],
+                            const SizedBox(height: 20),
+
+                            SizedBox(
+                              width: double.infinity,
+                              height: NavigoSizes.buttonHeightLarge,
+                              child: ElevatedButton(
+                                style:
+                                    NavigoDecorations.kPrimaryButtonLargeStyle,
+                                onPressed:
+                                    (!_agreeToTerms || _isLoading) ? null : _submit,
+                                child: _isLoading
+                                    ? const SizedBox(
+                                        height: 24,
+                                        width: 24,
+                                        child: CircularProgressIndicator(
+                                          color: NavigoColors.textLight,
+                                          strokeWidth: 2,
+                                        ),
+                                      )
+                                    : Row(
+                                        mainAxisAlignment:
+                                            MainAxisAlignment.center,
+                                        children: [
+                                          Text(
+                                            context.texts.t(
+                                              'continueToVerifyPhone',
+                                            ),
+                                            style: NavigoTextStyles.button,
+                                          ),
+                                          const SizedBox(width: 10),
+                                          const Icon(Icons.arrow_forward),
+                                        ],
+                                      ),
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
                   ),

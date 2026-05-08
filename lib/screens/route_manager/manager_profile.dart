@@ -4,6 +4,7 @@ import 'package:image_picker/image_picker.dart';
 import '../../controllers/manager_profile_controller.dart';
 import '../../localization/localization_x.dart';
 import '../../theme/app_theme.dart';
+import '../../widgets/app_message.dart';
 import '../../widgets/language_toggle_switch.dart';
 import '../authentication/email_login.dart';
 import 'route_manager_notification_compose.dart';
@@ -46,7 +47,7 @@ class _ManagerProfileState extends State<ManagerProfile> {
 
   void _showSnack(String msg) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+    AppMessage.showInfo(context, msg);
   }
 
   void _showImagePicker() {
@@ -172,7 +173,9 @@ class _ManagerProfileState extends State<ManagerProfile> {
                   const SizedBox(width: 12),
                   Text(
                     context.texts.t('changePassword'),
-                    style: NavigoTextStyles.titleSmall,
+                    style: NavigoTextStyles.titleSmall.copyWith(
+                      color: Colors.black,
+                    ),
                   ),
                   const Spacer(),
                   IconButton(

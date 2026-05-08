@@ -4,6 +4,8 @@ import 'package:navigo/controllers/app_controller_scope.dart';
 import '../../localization/localization_x.dart';
 import '../../services/phone_login_storage_service.dart';
 import '../../theme/app_theme.dart';
+import '../../widgets/app_message.dart';
+import '../../widgets/responsive.dart';
 import 'phone_number_screen.dart';
 import '../route_manager/route_schedule.dart';
 
@@ -57,9 +59,7 @@ class _EmailLoginScreenState extends State<EmailLoginScreen> {
     final password = _passwordController.text.trim();
 
     if (email.isEmpty || password.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(context.texts.t('enterEmailPassword'))),
-      );
+      AppMessage.showError(context, context.texts.t('enterEmailPassword'));
       return;
     }
 
@@ -84,188 +84,195 @@ class _EmailLoginScreenState extends State<EmailLoginScreen> {
         MaterialPageRoute(builder: (_) => const RouteSchedule()),
       );
     } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(auth.error ?? context.texts.t('loginFailed'))),
+      AppMessage.showError(
+        context,
+        auth.error ?? context.texts.t('loginFailed'),
       );
     }
+  }
+
+  void _goBack() {
+    final navigator = Navigator.of(context);
+
+    if (navigator.canPop()) {
+      navigator.pop();
+      return;
+    }
+
+    // After a route manager logs out, EmailLoginScreen is placed as the root
+    // route. Popping that root route leaves a black screen, so route back to
+    // the normal phone login entry point instead.
+    navigator.pushReplacement(
+      MaterialPageRoute(builder: (_) => const PhoneNumberScreen()),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     final isLoading = _localLoading;
+    final padding = Responsive.horizontalPadding(context);
 
-    return Scaffold(
-      backgroundColor: NavigoColors.backgroundLight,
-      resizeToAvoidBottomInset: true,
-      body: SafeArea(
-        child: Column(
-          children: [
-            NavigoDecorations.topBar1(
-              onBack: () => Navigator.pop(context),
-              context: context,
-            ),
-            Expanded(
-              child: Center(
-                child: SingleChildScrollView(
-                  padding: const EdgeInsets.all(20),
-                  child: ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 450),
-                    child: Container(
-                      padding: const EdgeInsets.all(20),
-                      decoration: NavigoDecorations.kCardDecoration,
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(
-                            context.texts.t('routeManager'),
-                            style: NavigoTextStyles.titleLarge,
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            context.texts.t('routeManagerLoginSubtitle'),
-                            style: NavigoTextStyles.bodyMedium,
-                          ),
-                          const SizedBox(height: 20),
-
-                          Text(
-                            context.texts.t('email'),
-                            style: NavigoTextStyles.label,
-                          ),
-                          const SizedBox(height: 8),
-                          TextField(
-                            controller: _emailController,
-                            keyboardType: TextInputType.emailAddress,
-                            textInputAction: TextInputAction.next,
-                            enabled: !isLoading,
-                            style: NavigoTextStyles.fieldText,
-                            decoration: NavigoDecorations.kInputDecoration
-                                .copyWith(
-                                  hintText: 'RouteManager@navigo.com',
-                                  prefixIcon: const Icon(
-                                    Icons.email_outlined,
-                                    color: NavigoColors.accentGreen,
-                                  ),
-                                ),
-                          ),
-                         
-
-                          const SizedBox(height: 16),
-
-                          Text(
-                            context.texts.t('password'),
-                            style: NavigoTextStyles.label,
-                          ),
-                          const SizedBox(height: 8),
-                          TextField(
-                            controller: _passwordController,
-                            obscureText: _obscurePassword,
-                            textInputAction: TextInputAction.done,
-                            enabled: !isLoading,
-                            onSubmitted: (_) => _signIn(),
-                            style: NavigoTextStyles.fieldText,
-                            decoration: NavigoDecorations.kInputDecoration
-                                .copyWith(
-                                  prefixIcon: const Icon(
-                                    Icons.lock_outline,
-                                    color: NavigoColors.accentGreen,
-                                  ),
-                                  suffixIcon: IconButton(
-                                    icon: Icon(
-                                      _obscurePassword
-                                          ? Icons.visibility_off
-                                          : Icons.visibility,
-                                    ),
-                                    onPressed: isLoading
-                                        ? null
-                                        : () {
-                                            setState(() {
-                                              _obscurePassword =
-                                                  !_obscurePassword;
-                                            });
-                                          },
-                                  ),
-                                ),
-                          ),
- const SizedBox(height: 8),
-                          CheckboxListTile(
-                            value: _rememberMe,
-                            onChanged: isLoading
-                                ? null
-                                : (value) {
-                                    setState(
-                                      () => _rememberMe = value ?? false,
-                                    );
-                                  },
-                            controlAffinity: ListTileControlAffinity.leading,
-                            contentPadding: EdgeInsets.zero,
-                            dense: true,
-                            title: Text(
-                              context.texts.t('rememberMe'),
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) _goBack();
+      },
+      child: Scaffold(
+        backgroundColor: NavigoColors.backgroundLight,
+        resizeToAvoidBottomInset: true,
+        body: SafeArea(
+          child: Column(
+            children: [
+              NavigoDecorations.topBar1(onBack: _goBack, context: context),
+              Expanded(
+                child: Center(
+                  child: SingleChildScrollView(
+                    // Responsive form padding prevents cramped small-phone
+                    // layouts and keeps the login card balanced on tablets.
+                    padding: EdgeInsets.all(padding),
+                    child: ConstrainedBox(
+                      constraints: Responsive.contentMaxWidth(context),
+                      child: Container(
+                        padding: EdgeInsets.all(padding.clamp(16, 24)),
+                        decoration: NavigoDecorations.kCardDecoration,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              context.texts.t('routeManager'),
+                              style: NavigoTextStyles.titleLarge,
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              context.texts.t('routeManagerLoginSubtitle'),
                               style: NavigoTextStyles.bodyMedium,
                             ),
-                          ),
-                          const SizedBox(height: 25),
-
-                          SizedBox(
-                            width: double.infinity,
-                            height: NavigoSizes.buttonHeightLarge,
-                            child: ElevatedButton(
-                              style: NavigoDecorations.kPrimaryButtonLargeStyle,
-                              onPressed: isLoading ? null : _signIn,
-                              child: isLoading
-                                  ? const SizedBox(
-                                      width: 22,
-                                      height: 22,
-                                      child: CircularProgressIndicator(
-                                        color: NavigoColors.textLight,
-                                        strokeWidth: 2,
-                                      ),
-                                    )
-                                  : Row(
-                                      mainAxisAlignment:
-                                          MainAxisAlignment.center,
-                                      children: [
-                                        Text(
-                                          context.texts.t('signIn'),
-                                          style: NavigoTextStyles.button,
-                                        ),
-                                        const SizedBox(width: 10),
-                                        const Icon(Icons.arrow_forward),
-                                      ],
-                                    ),
+                            const SizedBox(height: 20),
+                            Text(
+                              context.texts.t('email'),
+                              style: NavigoTextStyles.label,
                             ),
-                          ),
-
-                          const SizedBox(height: 12),
-
-                          Center(
-                            child: TextButton(
-                              onPressed: isLoading
+                            const SizedBox(height: 8),
+                            TextField(
+                              controller: _emailController,
+                              keyboardType: TextInputType.emailAddress,
+                              textInputAction: TextInputAction.next,
+                              enabled: !isLoading,
+                              style: NavigoTextStyles.fieldText,
+                              decoration: NavigoDecorations.kInputDecoration
+                                  .copyWith(
+                                    hintText: 'RouteManager@navigo.com',
+                                    prefixIcon: const Icon(
+                                      Icons.email_outlined,
+                                      color: NavigoColors.accentGreen,
+                                    ),
+                                  ),
+                            ),
+                            const SizedBox(height: 16),
+                            Text(
+                              context.texts.t('password'),
+                              style: NavigoTextStyles.label,
+                            ),
+                            const SizedBox(height: 8),
+                            TextField(
+                              controller: _passwordController,
+                              obscureText: _obscurePassword,
+                              textInputAction: TextInputAction.done,
+                              enabled: !isLoading,
+                              onSubmitted: (_) => _signIn(),
+                              style: NavigoTextStyles.fieldText,
+                              decoration: NavigoDecorations.kInputDecoration
+                                  .copyWith(
+                                    prefixIcon: const Icon(
+                                      Icons.lock_outline,
+                                      color: NavigoColors.accentGreen,
+                                    ),
+                                    suffixIcon: IconButton(
+                                      icon: Icon(
+                                        _obscurePassword
+                                            ? Icons.visibility_off
+                                            : Icons.visibility,
+                                      ),
+                                      onPressed: isLoading
+                                          ? null
+                                          : () {
+                                              setState(() {
+                                                _obscurePassword =
+                                                    !_obscurePassword;
+                                              });
+                                            },
+                                    ),
+                                  ),
+                            ),
+                            const SizedBox(height: 8),
+                            CheckboxListTile(
+                              value: _rememberMe,
+                              onChanged: isLoading
                                   ? null
-                                  : () {
-                                      Navigator.push(
-                                        context,
-                                        MaterialPageRoute(
-                                          builder: (_) =>
-                                              const PhoneNumberScreen(),
-                                        ),
+                                  : (value) {
+                                      setState(
+                                        () => _rememberMe = value ?? false,
                                       );
                                     },
-                              child: Text(
-                                context.texts.t('backToUserLogin'),
-                                style: NavigoTextStyles.actionLink,
+                              controlAffinity: ListTileControlAffinity.leading,
+                              contentPadding: EdgeInsets.zero,
+                              dense: true,
+                              title: Text(
+                                context.texts.t('rememberMe'),
+                                style: NavigoTextStyles.bodyMedium,
                               ),
                             ),
-                          ),
-                        ],
+                            const SizedBox(height: 25),
+                            SizedBox(
+                              width: double.infinity,
+                              height: Responsive.buttonHeight(context),
+                              child: ElevatedButton(
+                                style:
+                                    NavigoDecorations.kPrimaryButtonLargeStyle,
+                                onPressed: isLoading ? null : _signIn,
+                                child: isLoading
+                                    ? const SizedBox(
+                                        width: 22,
+                                        height: 22,
+                                        child: CircularProgressIndicator(
+                                          color: NavigoColors.textLight,
+                                          strokeWidth: 2,
+                                        ),
+                                      )
+                                    : Row(
+                                        mainAxisAlignment:
+                                            MainAxisAlignment.center,
+                                        children: [
+                                          Text(
+                                            context.texts.t('signIn'),
+                                            style: NavigoTextStyles.button,
+                                          ),
+                                          const SizedBox(width: 10),
+                                          const Icon(Icons.arrow_forward),
+                                        ],
+                                      ),
+                              ),
+                            ),
+                            const SizedBox(height: 12),
+                            Center(
+                              child: TextButton(
+                                onPressed: isLoading ? null : _goBack,
+                                child: Text(
+                                  context.texts.t('backToUserLogin'),
+                                  style: NavigoTextStyles.actionLink,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
                   ),
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );

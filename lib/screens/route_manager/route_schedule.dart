@@ -12,6 +12,7 @@ import 'package:navigo/services/slot_driver_assignment_service.dart';
 
 import '../../localization/localization_x.dart';
 import '../../theme/app_theme.dart';
+import '../../widgets/app_message.dart';
 import 'add_schedule_slot_screen.dart';
 import 'route_manager_nav_bar.dart';
 import 'route_manager_notification_compose.dart';
@@ -62,8 +63,10 @@ class _RouteScheduleState extends State<RouteSchedule> {
     setState(() => _routeId = id);
 
     try {
-      final snap =
-          await FirebaseFirestore.instance.collection('route').doc(id).get();
+      final snap = await FirebaseFirestore.instance
+          .collection('route')
+          .doc(id)
+          .get();
 
       if (!mounted) return;
 
@@ -111,17 +114,13 @@ class _RouteScheduleState extends State<RouteSchedule> {
     final result = await Navigator.push<bool>(
       context,
       MaterialPageRoute(
-        builder: (_) => AddScheduleSlotScreen(
-          routeId: id,
-          existingSlot: existing,
-        ),
+        builder: (_) =>
+            AddScheduleSlotScreen(routeId: id, existingSlot: existing),
       ),
     );
 
     if (result == true && mounted && existing != null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(context.texts.t('tripUpdated'))),
-      );
+      AppMessage.showSuccess(context, context.texts.t('tripUpdated'));
     }
   }
 
@@ -256,13 +255,16 @@ class _RouteScheduleState extends State<RouteSchedule> {
                         ),
                       ),
                       IconButton(
-                        onPressed:
-                            _queueRefreshing ? null : () => _refreshQueueNow(rid),
+                        onPressed: _queueRefreshing
+                            ? null
+                            : () => _refreshQueueNow(rid),
                         icon: _queueRefreshing
                             ? const SizedBox(
                                 width: 16,
                                 height: 16,
-                                child: CircularProgressIndicator(strokeWidth: 2),
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
                               )
                             : const Icon(Icons.refresh),
                         color: NavigoColors.accentGreen,
@@ -307,10 +309,10 @@ class _RouteScheduleState extends State<RouteSchedule> {
   }
 
   bool _matchesSelectedType(String rawVehicleType) {
-    final normalized = rawVehicleType
-        .trim()
-        .toLowerCase()
-        .replaceAll(RegExp(r'[\s_-]+'), '');
+    final normalized = rawVehicleType.trim().toLowerCase().replaceAll(
+      RegExp(r'[\s_-]+'),
+      '',
+    );
 
     if (_selectedType == 'bus') {
       return normalized == 'bus';
@@ -326,9 +328,7 @@ class _RouteScheduleState extends State<RouteSchedule> {
   String _vehicleTypeLabel(ScheduleSlot slot) {
     final raw = slot.vehicleType.trim();
 
-    final normalized = raw
-        .toLowerCase()
-        .replaceAll(RegExp(r'[\s_-]+'), '');
+    final normalized = raw.toLowerCase().replaceAll(RegExp(r'[\s_-]+'), '');
 
     if (normalized == 'bus') return context.texts.t('bus');
 
@@ -354,7 +354,6 @@ class _RouteScheduleState extends State<RouteSchedule> {
         // No FutureBuilder here.
         // No auto refresh when queue is empty.
         // Only refresh when user presses refresh button.
-
         StreamBuilder<List<String>>(
           stream: _queueSvc.watchQueueIds(routeId),
           builder: (context, qSnap) {
@@ -445,15 +444,11 @@ class _RouteScheduleState extends State<RouteSchedule> {
 
           if (!mounted) return;
 
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(context.texts.t('tripRemoved'))),
-          );
+          AppMessage.showSuccess(context, context.texts.t('tripRemoved'));
         } catch (e) {
           if (!mounted) return;
 
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Could not delete: $e')),
-          );
+          AppMessage.showError(context, 'Could not delete: $e');
         }
       },
       background: Container(
@@ -548,7 +543,8 @@ class _RouteScheduleState extends State<RouteSchedule> {
                   FutureBuilder<String>(
                     future: _driverLabelFuture(slot.driverId),
                     builder: (context, snap) {
-                      final t = snap.data ??
+                      final t =
+                          snap.data ??
                           (slot.driverId.isEmpty ? 'Unassigned' : 'Driver…');
 
                       return Text(
@@ -666,10 +662,7 @@ class _RouteScheduleState extends State<RouteSchedule> {
             ),
             const SizedBox(height: 16),
             Padding(
-              padding: const EdgeInsets.symmetric(
-                horizontal: 20,
-                vertical: 8,
-              ),
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [

@@ -1,9 +1,13 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/gestures.dart';
+import 'package:flutter/services.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
 import '../../localization/localization_x.dart';
 import '../../theme/app_theme.dart';
+import '../../utils/form_validation.dart';
+import '../../widgets/app_message.dart';
 import 'otp_verification_screen.dart';
 
 class DriverSignupScreen extends StatefulWidget {
@@ -17,10 +21,12 @@ class _DriverSignupScreenState extends State<DriverSignupScreen> {
   final _formKey = GlobalKey<FormState>();
 
   final TextEditingController _nameController = TextEditingController();
-  final TextEditingController _phoneController = TextEditingController();
+  final TextEditingController _phoneDigitsController = TextEditingController();
   final TextEditingController _carNumberController = TextEditingController();
   final TextEditingController _licenseController = TextEditingController();
 
+  String _phonePrefix = '+970';
+  bool _agreeToTerms = false;
   String? _selectedRouteId;
   String? _selectedVehicleClass;
 
@@ -111,51 +117,37 @@ class _DriverSignupScreenState extends State<DriverSignupScreen> {
   @override
   void dispose() {
     _nameController.dispose();
-    _phoneController.dispose();
+    _phoneDigitsController.dispose();
     _carNumberController.dispose();
     _licenseController.dispose();
     super.dispose();
   }
 
-  String _formatPhoneNumber(String phone) {
-    final cleaned = phone.replaceAll(RegExp(r'\s+'), '');
-
-    if (cleaned.startsWith('+970') || cleaned.startsWith('+972')) {
-      return cleaned;
-    }
-
-    if (cleaned.startsWith('0')) {
-      return '+970${cleaned.substring(1)}';
-    }
-
-    if (cleaned.startsWith('5')) {
-      return '+970$cleaned';
-    }
-
-    return cleaned;
-  }
+  String get _fullPhoneNumber =>
+      '$_phonePrefix${_phoneDigitsController.text.trim()}';
 
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
 
+    if (!_agreeToTerms) {
+      AppMessage.showError(context, context.texts.t('pleaseAgreeToTerms'));
+      return;
+    }
+
     if (_selectedRouteId == null || _selectedRouteId!.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(context.texts.t('selectRoute'))),
-      );
+      AppMessage.showError(context, context.texts.t('selectRoute'));
       return;
     }
 
     if (_selectedVehicleOption == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(context.texts.t('selectVehicleType'))),
-      );
+      AppMessage.showError(context, context.texts.t('selectVehicleType'));
       return;
     }
 
     final selectedVehicle = _selectedVehicleOption!;
 
     final name = _nameController.text.trim();
-    final formattedPhone = _formatPhoneNumber(_phoneController.text.trim());
+    final formattedPhone = _fullPhoneNumber;
 
     setState(() => _isLoading = true);
 
@@ -171,9 +163,7 @@ class _DriverSignupScreenState extends State<DriverSignupScreen> {
 
         setState(() => _isLoading = false);
 
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(context.texts.t('phoneAlreadyUsed'))),
-        );
+        AppMessage.showError(context, context.texts.t('phoneAlreadyUsed'));
         return;
       }
 
@@ -188,10 +178,9 @@ class _DriverSignupScreenState extends State<DriverSignupScreen> {
 
           setState(() => _isLoading = false);
 
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('${context.texts.t('errorLabel')}: ${e.message}'),
-            ),
+          AppMessage.showError(
+            context,
+            '${context.texts.t('errorLabel')}: ${e.message ?? e.code}',
           );
         },
         codeSent: (String verificationId, int? resendToken) {
@@ -229,10 +218,9 @@ class _DriverSignupScreenState extends State<DriverSignupScreen> {
 
       setState(() => _isLoading = false);
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('${context.texts.t('couldNotVerifyPhone')}: $e'),
-        ),
+      AppMessage.showError(
+        context,
+        '${context.texts.t('couldNotVerifyPhone')}: $e',
       );
     }
   }
@@ -276,15 +264,90 @@ class _DriverSignupScreenState extends State<DriverSignupScreen> {
                               controller: _nameController,
                               hint: context.texts.t('exampleFullName'),
                               prefixIcon: Icons.person_outline,
+                              inputFormatters: [
+                                FilteringTextInputFormatter.allow(
+                                  RegExp(r"[a-zA-Z\u0600-\u06FF\s'-]"),
+                                ),
+                              ],
+                              validator: (v) =>
+                                  AppFormValidators.fullName(context, v),
                             ),
                             const SizedBox(height: 16),
 
                             _label(context.texts.t('phoneNumber')),
-                            _inputField(
-                              controller: _phoneController,
-                              hint: '+97059 000 0000',
-                              prefixIcon: Icons.phone_outlined,
-                              keyboard: TextInputType.phone,
+                            Row(
+                              children: [
+                                SizedBox(
+                                  width: 110,
+                                  child: DropdownButtonFormField<String>(
+                                    value: _phonePrefix,
+                                    style: const TextStyle(color: Colors.grey),
+                                    items: const [
+                                      DropdownMenuItem(
+                                        value: '+970',
+                                        child: Text(
+                                          '+970',
+                                          style: TextStyle(color: Colors.grey),
+                                        ),
+                                      ),
+                                      DropdownMenuItem(
+                                        value: '+972',
+                                        child: Text(
+                                          '+972',
+                                          style: TextStyle(color: Colors.grey),
+                                        ),
+                                      ),
+                                    ],
+                                    onChanged: (v) {
+                                      if (v == null) return;
+                                      setState(() => _phonePrefix = v);
+                                    },
+                                    decoration: NavigoDecorations
+                                        .kInputDecoration
+                                        .copyWith(
+                                          contentPadding:
+                                              const EdgeInsets.symmetric(
+                                                horizontal: 12,
+                                                vertical: 14,
+                                              ),
+                                        ),
+                                  ),
+                                ),
+                                const SizedBox(width: 10),
+                                Expanded(
+                                  child: TextFormField(
+                                    controller: _phoneDigitsController,
+                                    keyboardType: TextInputType.phone,
+                                    style: const TextStyle(
+                                      color: Colors.black,
+                                      fontSize: 16,
+                                    ),
+                                    inputFormatters: [
+                                      FilteringTextInputFormatter.digitsOnly,
+                                      LengthLimitingTextInputFormatter(9),
+                                    ],
+                                    validator: (_) => AppFormValidators
+                                        .palestinianPhone(
+                                          context,
+                                          _fullPhoneNumber,
+                                        ),
+                                    decoration: NavigoDecorations
+                                        .kInputDecoration
+                                        .copyWith(
+                                          hintText: '590000000',
+                                          prefixIcon: const Icon(
+                                            Icons.phone_outlined,
+                                            color: Colors.green,
+                                          ),
+                                          suffixIcon: IconButton(
+                                            icon: const Icon(Icons.clear),
+                                            onPressed: () =>
+                                                _phoneDigitsController.clear(),
+                                          ),
+                                        ),
+                                  ),
+                                ),
+                              ],
                             ),
                             const SizedBox(height: 16),
 
@@ -321,6 +384,12 @@ class _DriverSignupScreenState extends State<DriverSignupScreen> {
                               controller: _carNumberController,
                               hint: context.texts.t('examplePlateNumber'),
                               prefixIcon: Icons.confirmation_number_outlined,
+                              keyboard: TextInputType.number,
+                              inputFormatters: [
+                                CarPlateInputFormatter(),
+                              ],
+                              validator: (v) =>
+                                  AppFormValidators.carPlate(context, v),
                             ),
                             const SizedBox(height: 16),
 
@@ -349,15 +418,70 @@ class _DriverSignupScreenState extends State<DriverSignupScreen> {
                                   setState(() => _selectedVehicleClass = val),
                             ),
 
+                            const SizedBox(height: 16),
+
+                            Row(
+                              children: [
+                                Checkbox(
+                                  value: _agreeToTerms,
+                                  onChanged: (value) {
+                                    setState(() {
+                                      _agreeToTerms = value ?? false;
+                                    });
+                                  },
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(4),
+                                  ),
+                                ),
+                                Expanded(
+                                  child: RichText(
+                                    text: TextSpan(
+                                      style: NavigoTextStyles.bodyMedium
+                                          .copyWith(
+                                            color: NavigoColors.textDark,
+                                            fontSize: 13,
+                                          ),
+                                      children: [
+                                        TextSpan(
+                                          text: '${context.texts.t('agreeTo')} ',
+                                        ),
+                                        TextSpan(
+                                          text: context.texts.t('terms'),
+                                          style: const TextStyle(
+                                            color: NavigoColors.primaryOrange,
+                                            fontWeight: FontWeight.w500,
+                                          ),
+                                          recognizer: TapGestureRecognizer()
+                                            ..onTap = () {},
+                                        ),
+                                        const TextSpan(text: " & "),
+                                        TextSpan(
+                                          text: context.texts.t('privacy'),
+                                          style: const TextStyle(
+                                            color: NavigoColors.primaryOrange,
+                                            fontWeight: FontWeight.w500,
+                                          ),
+                                          recognizer: TapGestureRecognizer()
+                                            ..onTap = () {},
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+
                             const SizedBox(height: 25),
 
                             SizedBox(
                               width: double.infinity,
                               height: 55,
                               child: ElevatedButton(
-                                onPressed: _isLoading ||
+                                onPressed:
+                                    _isLoading ||
                                         _routesLoading ||
-                                        _routeItems.isEmpty
+                                        _routeItems.isEmpty ||
+                                        !_agreeToTerms
                                     ? null
                                     : _submit,
                                 style:
@@ -423,19 +547,23 @@ class _DriverSignupScreenState extends State<DriverSignupScreen> {
     TextInputType keyboard = TextInputType.text,
     IconData? prefixIcon,
     String? Function(String?)? validator,
+    List<TextInputFormatter>? inputFormatters,
   }) {
     return TextFormField(
       controller: controller,
       keyboardType: keyboard,
       style: const TextStyle(color: Colors.black, fontSize: 16),
-      validator: validator ??
+      inputFormatters: inputFormatters,
+      validator:
+          validator ??
           (value) => value == null || value.isEmpty
               ? context.texts.t('required')
               : null,
       decoration: NavigoDecorations.kInputDecoration.copyWith(
         hintText: hint,
-        prefixIcon:
-            prefixIcon != null ? Icon(prefixIcon, color: Colors.green) : null,
+        prefixIcon: prefixIcon != null
+            ? Icon(prefixIcon, color: Colors.green)
+            : null,
         suffixIcon: prefixIcon != null
             ? IconButton(
                 icon: const Icon(Icons.clear),
@@ -458,7 +586,7 @@ class _DriverSignupScreenState extends State<DriverSignupScreen> {
       hint: Text(hint, style: const TextStyle(color: Colors.grey)),
       items: items,
       onChanged: onChanged,
-      validator: (v) => v == null ? context.texts.t('required') : null,
+      validator: (v) => AppFormValidators.requiredSelection(context, v),
       decoration: NavigoDecorations.kInputDecoration,
       icon: const Icon(Icons.keyboard_arrow_down),
     );

@@ -19,7 +19,11 @@ class LanguageController extends ChangeNotifier {
   Future<void> setLanguage(String languageCode) async {
     if (_locale.languageCode == languageCode) return;
     _locale = Locale(languageCode);
+
+    // Notify immediately before the async preference write, so MaterialApp,
+    // Directionality, and the current screen rebuild on the first toggle tap.
     notifyListeners();
+
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_storageKey, languageCode);
   }

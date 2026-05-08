@@ -5,6 +5,7 @@ import '../localization/localization_x.dart';
 import '../models/notification_model.dart';
 import '../services/notification_service.dart';
 import '../theme/app_theme.dart';
+import '../widgets/app_message.dart';
 
 class NotificationsScreen extends StatefulWidget {
   const NotificationsScreen({super.key});
@@ -18,7 +19,6 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   final NotificationService _notificationService = NotificationService();
 
   String _searchQuery = '';
-
 
   @override
   void dispose() {
@@ -180,29 +180,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
 
         if (!context.mounted) return;
 
-        showDialog(
-          context: context,
-          builder: (_) => AlertDialog(
-            title: Text(title),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(body),
-
-                const SizedBox(height: 12),
-
-                Text('Date: $formattedDate', style: NavigoTextStyles.bodySmall),
-              ],
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: const Text("Close"),
-              ),
-            ],
-          ),
-        );
+        AppMessage.showInfo(context, '$title\n$body\nDate: $formattedDate');
       },
       child: Container(
         padding: const EdgeInsets.all(16),

@@ -27,7 +27,7 @@ class SlotAssignmentResult {
 
 class SlotDriverAssignmentService {
   SlotDriverAssignmentService({FirebaseFirestore? firestore})
-      : _db = firestore ?? FirebaseFirestore.instance;
+    : _db = firestore ?? FirebaseFirestore.instance;
 
   final FirebaseFirestore _db;
 
@@ -48,11 +48,10 @@ class SlotDriverAssignmentService {
   }
 
   String _normalizeVehicleType(dynamic value) {
-    final text = value
-        .toString()
-        .trim()
-        .toLowerCase()
-        .replaceAll(RegExp(r'[\s_-]+'), '');
+    final text = value.toString().trim().toLowerCase().replaceAll(
+      RegExp(r'[\s_-]+'),
+      '',
+    );
 
     if (text.contains('micro')) return 'micro';
     if (text == 'bus') return 'bus';
@@ -137,11 +136,10 @@ class SlotDriverAssignmentService {
   }
 
   String _driverStatus(Map<String, dynamic> driverData) {
-    return driverData['status']
-        .toString()
-        .trim()
-        .toLowerCase()
-        .replaceAll(RegExp(r'[\s_-]+'), '');
+    return driverData['status'].toString().trim().toLowerCase().replaceAll(
+      RegExp(r'[\s_-]+'),
+      '',
+    );
   }
 
   bool _canUseDriverStatus(String status) {
@@ -153,13 +151,16 @@ class SlotDriverAssignmentService {
     required Map<String, dynamic>? vehicleData,
   }) {
     final fromDriver =
-        driverData['vehicleType'] ?? driverData['type'] ?? driverData['vehicle'];
+        driverData['vehicleType'] ??
+        driverData['type'] ??
+        driverData['vehicle'];
 
     if (fromDriver != null && fromDriver.toString().trim().isNotEmpty) {
       return _normalizeVehicleType(fromDriver);
     }
 
-    final fromVehicle = vehicleData?['vehicleType'] ??
+    final fromVehicle =
+        vehicleData?['vehicleType'] ??
         vehicleData?['type'] ??
         vehicleData?['vehicle'] ??
         vehicleData?['vehicle_type'];
@@ -214,7 +215,8 @@ class SlotDriverAssignmentService {
         }
 
         pendingIndexes.sort(
-          (a, b) => _slotDeparture(slots[a]).compareTo(_slotDeparture(slots[b])),
+          (a, b) =>
+              _slotDeparture(slots[a]).compareTo(_slotDeparture(slots[b])),
         );
 
         if (pendingIndexes.isEmpty) {
@@ -224,11 +226,9 @@ class SlotDriverAssignmentService {
           );
         }
 
-        final driverSnaps =
-            <String, DocumentSnapshot<Map<String, dynamic>>>{};
+        final driverSnaps = <String, DocumentSnapshot<Map<String, dynamic>>>{};
 
-        final vehicleSnaps =
-            <String, DocumentSnapshot<Map<String, dynamic>>>{};
+        final vehicleSnaps = <String, DocumentSnapshot<Map<String, dynamic>>>{};
 
         for (final driverId in originalQueue) {
           final driverSnap = await tx.get(_driverRef(driverId));
@@ -294,8 +294,9 @@ class SlotDriverAssignmentService {
             }
 
             final vehicleId = driverData['vehicleId']?.toString().trim() ?? '';
-            final vehicleData =
-                vehicleId.isEmpty ? null : vehicleSnaps[vehicleId]?.data();
+            final vehicleData = vehicleId.isEmpty
+                ? null
+                : vehicleSnaps[vehicleId]?.data();
 
             final driverVehicleType = _vehicleTypeFromDriverAndVehicle(
               driverData: driverData,

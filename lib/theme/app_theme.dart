@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:navigo/screens/notifications_screen.dart';
 
 class NavigoColors {
@@ -577,6 +577,11 @@ ThemeData get appTheme {
       style: NavigoDecorations.kPrimaryButtonStyle.copyWith(
         textStyle: WidgetStateProperty.all(NavigoTextStyles.button),
       ),
+    ),
+    dialogTheme: DialogThemeData(
+      // AlertDialog titles should stay readable on every dialog background.
+      // This applies to default `title: Text(...)` dialogs across the app.
+      titleTextStyle: NavigoTextStyles.titleSmall.copyWith(color: Colors.black),
     ),
     textTheme: const TextTheme(
       headlineLarge: NavigoTextStyles.titleLarge,

@@ -8,6 +8,7 @@ import 'package:google_maps_flutter/google_maps_flutter.dart';
 
 import '../../localization/localization_x.dart';
 import '../../theme/app_theme.dart';
+import '../../widgets/responsive.dart';
 import 'passenger_bottom_nav_bar.dart';
 
 /// Live map: driver from `drivers`, passenger from `passengers` only.
@@ -59,14 +60,12 @@ class _PassengerLiveTrackScreenState extends State<PassengerLiveTrackScreen> {
         });
 
     if (uid != null && uid.isNotEmpty) {
-      _passengerSub = db
-          .collection('passengers')
-          .doc(uid)
-          .snapshots()
-          .listen((snap) {
-            if (!mounted) return;
-            setState(() => _passengerData = snap.data());
-          });
+      _passengerSub = db.collection('passengers').doc(uid).snapshots().listen((
+        snap,
+      ) {
+        if (!mounted) return;
+        setState(() => _passengerData = snap.data());
+      });
     }
   }
 
@@ -136,7 +135,9 @@ class _PassengerLiveTrackScreenState extends State<PassengerLiveTrackScreen> {
                 : 'Driver',
             snippet: 'Live location',
           ),
-          icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueOrange),
+          icon: BitmapDescriptor.defaultMarkerWithHue(
+            BitmapDescriptor.hueOrange,
+          ),
         ),
       );
     }
@@ -147,8 +148,13 @@ class _PassengerLiveTrackScreenState extends State<PassengerLiveTrackScreen> {
         Marker(
           markerId: const MarkerId('me'),
           position: passPos,
-          infoWindow: InfoWindow(title: context.texts.t('you'), snippet: context.texts.t('yourPickup')),
-          icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueAzure),
+          infoWindow: InfoWindow(
+            title: context.texts.t('you'),
+            snippet: context.texts.t('yourPickup'),
+          ),
+          icon: BitmapDescriptor.defaultMarkerWithHue(
+            BitmapDescriptor.hueAzure,
+          ),
         ),
       );
     }
@@ -188,6 +194,9 @@ class _PassengerLiveTrackScreenState extends State<PassengerLiveTrackScreen> {
   Widget build(BuildContext context) {
     final driverPos = _driverLatLng();
     final markers = _buildMarkers();
+    final isLandscape =
+        MediaQuery.of(context).orientation == Orientation.landscape;
+    final padding = Responsive.horizontalPadding(context);
 
     return Scaffold(
       backgroundColor: NavigoColors.backgroundLight,
@@ -201,12 +210,15 @@ class _PassengerLiveTrackScreenState extends State<PassengerLiveTrackScreen> {
               context: context,
             ),
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20),
+              padding: EdgeInsets.symmetric(horizontal: padding),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(context.texts.t('liveTracking'), style: NavigoTextStyles.titleLarge),
-                  const SizedBox(height: 4),
+                  Text(
+                    context.texts.t('liveTracking'),
+                    style: NavigoTextStyles.titleLarge,
+                  ),
+                  SizedBox(height: Responsive.verticalGap(context, 4)),
                   Text(
                     driverPos == null
                         ? context.texts.t('waitingDriverLocation')
@@ -216,12 +228,14 @@ class _PassengerLiveTrackScreenState extends State<PassengerLiveTrackScreen> {
                 ],
               ),
             ),
-            const SizedBox(height: 12),
+            SizedBox(height: Responsive.verticalGap(context, 10)),
             Expanded(
               child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 14),
+                padding: EdgeInsets.symmetric(horizontal: padding * 0.7),
                 child: ClipRRect(
-                  borderRadius: BorderRadius.circular(22),
+                  // The map fills the remaining Expanded area while the border
+                  // radius scales down in landscape to preserve usable map room.
+                  borderRadius: BorderRadius.circular(isLandscape ? 14 : 22),
                   child: Stack(
                     children: [
                       GoogleMap(
@@ -241,8 +255,8 @@ class _PassengerLiveTrackScreenState extends State<PassengerLiveTrackScreen> {
                         },
                       ),
                       Positioned(
-                        top: 12,
-                        right: 12,
+                        top: Responsive.verticalGap(context, 12),
+                        right: Responsive.verticalGap(context, 12),
                         child: Material(
                           color: NavigoColors.surfaceWhite,
                           shape: const CircleBorder(),
@@ -260,7 +274,7 @@ class _PassengerLiveTrackScreenState extends State<PassengerLiveTrackScreen> {
                 ),
               ),
             ),
-            const SizedBox(height: 12),
+            SizedBox(height: Responsive.verticalGap(context, 10)),
           ],
         ),
       ),

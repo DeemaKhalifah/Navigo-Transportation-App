@@ -4,10 +4,12 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
+import '../../localization/localization_x.dart';
+import '../../models/driver.dart';
 import '../../services/notification_service.dart';
 import '../../services/route_manager_route_id.dart';
-import '../../localization/localization_x.dart';
 import '../../theme/app_theme.dart';
+import '../../widgets/app_message.dart';
 
 class RouteManagerNotificationCompose extends StatefulWidget {
   const RouteManagerNotificationCompose({super.key});
@@ -17,25 +19,12 @@ class RouteManagerNotificationCompose extends StatefulWidget {
       _RouteManagerNotificationComposeState();
 }
 
-class _DriverRecipient {
-  const _DriverRecipient({
-    required this.driverDocId,
-    required this.userId,
-    required this.name,
-    required this.status,
-  });
-
-  final String driverDocId;
-  final String userId;
-  final String name;
-  final String status;
-}
-
 class _RouteManagerNotificationComposeState
     extends State<RouteManagerNotificationCompose> {
   final TextEditingController _messageController = TextEditingController();
   final NotificationService _notificationService = NotificationService();
   final Set<String> _selectedUserIds = {};
+  final Map<String, String> _driverDocIdsByUserId = {};
 
   String? _routeId;
   String? _loadError;
@@ -76,7 +65,7 @@ class _RouteManagerNotificationComposeState
     }
   }
 
-  Stream<List<_DriverRecipient>> _watchRouteDrivers(String routeId) {
+  Stream<List<Driver>> _watchRouteDrivers(String routeId) {
     return FirebaseFirestore.instance
         .collection('drivers')
         .where('routeId', isEqualTo: routeId)
@@ -84,27 +73,31 @@ class _RouteManagerNotificationComposeState
         .asyncMap(_buildDriverRecipients);
   }
 
-  Future<List<_DriverRecipient>> _buildDriverRecipients(
+  Future<List<Driver>> _buildDriverRecipients(
     QuerySnapshot<Map<String, dynamic>> snapshot,
   ) async {
     final fs = FirebaseFirestore.instance;
     final userRefs = <String, DocumentReference<Map<String, dynamic>>>{};
+    final driverDocIdsByUserId = <String, String>{};
 
     for (final doc in snapshot.docs) {
       final userId = (doc.data()['userId'] ?? doc.id).toString().trim();
       if (userId.isNotEmpty) {
         userRefs[userId] = fs.collection('users').doc(userId);
+        driverDocIdsByUserId[userId] = doc.id;
       }
     }
 
     final userSnaps = userRefs.isEmpty
         ? <DocumentSnapshot<Map<String, dynamic>>>[]
         : await Future.wait(userRefs.values.map((ref) => ref.get()));
-    final usersById = {
-      for (final snap in userSnaps) snap.id: snap.data(),
-    };
+    final usersById = {for (final snap in userSnaps) snap.id: snap.data()};
 
-    final drivers = <_DriverRecipient>[];
+    _driverDocIdsByUserId
+      ..clear()
+      ..addAll(driverDocIdsByUserId);
+
+    final drivers = <Driver>[];
     for (final doc in snapshot.docs) {
       final data = doc.data();
       final userId = (data['userId'] ?? doc.id).toString().trim();
@@ -127,24 +120,27 @@ class _RouteManagerNotificationComposeState
           : 'Driver ${doc.id.substring(0, prefixLength)}';
 
       drivers.add(
-        _DriverRecipient(
-          driverDocId: doc.id,
-          userId: userId,
-          name: name,
+        Driver(
+          driverId: userId,
+          fullName: name,
+          phoneNumber: (user?['phone'] ?? data['phoneNumber'] ?? data['phone'])
+              .toString(),
           status: (data['status'] ?? 'offline').toString(),
+          isOnline: data['isOnline'] == true,
+          isApproved: data['isApproved'] == true,
         ),
       );
     }
 
-    drivers.sort((a, b) => a.name.compareTo(b.name));
+    drivers.sort((a, b) => a.fullName.compareTo(b.fullName));
     return drivers;
   }
 
-  Future<void> _send(List<_DriverRecipient> drivers) async {
+  Future<void> _send(List<Driver> drivers) async {
     final message = _messageController.text.trim();
     final recipients = _sendToAll
         ? drivers
-        : drivers.where((d) => _selectedUserIds.contains(d.userId)).toList();
+        : drivers.where((d) => _selectedUserIds.contains(d.driverId)).toList();
 
     if (message.isEmpty) {
       _showSnack('Write a notification message first.');
@@ -167,9 +163,10 @@ class _RouteManagerNotificationComposeState
         routeId: routeId,
         senderId: FirebaseAuth.instance.currentUser?.uid ?? '',
         message: message,
-        driverUserIds: recipients.map((d) => d.userId).toList(),
+        driverUserIds: recipients.map((d) => d.driverId).toList(),
         driverDocIdsByUserId: {
-          for (final d in recipients) d.userId: d.driverDocId,
+          for (final d in recipients)
+            d.driverId: _driverDocIdsByUserId[d.driverId] ?? d.driverId,
         },
         receiverScope: _sendToAll ? 'all' : 'specific',
       );
@@ -188,9 +185,7 @@ class _RouteManagerNotificationComposeState
   }
 
   void _showSnack(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message)),
-    );
+    AppMessage.showInfo(context, message);
   }
 
   @override
@@ -214,7 +209,7 @@ class _RouteManagerNotificationComposeState
                   ? const Center(child: CircularProgressIndicator())
                   : _loadError != null
                   ? _buildEmptyState(_loadError!)
-                  : StreamBuilder<List<_DriverRecipient>>(
+                  : StreamBuilder<List<Driver>>(
                       stream: _watchRouteDrivers(routeId!),
                       builder: (context, snapshot) {
                         if (snapshot.connectionState ==
@@ -253,7 +248,7 @@ class _RouteManagerNotificationComposeState
     );
   }
 
-  Widget _buildComposer(List<_DriverRecipient> drivers) {
+  Widget _buildComposer(List<Driver> drivers) {
     return SingleChildScrollView(
       padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
       child: Column(
@@ -277,7 +272,10 @@ class _RouteManagerNotificationComposeState
             ),
           ),
           const SizedBox(height: 16),
-          Text(context.texts.t('receivers'), style: NavigoTextStyles.titleSmall),
+          Text(
+            context.texts.t('receivers'),
+            style: NavigoTextStyles.titleSmall,
+          ),
           const SizedBox(height: 10),
           Row(
             children: [
@@ -325,7 +323,9 @@ class _RouteManagerNotificationComposeState
                     )
                   : const Icon(Icons.send),
               label: Text(
-                _sending ? context.texts.t('sending') : context.texts.t('sendNotification'),
+                _sending
+                    ? context.texts.t('sending')
+                    : context.texts.t('sendNotification'),
                 style: NavigoTextStyles.button,
               ),
             ),
@@ -335,8 +335,8 @@ class _RouteManagerNotificationComposeState
     );
   }
 
-  Widget _buildDriverTile(_DriverRecipient driver) {
-    final selected = _sendToAll || _selectedUserIds.contains(driver.userId);
+  Widget _buildDriverTile(Driver driver) {
+    final selected = _sendToAll || _selectedUserIds.contains(driver.driverId);
 
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
@@ -350,14 +350,14 @@ class _RouteManagerNotificationComposeState
         onChanged: (value) {
           setState(() {
             if (value == true) {
-              _selectedUserIds.add(driver.userId);
+              _selectedUserIds.add(driver.driverId);
             } else {
-              _selectedUserIds.remove(driver.userId);
+              _selectedUserIds.remove(driver.driverId);
             }
           });
         },
         title: Text(
-          driver.name,
+          driver.fullName,
           style: NavigoTextStyles.titleSmall.copyWith(fontSize: 15),
         ),
         subtitle: Text(

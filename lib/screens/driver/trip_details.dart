@@ -10,6 +10,7 @@ import '../../services/driver_trip_details_service.dart';
 import '../../services/driver_live_trip_service.dart';
 import '../../localization/localization_x.dart';
 import '../../theme/app_theme.dart';
+import '../../widgets/app_message.dart';
 import 'driver_home_screen.dart';
 import 'driver_bottom_nav_bar.dart';
 import 'driver_trips_screen.dart';
@@ -56,9 +57,7 @@ class _TripDetailesState extends State<TripDetailes> {
     final routeId = (widget.trip['routeId'] ?? '').toString().trim();
 
     if (tripId.isEmpty) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(context.texts.t('tripIdMissing'))));
+      AppMessage.showError(context, context.texts.t('tripIdMissing'));
       return;
     }
 
@@ -67,9 +66,7 @@ class _TripDetailesState extends State<TripDetailes> {
       context: context,
       builder: (ctx) => AlertDialog(
         title: Text(context.texts.t('cancelTrip')),
-        content: Text(
-          context.texts.t('cancelTripConfirm'),
-        ),
+        content: Text(context.texts.t('cancelTripConfirm')),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
@@ -98,18 +95,14 @@ class _TripDetailesState extends State<TripDetailes> {
       );
 
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(context.texts.t('tripCancelledSuccess'))),
-      );
+      AppMessage.showSuccess(context, context.texts.t('tripCancelledSuccess'));
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(builder: (_) => const DriverTripsScreen()),
       );
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('${context.texts.t('failedToCancel')}: $e')));
+      AppMessage.showError(context, '${context.texts.t('failedToCancel')}: $e');
     } finally {
       if (mounted) setState(() => _isCancelling = false);
     }
@@ -136,7 +129,10 @@ class _TripDetailesState extends State<TripDetailes> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(context.texts.t('tripDetails'), style: NavigoTextStyles.titleLarge),
+                  Text(
+                    context.texts.t('tripDetails'),
+                    style: NavigoTextStyles.titleLarge,
+                  ),
                   const SizedBox(height: 4),
                   Text(
                     context.texts.t('reviewBeforeStarting'),
@@ -253,7 +249,10 @@ class _TripDetailesState extends State<TripDetailes> {
                                     title: context.texts.t('from'),
                                     value: route.startPoint,
                                   ),
-                                  InfoItem(title: context.texts.t('to'), value: route.endPoint),
+                                  InfoItem(
+                                    title: context.texts.t('to'),
+                                    value: route.endPoint,
+                                  ),
                                 ],
                               ),
                             ],
@@ -262,7 +261,10 @@ class _TripDetailesState extends State<TripDetailes> {
 
                         const SizedBox(height: 16),
 
-                        Text(context.texts.t('passengers'), style: NavigoTextStyles.titleSmall),
+                        Text(
+                          context.texts.t('passengers'),
+                          style: NavigoTextStyles.titleSmall,
+                        ),
                         const SizedBox(height: 10),
 
                         Expanded(
@@ -282,7 +284,8 @@ class _TripDetailesState extends State<TripDetailes> {
                                     final passenger = passengers[index];
                                     return PassengerTile(
                                       passengerName:
-                                          (passenger['name'] ?? context.texts.t('passenger'))
+                                          (passenger['name'] ??
+                                                  context.texts.t('passenger'))
                                               .toString(),
                                       pickup:
                                           (passenger['pickup'] ??
@@ -319,12 +322,9 @@ class _TripDetailesState extends State<TripDetailes> {
                                         '';
 
                                     if (safeTripId.isEmpty) {
-                                      ScaffoldMessenger.of(
+                                      AppMessage.showError(
                                         context,
-                                      ).showSnackBar(
-                                        SnackBar(
-                                          content: Text(context.texts.t('tripIdMissing')),
-                                        ),
+                                        context.texts.t('tripIdMissing'),
                                       );
                                       return;
                                     }
@@ -338,18 +338,15 @@ class _TripDetailesState extends State<TripDetailes> {
 
                                       await _tripNotificationController
                                           .notifyPassengersTripStarted(
-                                        routeId: slot.routeId,
-                                        tripId: slot.slotId,
-                                        passengerIds: slot.passengersIds,
-                                      );
+                                            routeId: slot.routeId,
+                                            tripId: slot.slotId,
+                                            passengerIds: slot.passengersIds,
+                                          );
                                     } catch (e) {
                                       if (!context.mounted) return;
-                                      ScaffoldMessenger.of(
+                                      AppMessage.showError(
                                         context,
-                                      ).showSnackBar(
-                                        SnackBar(
-                                          content: Text('${context.texts.t('couldNotStart')}: $e'),
-                                        ),
+                                        '${context.texts.t('couldNotStart')}: $e',
                                       );
                                       return;
                                     }

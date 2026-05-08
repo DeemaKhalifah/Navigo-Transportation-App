@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -15,6 +16,8 @@ import '../../services/google_route_path_service.dart';
 import '../../services/notification_service.dart';
 import '../../localization/localization_x.dart';
 import '../../theme/app_theme.dart';
+import '../../widgets/app_message.dart';
+import '../../widgets/responsive.dart';
 import 'driver_bottom_nav_bar.dart';
 import 'package:navigo/screens/notifications_screen.dart';
 
@@ -443,17 +446,13 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
       );
 
       if (!mounted || _isDisposed) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Trip ended successfully')));
+      AppMessage.showSuccess(context, 'Trip ended successfully');
 
       _stopLiveTracking();
       setState(() {});
     } catch (e) {
       if (!mounted || _isDisposed) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Failed to end trip: $e')));
+      AppMessage.showError(context, 'Failed to end trip: $e');
     } finally {
       if (mounted && !_isDisposed) setState(() => _isEndingTrip = false);
     }
@@ -470,7 +469,9 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
 
     final String statusLabel = isAvailable
         ? context.texts.t('available')
-        : (isAssigned ? context.texts.t('assigned') : context.texts.t('offline'));
+        : (isAssigned
+              ? context.texts.t('assigned')
+              : context.texts.t('offline'));
     final Color statusColor = isAvailable
         ? NavigoColors.accentGreen
         : (isAssigned ? NavigoColors.primaryOrange : NavigoColors.accentRed);
@@ -479,6 +480,10 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
         : (isAssigned
               ? Icons.assignment_turned_in_outlined
               : Icons.cancel_outlined);
+    final media = MediaQuery.of(context);
+    final isLandscape = media.orientation == Orientation.landscape;
+    final pagePadding = Responsive.horizontalPadding(context);
+    final bottomCardMaxHeight = media.size.height * (isLandscape ? 0.58 : 0.48);
 
     return Scaffold(
       backgroundColor: NavigoColors.backgroundLight,
@@ -502,7 +507,10 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
           // ── Top header ───────────────────────────────────────────────────────
           SafeArea(
             child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+              padding: EdgeInsets.symmetric(
+                horizontal: pagePadding,
+                vertical: Responsive.verticalGap(context, 10),
+              ),
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
@@ -607,8 +615,10 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
 
           // ── My location button ───────────────────────────────────────────────
           Positioned(
-            top: 120,
-            right: 16,
+            // Keep the floating map control below the safe header and move it
+            // closer in landscape so it does not collide with the bottom sheet.
+            top: media.padding.top + (isLandscape ? 78 : 120),
+            right: pagePadding,
             child: _isLocating
                 ? const CircleAvatar(
                     radius: 18,
@@ -636,192 +646,215 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
             bottom: 0,
             left: 0,
             right: 0,
-            child: Container(
-              decoration: BoxDecoration(
-                color: NavigoColors.surfaceWhite,
-                borderRadius: const BorderRadius.vertical(
-                  top: Radius.circular(28),
-                ),
-                boxShadow: const [
-                  BoxShadow(color: Colors.black26, blurRadius: 16),
-                ],
-              ),
-              padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Drag handle
-                  Center(
-                    child: Container(
-                      width: 40,
-                      height: 5,
-                      decoration: BoxDecoration(
-                        color: Colors.grey.shade300,
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                    ),
+            child: ConstrainedBox(
+              constraints: BoxConstraints(maxHeight: bottomCardMaxHeight),
+              child: Container(
+                decoration: BoxDecoration(
+                  color: NavigoColors.surfaceWhite,
+                  borderRadius: BorderRadius.vertical(
+                    top: Radius.circular(isLandscape ? 20 : 28),
                   ),
-                  const SizedBox(height: 14),
+                  boxShadow: const [
+                    BoxShadow(color: Colors.black26, blurRadius: 16),
+                  ],
+                ),
+                padding: EdgeInsets.fromLTRB(
+                  pagePadding,
+                  Responsive.verticalGap(context, 12),
+                  pagePadding,
+                  math.max(media.padding.bottom, 16),
+                ),
+                child: SingleChildScrollView(
+                  // The bottom trip card can contain stats and action buttons;
+                  // constraining and scrolling it prevents landscape overflow
+                  // while keeping the GoogleMap filling the background.
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Drag handle
+                      Center(
+                        child: Container(
+                          width: 40,
+                          height: 5,
+                          decoration: BoxDecoration(
+                            color: Colors.grey.shade300,
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 14),
 
-                  if (!hasActiveTrip) ...[
-                    // ── No active trip ────────────────────────────────────────
-                    Row(
-                      children: [
-                        Container(
-                          width: 44,
-                          height: 44,
-                          decoration: NavigoDecorations.iconCircleDecoration(
-                            statusColor,
-                          ),
-                          child: Icon(statusIcon, color: statusColor, size: 24),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                isOffline
-                                    ? context.texts.t('youAreOffline')
-                                    : (isAssigned
-                                          ? context.texts.t('youHaveAssignedTrip')
-                                          : context.texts.t('youAreAvailable')),
-                                style: NavigoTextStyles.titleSmall.copyWith(
-                                  fontSize: 16,
-                                ),
-                              ),
-                              const SizedBox(height: 2),
-                              Text(
-                                '${context.texts.t('assignedTrips')}: $_assignedTripsCount',
-                                style: NavigoTextStyles.bodySmall,
-                              ),
-                            ],
-                          ),
-                        ),
-                        NavigoDecorations.statusChip(
-                          label: statusLabel,
-                          color: statusColor,
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 14,
-                            vertical: 6,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ] else ...[
-                    // ── Active trip ───────────────────────────────────────────
-                    Row(
-                      children: [
-                        Container(
-                          width: 44,
-                          height: 44,
-                          decoration: NavigoDecorations.iconCircleDecoration(
-                            NavigoColors.accentBlue,
-                          ),
-                          child: const Icon(
-                            Icons.directions_bus,
-                            color: NavigoColors.accentBlue,
-                            size: 24,
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                _tripLine ?? context.texts.t('activeTrip'),
-                                style: NavigoTextStyles.titleSmall.copyWith(
-                                  fontSize: 15,
-                                ),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                              const SizedBox(height: 2),
-                              if (_etaText != null)
-                                Text(
-                                  '${context.texts.t('eta')}: $_etaText',
-                                  style: NavigoTextStyles.bodySmall,
-                                ),
-                            ],
-                          ),
-                        ),
-                        NavigoDecorations.statusChip(
-                          label: context.texts.t('onTrip'),
-                          color: NavigoColors.accentBlue,
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 14,
-                            vertical: 6,
-                          ),
-                        ),
-                      ],
-                    ),
-
-                    const SizedBox(height: 14),
-                    Divider(
-                      color: NavigoColors.primaryOrange.withOpacity(0.25),
-                      height: 1,
-                    ),
-                    const SizedBox(height: 12),
-
-                    // Passenger stats
-                    Row(
-                      children: [
-                        _statChip(
-                          icon: Icons.people,
-                          label: context.texts.t('total'),
-                          value: '${_activeSlot!.passengersIds.length}',
-                          color: NavigoColors.primaryOrange,
-                        ),
-                        const SizedBox(width: 10),
-                        _statChip(
-                          icon: Icons.location_on,
-                          label: context.texts.t('onMap'),
-                          value: '$_passengersOnMap',
-                          color: NavigoColors.accentBlue,
-                        ),
-                        const SizedBox(width: 10),
-                        _statChip(
-                          icon: Icons.event_seat,
-                          label: context.texts.t('capacity'),
-                          value: '${_activeSlot!.capacity}',
-                          color: NavigoColors.accentGreen,
-                        ),
-                      ],
-                    ),
-
-                    const SizedBox(height: 16),
-
-                    // End trip button
-                    SizedBox(
-                      width: double.infinity,
-                      height: NavigoSizes.buttonHeight,
-                      child: ElevatedButton(
-                        onPressed: _isEndingTrip ? null : _endTrip,
-                        style: NavigoDecorations.kPrimaryButtonLargeStyle
-                            .copyWith(
-                              backgroundColor: const WidgetStatePropertyAll(
-                                NavigoColors.accentRed,
+                      if (!hasActiveTrip) ...[
+                        // ── No active trip ────────────────────────────────────────
+                        Row(
+                          children: [
+                            Container(
+                              width: 44,
+                              height: 44,
+                              decoration:
+                                  NavigoDecorations.iconCircleDecoration(
+                                    statusColor,
+                                  ),
+                              child: Icon(
+                                statusIcon,
+                                color: statusColor,
+                                size: 24,
                               ),
                             ),
-                        child: _isEndingTrip
-                            ? const SizedBox(
-                                width: 22,
-                                height: 22,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  color: NavigoColors.textLight,
-                                ),
-                              )
-                            : Text(
-                                context.texts.t('endTrip'),
-                                style: NavigoTextStyles.button,
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    isOffline
+                                        ? context.texts.t('youAreOffline')
+                                        : (isAssigned
+                                              ? context.texts.t(
+                                                  'youHaveAssignedTrip',
+                                                )
+                                              : context.texts.t(
+                                                  'youAreAvailable',
+                                                )),
+                                    style: NavigoTextStyles.titleSmall.copyWith(
+                                      fontSize: 16,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    '${context.texts.t('assignedTrips')}: $_assignedTripsCount',
+                                    style: NavigoTextStyles.bodySmall,
+                                  ),
+                                ],
                               ),
-                      ),
-                    ),
-                  ],
-                ],
+                            ),
+                            NavigoDecorations.statusChip(
+                              label: statusLabel,
+                              color: statusColor,
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 14,
+                                vertical: 6,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ] else ...[
+                        // ── Active trip ───────────────────────────────────────────
+                        Row(
+                          children: [
+                            Container(
+                              width: 44,
+                              height: 44,
+                              decoration:
+                                  NavigoDecorations.iconCircleDecoration(
+                                    NavigoColors.accentBlue,
+                                  ),
+                              child: const Icon(
+                                Icons.directions_bus,
+                                color: NavigoColors.accentBlue,
+                                size: 24,
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    _tripLine ?? context.texts.t('activeTrip'),
+                                    style: NavigoTextStyles.titleSmall.copyWith(
+                                      fontSize: 15,
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                  const SizedBox(height: 2),
+                                  if (_etaText != null)
+                                    Text(
+                                      '${context.texts.t('eta')}: $_etaText',
+                                      style: NavigoTextStyles.bodySmall,
+                                    ),
+                                ],
+                              ),
+                            ),
+                            NavigoDecorations.statusChip(
+                              label: context.texts.t('onTrip'),
+                              color: NavigoColors.accentBlue,
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 14,
+                                vertical: 6,
+                              ),
+                            ),
+                          ],
+                        ),
+
+                        const SizedBox(height: 14),
+                        Divider(
+                          color: NavigoColors.primaryOrange.withOpacity(0.25),
+                          height: 1,
+                        ),
+                        const SizedBox(height: 12),
+
+                        // Passenger stats
+                        Row(
+                          children: [
+                            _statChip(
+                              icon: Icons.people,
+                              label: context.texts.t('total'),
+                              value: '${_activeSlot!.passengersIds.length}',
+                              color: NavigoColors.primaryOrange,
+                            ),
+                            const SizedBox(width: 10),
+                            _statChip(
+                              icon: Icons.location_on,
+                              label: context.texts.t('onMap'),
+                              value: '$_passengersOnMap',
+                              color: NavigoColors.accentBlue,
+                            ),
+                            const SizedBox(width: 10),
+                            _statChip(
+                              icon: Icons.event_seat,
+                              label: context.texts.t('capacity'),
+                              value: '${_activeSlot!.capacity}',
+                              color: NavigoColors.accentGreen,
+                            ),
+                          ],
+                        ),
+
+                        const SizedBox(height: 16),
+
+                        // End trip button
+                        SizedBox(
+                          width: double.infinity,
+                          height: NavigoSizes.buttonHeight,
+                          child: ElevatedButton(
+                            onPressed: _isEndingTrip ? null : _endTrip,
+                            style: NavigoDecorations.kPrimaryButtonLargeStyle
+                                .copyWith(
+                                  backgroundColor: const WidgetStatePropertyAll(
+                                    NavigoColors.accentRed,
+                                  ),
+                                ),
+                            child: _isEndingTrip
+                                ? const SizedBox(
+                                    width: 22,
+                                    height: 22,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      color: NavigoColors.textLight,
+                                    ),
+                                  )
+                                : Text(
+                                    context.texts.t('endTrip'),
+                                    style: NavigoTextStyles.button,
+                                  ),
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
               ),
             ),
           ),

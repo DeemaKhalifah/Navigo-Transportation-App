@@ -27,7 +27,9 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
       options: DefaultFirebaseOptions.currentPlatform,
     );
   }
-  debugPrint('FCM background: ${message.messageId} type=${message.data['type']}');
+  debugPrint(
+    'FCM background: ${message.messageId} type=${message.data['type']}',
+  );
 }
 
 Future<void> main() async {
@@ -109,6 +111,18 @@ class _MyAppState extends State<MyApp> {
           debugShowCheckedModeBanner: false,
           locale: widget.languageController.locale,
           supportedLocales: AppTexts.supportedLocales,
+          // Rebuilt by AnimatedBuilder whenever LanguageController notifies,
+          // so locale and Directionality switch immediately on the active page.
+          builder: (context, child) {
+            // Keep the current route under the new text direction immediately;
+            // this prevents the onboarding screen from needing a second tap.
+            return Directionality(
+              textDirection: widget.languageController.isArabic
+                  ? TextDirection.rtl
+                  : TextDirection.ltr,
+              child: child ?? const SizedBox.shrink(),
+            );
+          },
           localizationsDelegates: const [
             GlobalMaterialLocalizations.delegate,
             GlobalWidgetsLocalizations.delegate,
@@ -171,10 +185,7 @@ class _SplashScreenState extends State<SplashScreen> {
           gradient: LinearGradient(
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
-            colors: [
-              NavigoColors.primaryAmber,
-              NavigoColors.backgroundLight,
-            ],
+            colors: [NavigoColors.primaryAmber, NavigoColors.backgroundLight],
           ),
         ),
         child: SafeArea(
@@ -182,10 +193,7 @@ class _SplashScreenState extends State<SplashScreen> {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Image.asset(
-                  "assets/images/logo.png",
-                  width: 220,
-                ),
+                Image.asset("assets/images/logo.png", width: 220),
                 const SizedBox(height: 20),
                 const Text(
                   "Navigo وصلني",

@@ -5,6 +5,7 @@ import '../../localization/localization_x.dart';
 import '../../models/trip_driver_request.dart';
 import '../../services/trip_driver_request_service.dart';
 import '../../theme/app_theme.dart';
+import '../../widgets/app_message.dart';
 import 'driver_bottom_nav_bar.dart';
 import 'driver_home_screen.dart';
 
@@ -42,7 +43,10 @@ class _DriverRequestsScreenState extends State<DriverRequestsScreen> {
             ),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 20),
-              child: Text(context.texts.t('tripRequests'), style: NavigoTextStyles.titleLarge),
+              child: Text(
+                context.texts.t('tripRequests'),
+                style: NavigoTextStyles.titleLarge,
+              ),
             ),
             const SizedBox(height: 16),
             Padding(
@@ -71,7 +75,8 @@ class _DriverRequestsScreenState extends State<DriverRequestsScreen> {
                   : StreamBuilder<List<TripDriverRequest>>(
                       stream: _requestService.watchPendingForDriver(driverId),
                       builder: (context, snapshot) {
-                        if (snapshot.connectionState == ConnectionState.waiting) {
+                        if (snapshot.connectionState ==
+                            ConnectionState.waiting) {
                           return const Center(
                             child: CircularProgressIndicator(),
                           );
@@ -118,11 +123,14 @@ class _DriverRequestsScreenState extends State<DriverRequestsScreen> {
                         return ListView.separated(
                           padding: const EdgeInsets.symmetric(horizontal: 16),
                           itemCount: filtered.length,
-                          separatorBuilder: (_, _) => const SizedBox(height: 12),
+                          separatorBuilder: (_, _) =>
+                              const SizedBox(height: 12),
                           itemBuilder: (context, index) {
                             return _RequestCard(
                               request: filtered[index],
-                              busy: _busyIds.contains(filtered[index].requestId),
+                              busy: _busyIds.contains(
+                                filtered[index].requestId,
+                              ),
                               onDecline: () => _respond(
                                 filtered[index].requestId,
                                 accept: false,
@@ -156,19 +164,17 @@ class _DriverRequestsScreenState extends State<DriverRequestsScreen> {
         await _requestService.declineRequest(requestId);
       }
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(accept ? context.texts.t('requestAccepted') : context.texts.t('requestDeclined')),
-        ),
+      AppMessage.showSuccess(
+        context,
+        accept
+            ? context.texts.t('requestAccepted')
+            : context.texts.t('requestDeclined'),
       );
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            e.toString().replaceFirst('Exception: ', ''),
-          ),
-        ),
+      AppMessage.showError(
+        context,
+        e.toString().replaceFirst('Exception: ', ''),
       );
     } finally {
       if (mounted) {
@@ -259,7 +265,9 @@ class _RequestCard extends StatelessWidget {
               Expanded(
                 child: ElevatedButton(
                   onPressed: busy ? null : onDecline,
-                  style: NavigoDecorations.coloredButton(NavigoColors.accentRed),
+                  style: NavigoDecorations.coloredButton(
+                    NavigoColors.accentRed,
+                  ),
                   child: Text(context.texts.t('decline')),
                 ),
               ),

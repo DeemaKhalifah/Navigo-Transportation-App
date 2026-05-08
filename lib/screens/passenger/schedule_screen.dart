@@ -8,6 +8,7 @@ import '../../services/passenger_schedule_service.dart';
 import '../../services/passenger_trip_repository.dart';
 import '../../localization/localization_x.dart';
 import '../../theme/app_theme.dart';
+import '../../widgets/app_message.dart';
 import 'passenger_bottom_nav_bar.dart';
 import 'passenger_home_screen.dart';
 
@@ -23,8 +24,7 @@ class ScheduleScreen extends StatefulWidget {
 class _ScheduleScreenState extends State<ScheduleScreen> {
   final PassengerScheduleService _scheduleService = PassengerScheduleService();
   final PassengerTripRepository _tripRepository = PassengerTripRepository();
-  final TextEditingController _manualPickupController =
-      TextEditingController();
+  final TextEditingController _manualPickupController = TextEditingController();
 
   String? _selectedLine;
   String? _vehicleType;
@@ -137,9 +137,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
       setState(() => _schedules = schedules);
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Failed to load schedules: $e')));
+      AppMessage.showError(context, 'Failed to load schedules: $e');
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -305,23 +303,17 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                                   });
                                   if (!sheetContext.mounted) return;
                                   Navigator.pop(sheetContext);
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    SnackBar(
-                                      content: Text(
-                                        '${context.texts.t('scheduleConfirmed')} $sheetSeatCount ${context.texts.t('seats')}.',
-                                      ),
-                                    ),
+                                  AppMessage.showSuccess(
+                                    context,
+                                    '${context.texts.t('scheduleConfirmed')} $sheetSeatCount ${context.texts.t('seats')}.',
                                   );
                                 } catch (e) {
                                   if (!mounted) return;
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    SnackBar(
-                                      content: Text(
-                                        e.toString().replaceFirst(
-                                          'Exception: ',
-                                          '',
-                                        ),
-                                      ),
+                                  AppMessage.showError(
+                                    context,
+                                    e.toString().replaceFirst(
+                                      'Exception: ',
+                                      '',
                                     ),
                                   );
                                 } finally {
@@ -376,7 +368,10 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(context.texts.t('searchSchedule'), style: NavigoTextStyles.titleLarge),
+                    Text(
+                      context.texts.t('searchSchedule'),
+                      style: NavigoTextStyles.titleLarge,
+                    ),
                     const SizedBox(height: 6),
                     Text(
                       context.texts.t('line'),
@@ -391,7 +386,10 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                       ),
                     ),
                     const SizedBox(height: 20),
-                    Text(context.texts.t('vehicleTypeLabel'), style: NavigoTextStyles.label),
+                    Text(
+                      context.texts.t('vehicleTypeLabel'),
+                      style: NavigoTextStyles.label,
+                    ),
                     const SizedBox(height: 8),
                     Row(
                       children: _vehicles.map((v) {
@@ -433,7 +431,10 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                       }).toList(),
                     ),
                     const SizedBox(height: 20),
-                    Text(context.texts.t('pickupLocation'), style: NavigoTextStyles.label),
+                    Text(
+                      context.texts.t('pickupLocation'),
+                      style: NavigoTextStyles.label,
+                    ),
                     const SizedBox(height: 6),
                     Text(
                       context.texts.t('pickupHint'),
@@ -456,7 +457,10 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                     const SizedBox(height: 20),
 
                     // ── Date & Time on the same row ──────────────────────────
-                    Text(context.texts.t('dateAndTime'), style: NavigoTextStyles.label),
+                    Text(
+                      context.texts.t('dateAndTime'),
+                      style: NavigoTextStyles.label,
+                    ),
                     const SizedBox(height: 8),
                     Row(
                       children: [
@@ -528,7 +532,10 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                     const SizedBox(height: 22),
                     Row(
                       children: [
-                        Text(context.texts.t('availableTrips'), style: NavigoTextStyles.label),
+                        Text(
+                          context.texts.t('availableTrips'),
+                          style: NavigoTextStyles.label,
+                        ),
                         const Spacer(),
                         IconButton(
                           onPressed: _isLoading ? null : _loadSchedules,

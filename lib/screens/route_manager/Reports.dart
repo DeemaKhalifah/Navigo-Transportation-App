@@ -4,6 +4,8 @@ import '../../localization/localization_x.dart';
 import '../../models/support_report.dart';
 import '../../services/support_report_service.dart';
 import '../../theme/app_theme.dart';
+import '../../widgets/app_message.dart';
+import '../../widgets/responsive.dart';
 import 'route_manager_notification_compose.dart';
 import 'route_manager_nav_bar.dart';
 import 'route_schedule.dart';
@@ -55,10 +57,11 @@ class _ReportsState extends State<Reports> {
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (_) {
+        final media = MediaQuery.of(context);
+        final padding = Responsive.horizontalPadding(context);
+
         return Container(
-          constraints: BoxConstraints(
-            maxHeight: MediaQuery.of(context).size.height * 0.85,
-          ),
+          constraints: BoxConstraints(maxHeight: media.size.height * 0.85),
           decoration: const BoxDecoration(
             color: NavigoColors.surfaceWhite,
             borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
@@ -66,9 +69,11 @@ class _ReportsState extends State<Reports> {
           child: SafeArea(
             top: false,
             child: Padding(
-              padding: const EdgeInsets.all(NavigoSizes.screenPadding),
+              padding: EdgeInsets.all(padding.clamp(16, 24)),
               child: Column(
-                mainAxisSize: MainAxisSize.min,
+                // The sheet has a max height; keeping the column bounded and
+                // making only the message scroll avoids landscape overflows.
+                mainAxisSize: MainAxisSize.max,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Center(
@@ -81,17 +86,26 @@ class _ReportsState extends State<Reports> {
                       ),
                     ),
                   ),
-                  const SizedBox(height: 14),
-                  Text(context.texts.t('reportDetails'), style: NavigoTextStyles.titleLarge),
-                  const SizedBox(height: 12),
+                  SizedBox(height: Responsive.verticalGap(context, 14)),
+                  Text(
+                    context.texts.t('reportDetails'),
+                    style: NavigoTextStyles.titleLarge,
+                  ),
+                  SizedBox(height: Responsive.verticalGap(context, 12)),
                   _detailRow(context.texts.t('from'), report.senderName),
                   _detailRow(context.texts.t('role'), report.senderRole),
                   _detailRow(context.texts.t('route'), report.routeLabel),
-                  _detailRow(context.texts.t('date'), _formatDate(report.createdAt)),
+                  _detailRow(
+                    context.texts.t('date'),
+                    _formatDate(report.createdAt),
+                  ),
                   _detailRow(context.texts.t('status'), report.status),
-                  const SizedBox(height: 14),
-                  Text(context.texts.t('message'), style: NavigoTextStyles.titleSmall),
-                  const SizedBox(height: 8),
+                  SizedBox(height: Responsive.verticalGap(context, 14)),
+                  Text(
+                    context.texts.t('message'),
+                    style: NavigoTextStyles.titleSmall,
+                  ),
+                  SizedBox(height: Responsive.verticalGap(context, 8)),
                   Expanded(
                     child: SingleChildScrollView(
                       child: Text(
@@ -115,8 +129,10 @@ class _ReportsState extends State<Reports> {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          SizedBox(
-            width: 72,
+          ConstrainedBox(
+            // The label column flexes a little for translated text instead of
+            // forcing a fixed 72px width in landscape/small screens.
+            constraints: const BoxConstraints(minWidth: 64, maxWidth: 110),
             child: Text(
               label,
               style: NavigoTextStyles.bodySmall.copyWith(
@@ -125,7 +141,7 @@ class _ReportsState extends State<Reports> {
               ),
             ),
           ),
-          const SizedBox(width: 10),
+          SizedBox(width: Responsive.verticalGap(context, 10)),
           Expanded(
             child: Text(
               value.trim().isEmpty ? '-' : value,
@@ -137,15 +153,33 @@ class _ReportsState extends State<Reports> {
     );
   }
 
+  Widget _buildSearchField() {
+    return TextField(
+      controller: searchController,
+      style: NavigoTextStyles.fieldText,
+      decoration: NavigoDecorations.kInputDecoration.copyWith(
+        hintText: context.texts.t('searchReports'),
+        filled: true,
+        fillColor: NavigoColors.surfaceWhite,
+        prefixIcon: const Icon(Icons.search, color: NavigoColors.accentGreen),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(30),
+          borderSide: BorderSide.none,
+        ),
+      ),
+      onChanged: (value) {
+        setState(() => query = value);
+      },
+    );
+  }
+
   Future<void> _sendToAdmin(List<SupportReport> visibleReports) async {
     final selectedReports = visibleReports
         .where((report) => selectedReportIds.contains(report.reportId))
         .toList();
 
     if (selectedReports.isEmpty) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(context.texts.t('noReportsSelected'))));
+      AppMessage.showError(context, context.texts.t('noReportsSelected'));
       return;
     }
 
@@ -160,20 +194,48 @@ class _ReportsState extends State<Reports> {
         selectedReportIds.clear();
       });
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(context.texts.t('reportsSentSuccess'))),
-      );
+      AppMessage.showSuccess(context, context.texts.t('reportsSentSuccess'));
     } catch (e) {
       if (!mounted) return;
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.toString().replaceFirst('Exception: ', ''))),
+      AppMessage.showError(
+        context,
+        e.toString().replaceFirst('Exception: ', ''),
       );
     } finally {
       if (mounted) {
         setState(() => _sending = false);
       }
     }
+  }
+
+  Widget _buildSendButton({
+    required List<SupportReport> visibleReports,
+    required bool compact,
+    required double padding,
+  }) {
+    return Padding(
+      padding: EdgeInsets.fromLTRB(
+        0,
+        compact ? 4 : Responsive.verticalGap(context, 8),
+        0,
+        compact ? 8 : padding,
+      ),
+      child: SizedBox(
+        width: double.infinity,
+        height: compact ? 44 : Responsive.buttonHeight(context),
+        child: ElevatedButton(
+          onPressed: _sending ? null : () => _sendToAdmin(visibleReports),
+          style: NavigoDecorations.kPrimaryButtonLargeStyle,
+          child: _sending
+              ? const CircularProgressIndicator(color: Colors.white)
+              : Text(
+                  context.texts.t('sendToAdmin'),
+                  style: NavigoTextStyles.button,
+                ),
+        ),
+      ),
+    );
   }
 
   @override
@@ -184,6 +246,12 @@ class _ReportsState extends State<Reports> {
 
   @override
   Widget build(BuildContext context) {
+    final padding = Responsive.horizontalPadding(context);
+    final isLandscape =
+        MediaQuery.of(context).orientation == Orientation.landscape;
+    final isShort = MediaQuery.sizeOf(context).height < 520;
+    final compact = isLandscape || isShort;
+
     return Scaffold(
       backgroundColor: NavigoColors.backgroundLight,
       body: SafeArea(
@@ -203,52 +271,55 @@ class _ReportsState extends State<Reports> {
               ),
             ),
 
-            Padding(
-              padding: const EdgeInsets.symmetric(
-                horizontal: NavigoSizes.screenPadding,
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(context.texts.t('reports'), style: NavigoTextStyles.titleLarge),
-                  const SizedBox(height: 4),
-                  Text(
-                    context.texts.t('reportsSubtitle'),
-                    style: NavigoTextStyles.bodySmall,
-                  ),
-                ],
-              ),
-            ),
-
-            const SizedBox(height: NavigoSizes.sectionGap),
-
-            Padding(
-              padding: const EdgeInsets.symmetric(
-                horizontal: NavigoSizes.screenPadding,
-              ),
-              child: TextField(
-                controller: searchController,
-                style: NavigoTextStyles.fieldText,
-                decoration: NavigoDecorations.kInputDecoration.copyWith(
-                  hintText: context.texts.t('searchReports'),
-                  filled: true,
-                  fillColor: NavigoColors.surfaceWhite,
-                  prefixIcon: const Icon(
-                    Icons.search,
-                    color: NavigoColors.accentGreen,
-                  ),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(30),
-                    borderSide: BorderSide.none,
-                  ),
+            if (compact)
+              Padding(
+                padding: EdgeInsets.symmetric(horizontal: padding),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    Flexible(
+                      flex: 2,
+                      child: Text(
+                        context.texts.t('reports'),
+                        style: NavigoTextStyles.titleLarge,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    SizedBox(width: Responsive.verticalGap(context, 12)),
+                    // Landscape has very little vertical space, so the search
+                    // field moves beside the title instead of consuming another
+                    // full row and causing a bottom overflow.
+                    Expanded(flex: 3, child: _buildSearchField()),
+                  ],
                 ),
-                onChanged: (value) {
-                  setState(() => query = value);
-                },
+              )
+            else ...[
+              Padding(
+                padding: EdgeInsets.symmetric(horizontal: padding),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      context.texts.t('reports'),
+                      style: NavigoTextStyles.titleLarge,
+                    ),
+                    SizedBox(height: Responsive.verticalGap(context, 4)),
+                    Text(
+                      context.texts.t('reportsSubtitle'),
+                      style: NavigoTextStyles.bodySmall,
+                    ),
+                  ],
+                ),
               ),
-            ),
+              SizedBox(height: Responsive.verticalGap(context, 14)),
+              Padding(
+                padding: EdgeInsets.symmetric(horizontal: padding),
+                child: _buildSearchField(),
+              ),
+            ],
 
-            const SizedBox(height: NavigoSizes.sectionGap),
+            SizedBox(height: compact ? 6 : Responsive.verticalGap(context, 14)),
 
             Expanded(
               child: StreamBuilder<List<SupportReport>>(
@@ -279,11 +350,23 @@ class _ReportsState extends State<Reports> {
                   }
 
                   return ListView.builder(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: NavigoSizes.screenPadding,
+                    padding: EdgeInsets.symmetric(
+                      horizontal: padding,
+                      vertical: Responsive.verticalGap(context, 2),
                     ),
-                    itemCount: reports.length,
+                    // The action button is part of the scrollable content in
+                    // compact/landscape layouts, so it never forces the outer
+                    // Column to overflow by a few pixels.
+                    itemCount: reports.length + 1,
                     itemBuilder: (context, index) {
+                      if (index == reports.length) {
+                        return _buildSendButton(
+                          visibleReports: reports,
+                          compact: compact,
+                          padding: padding,
+                        );
+                      }
+
                       final report = reports[index];
                       final isSelected = selectedReportIds.contains(
                         report.reportId,
@@ -307,114 +390,82 @@ class _ReportsState extends State<Reports> {
                       );
 
                       return Container(
-                        margin: const EdgeInsets.only(
-                          bottom: NavigoSizes.itemGap,
+                        margin: EdgeInsets.only(
+                          bottom: Responsive.verticalGap(context, 10),
                         ),
-                        padding: const EdgeInsets.all(NavigoSizes.cardPadding),
+                        padding: EdgeInsets.all(
+                          padding.clamp(14, NavigoSizes.cardPadding),
+                        ),
                         decoration: NavigoDecorations.kCardDecoration,
-                        child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Checkbox(
-                              value: isSelected,
-                              activeColor: NavigoColors.primaryOrange,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(4),
-                              ),
-                              onChanged: (value) {
-                                setState(() {
-                                  if (value == true) {
-                                    selectedReportIds.add(report.reportId);
-                                  } else {
-                                    selectedReportIds.remove(report.reportId);
-                                  }
-                                });
-                              },
+                        child: _ReportCardContent(
+                          isCompact: isLandscape,
+                          checkbox: Checkbox(
+                            value: isSelected,
+                            activeColor: NavigoColors.primaryOrange,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(4),
                             ),
-
-                            const SizedBox(width: 8),
-
-                            Expanded(
-                              child: InkWell(
-                                borderRadius: BorderRadius.circular(16),
-                                onTap: () => _openReportSheet(report),
-                                child: Padding(
-                                  padding: const EdgeInsets.symmetric(
-                                    vertical: 6,
+                            onChanged: (value) {
+                              setState(() {
+                                if (value == true) {
+                                  selectedReportIds.add(report.reportId);
+                                } else {
+                                  selectedReportIds.remove(report.reportId);
+                                }
+                              });
+                            },
+                          ),
+                          content: InkWell(
+                            borderRadius: BorderRadius.circular(16),
+                            onTap: () => _openReportSheet(report),
+                            child: Padding(
+                              padding: EdgeInsets.symmetric(
+                                vertical: Responsive.verticalGap(context, 6),
+                              ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    report.senderName.isEmpty
+                                        ? context.texts.t('unknownUser')
+                                        : report.senderName,
+                                    style: titleStyle,
                                   ),
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        report.senderName.isEmpty
-                                            ? context.texts.t('unknownUser')
-                                            : report.senderName,
-                                        style: titleStyle,
-                                      ),
-                                      const SizedBox(height: 4),
-                                      Text(
-                                        '${context.texts.t('role')}: ${report.senderRole}',
-                                        style: metaStyle,
-                                      ),
-                                      const SizedBox(height: 4),
-                                      Text(
-                                        '${context.texts.t('route')}: ${report.routeLabel}',
-                                        style: metaStyle,
-                                      ),
-                                    ],
+                                  SizedBox(
+                                    height: Responsive.verticalGap(context, 4),
                                   ),
-                                ),
+                                  Text(
+                                    '${context.texts.t('role')}: ${report.senderRole}',
+                                    style: metaStyle,
+                                  ),
+                                  SizedBox(
+                                    height: Responsive.verticalGap(context, 4),
+                                  ),
+                                  Text(
+                                    '${context.texts.t('route')}: ${report.routeLabel}',
+                                    style: metaStyle,
+                                  ),
+                                ],
                               ),
                             ),
-
-                            const SizedBox(width: 8),
-
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 10,
-                                vertical: 6,
-                              ),
-                              decoration: BoxDecoration(
-                                color: NavigoColors.accentGreen,
-                                borderRadius: BorderRadius.circular(999),
-                              ),
-                              child: Text(
-                                _formatDate(report.createdAt),
-                                style: chipTextStyle,
-                              ),
+                          ),
+                          dateChip: Container(
+                            padding: EdgeInsets.symmetric(
+                              horizontal: Responsive.verticalGap(context, 10),
+                              vertical: Responsive.verticalGap(context, 6),
                             ),
-                          ],
+                            decoration: BoxDecoration(
+                              color: NavigoColors.accentGreen,
+                              borderRadius: BorderRadius.circular(999),
+                            ),
+                            child: Text(
+                              _formatDate(report.createdAt),
+                              style: chipTextStyle,
+                            ),
+                          ),
                         ),
                       );
                     },
-                  );
-                },
-              ),
-            ),
-
-            Padding(
-              padding: const EdgeInsets.all(NavigoSizes.screenPadding),
-              child: StreamBuilder<List<SupportReport>>(
-                stream: _service.watchReportsForCurrentRouteManager(),
-                builder: (context, snapshot) {
-                  final visibleReports = _filterReports(snapshot.data ?? []);
-
-                  return SizedBox(
-                    width: double.infinity,
-                    height: NavigoSizes.buttonHeight,
-                    child: ElevatedButton(
-                      onPressed: _sending
-                          ? null
-                          : () => _sendToAdmin(visibleReports),
-                      style: NavigoDecorations.kPrimaryButtonLargeStyle,
-                      child: _sending
-                          ? const CircularProgressIndicator(color: Colors.white)
-                          : Text(
-                              context.texts.t('sendToAdmin'),
-                              style: NavigoTextStyles.button,
-                            ),
-                    ),
                   );
                 },
               ),
@@ -423,6 +474,54 @@ class _ReportsState extends State<Reports> {
         ),
       ),
       bottomNavigationBar: const RouteManagerNavBar(currentIndex: 2),
+    );
+  }
+}
+
+class _ReportCardContent extends StatelessWidget {
+  const _ReportCardContent({
+    required this.isCompact,
+    required this.checkbox,
+    required this.content,
+    required this.dateChip,
+  });
+
+  final bool isCompact;
+  final Widget checkbox;
+  final Widget content;
+  final Widget dateChip;
+
+  @override
+  Widget build(BuildContext context) {
+    if (isCompact) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              checkbox,
+              const SizedBox(width: 8),
+              Expanded(child: content),
+            ],
+          ),
+          const SizedBox(height: 8),
+          // In landscape the card stacks the date below the text, so narrow
+          // heights/translated text do not force a horizontal overflow.
+          Align(alignment: AlignmentDirectional.centerEnd, child: dateChip),
+        ],
+      );
+    }
+
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        checkbox,
+        const SizedBox(width: 8),
+        Expanded(child: content),
+        const SizedBox(width: 8),
+        Flexible(flex: 0, child: dateChip),
+      ],
     );
   }
 }

@@ -5,6 +5,7 @@ import '../../models/schedule_slot.dart';
 import '../../models/trip_status.dart';
 import '../../services/passenger_trip_history_service.dart';
 import '../../theme/app_theme.dart';
+import '../../widgets/app_message.dart';
 import 'passenger_home_screen.dart';
 import 'passenger_bottom_nav_bar.dart';
 
@@ -114,7 +115,10 @@ class _TripHistoryScreenState extends State<TripHistoryScreen> {
             ),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 20),
-              child: Text(context.texts.t('tripHistory'), style: NavigoTextStyles.titleLarge),
+              child: Text(
+                context.texts.t('tripHistory'),
+                style: NavigoTextStyles.titleLarge,
+              ),
             ),
             const SizedBox(height: 12),
             Padding(
@@ -123,14 +127,20 @@ class _TripHistoryScreenState extends State<TripHistoryScreen> {
                 scrollDirection: Axis.horizontal,
                 child: Row(
                   children: [
-                    _filterChip(label: context.texts.t('all'), value: TripStatus.all),
+                    _filterChip(
+                      label: context.texts.t('all'),
+                      value: TripStatus.all,
+                    ),
                     const SizedBox(width: 7),
                     _filterChip(
                       label: context.texts.t('scheduled'),
                       value: TripStatus.scheduled,
                     ),
                     const SizedBox(width: 7),
-                    _filterChip(label: context.texts.t('onTrip'), value: TripStatus.onTrip),
+                    _filterChip(
+                      label: context.texts.t('onTrip'),
+                      value: TripStatus.onTrip,
+                    ),
                     const SizedBox(width: 7),
                     _filterChip(
                       label: context.texts.t('completed'),
@@ -380,7 +390,10 @@ class _TripHistoryDetailsSheetState extends State<_TripHistoryDetailsSheet> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(context.texts.t('tripDetails'), style: NavigoTextStyles.titleSmall),
+              Text(
+                context.texts.t('tripDetails'),
+                style: NavigoTextStyles.titleSmall,
+              ),
               NavigoDecorations.statusChip(
                 label: _localizedStatus(status),
                 color: _statusColor(status),
@@ -392,7 +405,10 @@ class _TripHistoryDetailsSheetState extends State<_TripHistoryDetailsSheet> {
           const SizedBox(height: 8),
 
           // Only show: Line, Date, Departure, Arrival, Vehicle, Plate Number, Driver Phone
-          _row(context.texts.t('line'), widget.historyService.lineOf(widget.slot)),
+          _row(
+            context.texts.t('line'),
+            widget.historyService.lineOf(widget.slot),
+          ),
           _row(
             context.texts.t('date'),
             PassengerTripHistoryService.formatDate(widget.slot.departureAt),
@@ -405,9 +421,18 @@ class _TripHistoryDetailsSheetState extends State<_TripHistoryDetailsSheet> {
             context.texts.t('arrival'),
             PassengerTripHistoryService.formatTime(widget.slot.arrivalAt),
           ),
-          _row(context.texts.t('vehicle'), widget.historyService.vehicleTypeTextOf(widget.slot)),
-          _row(context.texts.t('vehiclePlateNo'), _loadingDriverInfo ? '...' : _plateNumber),
-          _row(context.texts.t('driverPhone'), _loadingDriverInfo ? '...' : _driverPhone),
+          _row(
+            context.texts.t('vehicle'),
+            widget.historyService.vehicleTypeTextOf(widget.slot),
+          ),
+          _row(
+            context.texts.t('vehiclePlateNo'),
+            _loadingDriverInfo ? '...' : _plateNumber,
+          ),
+          _row(
+            context.texts.t('driverPhone'),
+            _loadingDriverInfo ? '...' : _driverPhone,
+          ),
 
           const SizedBox(height: 20),
 
@@ -434,7 +459,10 @@ class _TripHistoryDetailsSheetState extends State<_TripHistoryDetailsSheet> {
                 },
                 style: NavigoDecorations.kPrimaryButtonLargeStyle,
                 icon: const Icon(Icons.route, size: 20),
-                label: Text(context.texts.t('viewRoute'), style: NavigoTextStyles.button),
+                label: Text(
+                  context.texts.t('viewRoute'),
+                  style: NavigoTextStyles.button,
+                ),
               ),
             ),
 
@@ -447,10 +475,9 @@ class _TripHistoryDetailsSheetState extends State<_TripHistoryDetailsSheet> {
                 onPressed: () {
                   Navigator.pop(context);
                   if (widget.slot.driverId.trim().isEmpty) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text(context.texts.t('noDriverAssigned')),
-                      ),
+                    AppMessage.showError(
+                      context,
+                      context.texts.t('noDriverAssigned'),
                     );
                     return;
                   }

@@ -4,12 +4,13 @@ import 'package:image_picker/image_picker.dart';
 import '../../localization/localization_x.dart';
 import '../../theme/app_theme.dart';
 import '../../controllers/driver_profile_controller.dart';
+import '../../widgets/app_message.dart';
 import '../../widgets/language_toggle_switch.dart';
 import 'driver_bottom_nav_bar.dart';
 import 'driver_home_screen.dart';
 import '../../screens/passenger/support_screen.dart';
 import '../../models/driver_status.dart';
-import '../authentication/phone_number_screen.dart';
+import '../welcome_flow/welcome.dart';
 
 class DriverProfileScreen extends StatefulWidget {
   const DriverProfileScreen({super.key});
@@ -41,9 +42,7 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
   }
 
   void _showSnack(String message) {
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text(message)));
+    AppMessage.showInfo(context, message);
   }
 
   void _showImagePicker() {
@@ -108,7 +107,7 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
     await controller.logout();
     if (!mounted) return;
     Navigator.of(context).pushAndRemoveUntil(
-      MaterialPageRoute(builder: (_) => const PhoneNumberScreen()),
+      MaterialPageRoute(builder: (_) => const OnboardingScreen()),
       (route) => false,
     );
   }
@@ -148,7 +147,10 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text(context.texts.t('profile'), style: NavigoTextStyles.titleLarge),
+                  Text(
+                    context.texts.t('profile'),
+                    style: NavigoTextStyles.titleLarge,
+                  ),
                   IconButton(
                     onPressed: controller.toggleEdit,
                     icon: Icon(
@@ -242,7 +244,10 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
                               ),
                             const SizedBox(height: 16),
                             Align(
-                              alignment: Alignment.centerLeft,
+                              // Use directional start so this text moves with
+                              // the active language: left for English, right
+                              // for Arabic after Directionality rebuilds.
+                              alignment: AlignmentDirectional.centerStart,
                               child: Text(
                                 '${context.texts.t('driverStatus')}: ${controller.statusLabel}',
                                 style: NavigoTextStyles.bodyMedium.copyWith(
@@ -327,7 +332,9 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
                             ),
                             const SizedBox(height: 20),
                             Align(
-                              alignment: Alignment.centerLeft,
+                              // Keep section headers aligned to the reading
+                              // start instead of hard-coding the left side.
+                              alignment: AlignmentDirectional.centerStart,
                               child: Text(
                                 context.texts.t('settings'),
                                 style: NavigoTextStyles.titleSmall.copyWith(
@@ -337,7 +344,10 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
                             ),
                             const SizedBox(height: 10),
                             const Align(
-                              alignment: Alignment.centerLeft,
+                              // The language switch follows the current text
+                              // direction: English/LTR start is left, Arabic
+                              // /RTL start is right.
+                              alignment: AlignmentDirectional.centerStart,
                               child: LanguageToggleSwitch(),
                             ),
                             const SizedBox(height: 8),

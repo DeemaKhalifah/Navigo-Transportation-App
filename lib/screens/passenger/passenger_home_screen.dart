@@ -10,6 +10,8 @@ import 'dart:ui' as ui;
 
 import '../../localization/localization_x.dart';
 import '../../theme/app_theme.dart';
+import '../../widgets/app_message.dart';
+import '../../widgets/responsive.dart';
 import 'passenger_bottom_nav_bar.dart';
 import '../notifications_screen.dart';
 import 'schedule_screen.dart';
@@ -182,9 +184,7 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> {
     final end = endLatLng ?? routeInfo?.endLocation;
 
     if (start == null || end == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Could not geocode route points')),
-      );
+      AppMessage.showError(context, 'Could not geocode route points');
       return;
     }
 
@@ -219,7 +219,10 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> {
         Marker(
           markerId: const MarkerId('route_start'),
           position: start,
-          infoWindow: InfoWindow(title: context.texts.t('from'), snippet: startPoint),
+          infoWindow: InfoWindow(
+            title: context.texts.t('from'),
+            snippet: startPoint,
+          ),
           icon: BitmapDescriptor.defaultMarkerWithHue(
             BitmapDescriptor.hueGreen,
           ),
@@ -229,7 +232,10 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> {
         Marker(
           markerId: const MarkerId('route_end'),
           position: end,
-          infoWindow: InfoWindow(title: context.texts.t('to'), snippet: endPoint),
+          infoWindow: InfoWindow(
+            title: context.texts.t('to'),
+            snippet: endPoint,
+          ),
           icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRed),
         ),
       );
@@ -353,9 +359,7 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> {
     final serviceEnabled = await Geolocator.isLocationServiceEnabled();
     if (!serviceEnabled) {
       if (showMessages && mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Please enable location services")),
-        );
+        AppMessage.showError(context, 'Please enable location services');
       }
       return false;
     }
@@ -367,19 +371,16 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> {
 
     if (permission == LocationPermission.denied) {
       if (showMessages && mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Location permission denied")),
-        );
+        AppMessage.showError(context, 'Location permission denied');
       }
       return false;
     }
 
     if (permission == LocationPermission.deniedForever) {
       if (showMessages && mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text("Enable location permission from settings"),
-          ),
+        AppMessage.showError(
+          context,
+          'Enable location permission from settings',
         );
         await Geolocator.openAppSettings();
       }
@@ -526,9 +527,7 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> {
     } catch (e) {
       debugPrint("Routes load error: $e");
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text("Failed to load routes: $e")));
+      AppMessage.showError(context, 'Failed to load routes: $e');
     } finally {
       if (mounted) {
         setState(() => _isLoadingLines = false);
@@ -635,9 +634,7 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> {
     } catch (e) {
       debugPrint("Location error: $e");
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text("Error getting location")));
+      AppMessage.showError(context, 'Error getting location');
     } finally {
       if (mounted) {
         setState(() => _isLocating = false);
@@ -717,10 +714,14 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> {
 
       final startLoc = route.startLocation;
       final endLoc = route.endLocation;
-      final startLatLng = (startLoc != null && startLoc['lat'] != null && startLoc['lng'] != null)
+      final startLatLng =
+          (startLoc != null &&
+              startLoc['lat'] != null &&
+              startLoc['lng'] != null)
           ? LatLng(startLoc['lat']!, startLoc['lng']!)
           : null;
-      final endLatLng = (endLoc != null && endLoc['lat'] != null && endLoc['lng'] != null)
+      final endLatLng =
+          (endLoc != null && endLoc['lat'] != null && endLoc['lng'] != null)
           ? LatLng(endLoc['lat']!, endLoc['lng']!)
           : null;
 
@@ -746,9 +747,7 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> {
     if (!mounted) return;
 
     if (filteredDrivers.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(context.texts.t('noVehiclesFound'))),
-      );
+      AppMessage.showInfo(context, context.texts.t('noVehiclesFound'));
       return;
     }
 
@@ -850,7 +849,11 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> {
                       context.texts.t('vehicleType'),
                       driver['vehicleType'] as String,
                     ),
-                    _tripInfoRow(Icons.route, context.texts.t('line'), driver['line'] as String),
+                    _tripInfoRow(
+                      Icons.route,
+                      context.texts.t('line'),
+                      driver['line'] as String,
+                    ),
                     _tripInfoRow(
                       Icons.event_seat,
                       context.texts.t('availableSeats'),
@@ -937,7 +940,6 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> {
                       child: ElevatedButton(
                         onPressed: () async {
                           final nav = Navigator.of(context);
-                          final messenger = ScaffoldMessenger.of(this.context);
                           nav.pop();
                           try {
                             await _tripRequestService.createRequest(
@@ -955,22 +957,16 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> {
                               pickupDescription: _selectedLocation ?? '',
                             );
                             if (!this.context.mounted) return;
-                            messenger.showSnackBar(
-                              SnackBar(
-                                content: Text(
-                                  '${context.texts.t('requestSentTo')} ${driver['name']}. '
-                                  '${context.texts.t('driverAcceptDecline')}',
-                                ),
-                              ),
+                            AppMessage.showSuccess(
+                              this.context,
+                              '${context.texts.t('requestSentTo')} ${driver['name']}. '
+                              '${context.texts.t('driverAcceptDecline')}',
                             );
                           } catch (e) {
                             if (!this.context.mounted) return;
-                            messenger.showSnackBar(
-                              SnackBar(
-                                content: Text(
-                                  e.toString().replaceFirst('Exception: ', ''),
-                                ),
-                              ),
+                            AppMessage.showError(
+                              this.context,
+                              e.toString().replaceFirst('Exception: ', ''),
                             );
                           }
                         },
@@ -1029,9 +1025,7 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> {
 
     if (line == null || line.isEmpty) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(context.texts.t('selectLineFirst'))),
-      );
+      AppMessage.showError(context, context.texts.t('selectLineFirst'));
       return;
     }
 
@@ -1045,6 +1039,12 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> {
   @override
   Widget build(BuildContext context) {
     debugPrint('[Map] PassengerHomeScreen build');
+    final media = MediaQuery.of(context);
+    final isLandscape = media.orientation == Orientation.landscape;
+    final pagePadding = Responsive.horizontalPadding(context);
+    final bannerTop = media.padding.top + (isLandscape ? 132 : 180);
+    final bottomCardMaxHeight = media.size.height * (isLandscape ? 0.46 : 0.38);
+
     return Scaffold(
       backgroundColor: NavigoColors.backgroundLight,
       bottomNavigationBar: const PassengerBottomNavBar(currentIndex: 0),
@@ -1078,7 +1078,9 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> {
           ),
           SafeArea(
             child: Padding(
-              padding: const EdgeInsets.all(16),
+              // Responsive safe padding keeps the search/header overlay inside
+              // notches and balanced across phones/tablets.
+              padding: EdgeInsets.all(pagePadding.clamp(12, 20)),
               child: Column(
                 children: [
                   NavigoDecorations.homeStyleTitleBar(
@@ -1166,7 +1168,7 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> {
                       ],
                     ),
                   ),
-                  const SizedBox(height: 14),
+                  SizedBox(height: Responsive.verticalGap(context, 12)),
                   Row(
                     children: [
                       Expanded(
@@ -1264,7 +1266,7 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> {
                           ],
                         ),
                       ),
-                      const SizedBox(width: 10),
+                      SizedBox(width: Responsive.verticalGap(context, 10)),
                       _isLocating
                           ? const CircularProgressIndicator()
                           : FloatingActionButton.small(
@@ -1282,9 +1284,9 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> {
           // ── Live tracking banner ──────────────────────────────────────────
           if (_isLiveTracking)
             Positioned(
-              top: 180,
-              left: 16,
-              right: 16,
+              top: bannerTop,
+              left: pagePadding,
+              right: pagePadding,
               child: Container(
                 padding: const EdgeInsets.symmetric(
                   horizontal: 16,
@@ -1342,9 +1344,9 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> {
           // ── Route view banner ─────────────────────────────────────────────
           if (_polylines.isNotEmpty && !_isLiveTracking)
             Positioned(
-              top: 180,
-              left: 16,
-              right: 16,
+              top: bannerTop,
+              left: pagePadding,
+              right: pagePadding,
               child: Container(
                 padding: const EdgeInsets.symmetric(
                   horizontal: 16,
@@ -1409,109 +1411,123 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> {
             ),
 
           Positioned(
-            bottom: 20,
-            left: 0,
-            right: 0,
-            child: Container(
-              margin: const EdgeInsets.symmetric(horizontal: 12),
-              padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
-              decoration: BoxDecoration(
-                color: NavigoColors.lightorange,
-                borderRadius: const BorderRadius.vertical(
-                  top: Radius.circular(25),
+            bottom: media.padding.bottom + Responsive.verticalGap(context, 8),
+            left: pagePadding * 0.5,
+            right: pagePadding * 0.5,
+            child: ConstrainedBox(
+              constraints: BoxConstraints(maxHeight: bottomCardMaxHeight),
+              child: Container(
+                padding: EdgeInsets.fromLTRB(
+                  pagePadding,
+                  Responsive.verticalGap(context, 12),
+                  pagePadding,
+                  Responsive.verticalGap(context, 18),
                 ),
-                boxShadow: const [
-                  BoxShadow(color: Colors.black26, blurRadius: 16),
-                ],
-              ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Center(
-                    child: Container(
-                      width: 40,
-                      height: 5,
-                      decoration: BoxDecoration(
-                        color: Colors.white24,
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                    ),
+                decoration: BoxDecoration(
+                  color: NavigoColors.lightorange,
+                  borderRadius: BorderRadius.vertical(
+                    top: Radius.circular(isLandscape ? 18 : 25),
                   ),
-                  const SizedBox(height: 14),
-                  Row(
-                    children: [
-                      const Icon(
-                        Icons.directions_bus,
-                        color: NavigoColors.accentGreen,
-                        size: 18,
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          "${context.texts.t('line')}: ${_selectedLine ?? context.texts.t('notSelected')}",
-                          style: NavigoTextStyles.bodyMedium.copyWith(
-                            color: NavigoColors.textDark,
-                            fontSize: 15,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 10),
-                  Row(
+                  boxShadow: const [
+                    BoxShadow(color: Colors.black26, blurRadius: 16),
+                  ],
+                ),
+                child: SingleChildScrollView(
+                  // This card gains content as the user selects a line/location.
+                  // Scrolling inside a capped height prevents landscape overflow
+                  // while the map keeps filling the available background.
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Icon(
-                        Icons.location_on,
-                        color: NavigoColors.accentGreen,
-                        size: 18,
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          "${context.texts.t('location')}: ${_selectedLocation ?? context.texts.t('notSelected')}",
-                          style: NavigoTextStyles.bodyMedium.copyWith(
-                            color: NavigoColors.textDark,
-                            fontSize: 15,
+                      Center(
+                        child: Container(
+                          width: 40,
+                          height: 5,
+                          decoration: BoxDecoration(
+                            color: Colors.white24,
+                            borderRadius: BorderRadius.circular(10),
                           ),
                         ),
+                      ),
+                      const SizedBox(height: 14),
+                      Row(
+                        children: [
+                          const Icon(
+                            Icons.directions_bus,
+                            color: NavigoColors.accentGreen,
+                            size: 18,
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              "${context.texts.t('line')}: ${_selectedLine ?? context.texts.t('notSelected')}",
+                              style: NavigoTextStyles.bodyMedium.copyWith(
+                                color: NavigoColors.textDark,
+                                fontSize: 15,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 10),
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Icon(
+                            Icons.location_on,
+                            color: NavigoColors.accentGreen,
+                            size: 18,
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              "${context.texts.t('location')}: ${_selectedLocation ?? context.texts.t('notSelected')}",
+                              style: NavigoTextStyles.bodyMedium.copyWith(
+                                color: NavigoColors.textDark,
+                                fontSize: 15,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      SizedBox(height: Responsive.verticalGap(context, 16)),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: SizedBox(
+                              height: Responsive.buttonHeight(context),
+                              child: ElevatedButton(
+                                onPressed: _showDriversNow,
+                                style:
+                                    NavigoDecorations.kPrimaryButtonLargeStyle,
+                                child: Text(
+                                  context.texts.t('now'),
+                                  style: NavigoTextStyles.button,
+                                ),
+                              ),
+                            ),
+                          ),
+                          SizedBox(width: Responsive.verticalGap(context, 12)),
+                          Expanded(
+                            child: SizedBox(
+                              height: Responsive.buttonHeight(context),
+                              child: ElevatedButton(
+                                onPressed: () => _openScheduleTrip(),
+                                style:
+                                    NavigoDecorations.kPrimaryButtonLargeStyle,
+                                child: Text(
+                                  context.texts.t('scheduleTrip'),
+                                  style: NavigoTextStyles.button,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                     ],
                   ),
-                  const SizedBox(height: 18),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: SizedBox(
-                          height: 50,
-                          child: ElevatedButton(
-                            onPressed: _showDriversNow,
-                            style: NavigoDecorations.kPrimaryButtonLargeStyle,
-                            child: Text(
-                              context.texts.t('now'),
-                              style: NavigoTextStyles.button,
-                            ),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: SizedBox(
-                          height: 50,
-                          child: ElevatedButton(
-                            onPressed: () => _openScheduleTrip(),
-                            style: NavigoDecorations.kPrimaryButtonLargeStyle,
-                            child: Text(
-                              context.texts.t('scheduleTrip'),
-                              style: NavigoTextStyles.button,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
+                ),
               ),
             ),
           ),
