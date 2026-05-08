@@ -8,6 +8,10 @@ class RouteModel {
   final List<String> vehicleTypes; // bus, microbus
   final List<ScheduleSlot> scheduleSlots;
   final List<String> driverQueueIds;
+
+  /// Optional coordinate maps (Firestore shape: `{lat: <num>, lng: <num>}`).
+  final Map<String, double>? startLocation;
+  final Map<String, double>? endLocation;
   final int? etaMinutes;
   final String? etaText;
   final int? distanceMeters;
@@ -25,6 +29,8 @@ class RouteModel {
     required this.vehicleTypes,
     this.scheduleSlots = const [],
     this.driverQueueIds = const [],
+    this.startLocation,
+    this.endLocation,
     this.etaMinutes,
     this.etaText,
     this.distanceMeters,
@@ -45,6 +51,8 @@ class RouteModel {
       "vehicleTypes": vehicleTypes,
       "scheduleSlots": scheduleSlots.map((slot) => slot.toMap()).toList(),
       "driverQueueIds": driverQueueIds,
+      if (startLocation != null) "startLocation": startLocation,
+      if (endLocation != null) "endLocation": endLocation,
       if (etaMinutes != null) "etaMinutes": etaMinutes,
       if (etaText != null) "etaText": etaText,
       if (distanceMeters != null) "distanceMeters": distanceMeters,
@@ -71,6 +79,14 @@ class RouteModel {
       }
     }
 
+    Map<String, double>? parseLocation(dynamic raw) {
+      if (raw is! Map) return null;
+      final lat = (raw['lat'] as num?)?.toDouble();
+      final lng = (raw['lng'] as num?)?.toDouble();
+      if (lat == null || lng == null) return null;
+      return {'lat': lat, 'lng': lng};
+    }
+
     return RouteModel(
       routeId: map['routeId'] ?? '',
       startPoint: map['startPoint'] ?? '',
@@ -79,6 +95,8 @@ class RouteModel {
       vehicleTypes: List<String>.from(map['vehicleTypes'] ?? []),
       scheduleSlots: parsedSlots,
       driverQueueIds: List<String>.from(map['driverQueueIds'] ?? const []),
+      startLocation: parseLocation(map['startLocation']),
+      endLocation: parseLocation(map['endLocation']),
       etaMinutes: (map['etaMinutes'] as num?)?.toInt(),
       etaText: map['etaText'] as String?,
       distanceMeters: (map['distanceMeters'] as num?)?.toInt(),

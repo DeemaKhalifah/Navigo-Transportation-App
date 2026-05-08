@@ -2,7 +2,6 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:navigo/models/driver_status.dart';
 import 'package:navigo/models/route.dart';
 import 'package:navigo/models/schedule_slot.dart';
 import 'package:navigo/services/google_route_path_service.dart';
@@ -30,9 +29,11 @@ class _RouteScheduleState extends State<RouteSchedule> {
   final GoogleRoutePathService _routePathService = GoogleRoutePathService();
 
   final Map<String, Future<String>> _driverLabelFutures = {};
+  StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _driversSub;
 
   String _selectedType = 'bus';
-  bool _assignOneBusy = false;
+  bool _autoAssignBusy = false;
+  DateTime _lastAutoAssign = DateTime.fromMillisecondsSinceEpoch(0);
 
   String? _routeId;
   RouteModel? _route;
@@ -42,6 +43,12 @@ class _RouteScheduleState extends State<RouteSchedule> {
   void initState() {
     super.initState();
     _loadRouteContext();
+  }
+
+  @override
+  void dispose() {
+    _driversSub?.cancel();
+    super.dispose();
   }
 
   Future<void> _loadRouteContext() async {
@@ -71,6 +78,18 @@ class _RouteScheduleState extends State<RouteSchedule> {
           _loadingRoute = false;
         });
         unawaited(_syncRoutePath(id, _route!));
+        // Keep queue in sync and pruned in real time based on driver snapshots.
+        await _driversSub?.cancel();
+        _driversSub = FirebaseFirestore.instance
+            .collection('drivers')
+            .where('routeId', isEqualTo: id)
+            .snapshots()
+            .listen((_) async {
+              await _queueSvc.syncQueueWithOnlineAvailableDrivers(id);
+              if (!mounted) return;
+              unawaited(_autoAssignNow());
+            });
+        unawaited(_queueSvc.syncQueueWithOnlineAvailableDrivers(id));
         return;
       }
     } catch (e) {
@@ -141,55 +160,25 @@ class _RouteScheduleState extends State<RouteSchedule> {
     return n.isEmpty ? 'Driver ${driverDocId.substring(0, 6)}…' : n;
   }
 
-  Future<void> _onQueueAllAvailable(String routeId) async {
-    try {
-      await _queueSvc.queueAllAvailableDriversSorted(routeId);
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Queue set to all available drivers (A–Z).'),
-        ),
-      );
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Could not build queue: $e')));
-    }
-  }
-
-  Future<void> _assignOneFromQueue() async {
+  Future<void> _autoAssignNow({int maxAssignments = 10}) async {
     final id = _routeId;
     if (id == null) return;
-    setState(() => _assignOneBusy = true);
+    if (_autoAssignBusy) return;
+
+    final now = DateTime.now();
+    if (now.difference(_lastAutoAssign) < const Duration(seconds: 3)) return;
+    _lastAutoAssign = now;
+
+    _autoAssignBusy = true;
     try {
-      final r = await _slotAssign.tryAssignFirstUnassignedSlot(
+      await _slotAssign.autoAssignUpcomingUnassignedSlots(
         routeId: id,
-        vehicleType: _selectedType,
+        maxAssignments: maxAssignments,
       );
-      if (!mounted) return;
-      if (r.outcome == SlotAssignmentOutcome.assigned) {
-        final label = await _driverLabelFuture(r.driverId!);
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Assigned $label to the next open trip.')),
-        );
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text(
-              'No assignment: add an unassigned trip or drivers in the queue.',
-            ),
-          ),
-        );
-      }
     } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Assign failed: $e')));
+      debugPrint('Auto-assign failed: $e');
     } finally {
-      if (mounted) setState(() => _assignOneBusy = false);
+      _autoAssignBusy = false;
     }
   }
 
@@ -265,21 +254,6 @@ class _RouteScheduleState extends State<RouteSchedule> {
     );
   }
 
-  Future<void> _onClearQueue(String routeId) async {
-    try {
-      await _queueSvc.clearQueue(routeId);
-      if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(context.texts.t('tripRemoved'))));
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Could not clear queue: $e')));
-    }
-  }
-
   String _routeTitle() {
     final r = _route;
     if (r == null) return context.texts.t('routeSchedule');
@@ -300,38 +274,16 @@ class _RouteScheduleState extends State<RouteSchedule> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          'Use "queue all" or tap a driver to append. '
-          'First in list is used for the next assignment.',
+          'Queue is automatic: online + available drivers are appended. '
+          'New trips are assigned to the first eligible driver (FIFO). '
+          'When a driver starts a trip, they are rotated to the end.',
           style: NavigoTextStyles.bodySmall.copyWith(fontSize: 11),
         ),
         const SizedBox(height: 10),
-        Row(
-          children: [
-            Expanded(
-              child: OutlinedButton(
-                onPressed: () => _onClearQueue(routeId),
-                child: Text(context.texts.t('clearQueue')),
-              ),
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: ElevatedButton(
-                onPressed: () => _onQueueAllAvailable(routeId),
-                style: NavigoDecorations.kPrimaryButtonLargeStyle.copyWith(
-                  padding: const WidgetStatePropertyAll(
-                    EdgeInsets.symmetric(horizontal: 8, vertical: 10),
-                  ),
-                ),
-                child: Text(
-                  context.texts.t('queueAllAvailable'),
-                  textAlign: TextAlign.center,
-                  style: TextStyle(fontSize: 12),
-                ),
-              ),
-            ),
-          ],
+        FutureBuilder<void>(
+          future: _queueSvc.syncQueueWithOnlineAvailableDrivers(routeId),
+          builder: (context, _) => const SizedBox.shrink(),
         ),
-        const SizedBox(height: 10),
         StreamBuilder<List<String>>(
           stream: _queueSvc.watchQueueIds(routeId),
           builder: (context, qSnap) {
@@ -368,72 +320,10 @@ class _RouteScheduleState extends State<RouteSchedule> {
                     builder: (c, s) =>
                         Text(s.data ?? '…', style: NavigoTextStyles.bodySmall),
                   ),
-                  trailing: IconButton(
-                    icon: const Icon(Icons.close, size: 20),
-                    onPressed: () => _queueSvc.removeDriver(routeId, id),
-                  ),
                 );
               }),
             );
           },
-        ),
-        const SizedBox(height: 8),
-        Text(
-          context.texts.t('availableDriversAppend'),
-          style: NavigoTextStyles.label,
-        ),
-        const SizedBox(height: 6),
-        SizedBox(
-          height: 44,
-          child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-            stream: FirebaseFirestore.instance
-                .collection('drivers')
-                .where('routeId', isEqualTo: routeId)
-                .snapshots(),
-            builder: (context, dSnap) {
-              if (!dSnap.hasData) {
-                return const Center(
-                  child: SizedBox(
-                    width: 20,
-                    height: 20,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  ),
-                );
-              }
-              final docs = dSnap.data!.docs.where((d) {
-                final st = DriverStatus.normalize(
-                  d.data()['status'] as String?,
-                );
-                return st == DriverStatus.available;
-              }).toList();
-
-              if (docs.isEmpty) {
-                return Text(
-                  context.texts.t('noAvailableDrivers'),
-                  style: NavigoTextStyles.bodySmall,
-                );
-              }
-
-              return ListView.separated(
-                scrollDirection: Axis.horizontal,
-                itemCount: docs.length,
-                separatorBuilder: (_, _) => const SizedBox(width: 8),
-                itemBuilder: (_, i) {
-                  final d = docs[i];
-                  return ActionChip(
-                    label: FutureBuilder<String>(
-                      future: _driverLabelFuture(d.id),
-                      builder: (c, s) => Text(
-                        s.data ?? d.id.substring(0, 6),
-                        style: const TextStyle(fontSize: 12),
-                      ),
-                    ),
-                    onPressed: () => _queueSvc.appendDriver(routeId, d.id),
-                  );
-                },
-              );
-            },
-          ),
         ),
       ],
     );
@@ -474,9 +364,9 @@ class _RouteScheduleState extends State<RouteSchedule> {
         try {
           await _repo.deleteSlot(id, slot.slotId);
           if (!mounted) return;
-          ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(SnackBar(content: Text(context.texts.t('tripRemoved'))));
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(context.texts.t('tripRemoved'))),
+          );
         } catch (e) {
           if (!mounted) return;
           ScaffoldMessenger.of(
@@ -558,7 +448,9 @@ class _RouteScheduleState extends State<RouteSchedule> {
                   ),
                   const SizedBox(height: 6),
                   NavigoDecorations.statusChip(
-                    label: slot.vehicleType == 'bus' ? context.texts.t('bus') : context.texts.t('microBus'),
+                    label: slot.vehicleType == 'bus'
+                        ? context.texts.t('bus')
+                        : context.texts.t('microBus'),
                     color: NavigoColors.primaryOrange,
                     padding: const EdgeInsets.symmetric(
                       horizontal: 8,
@@ -702,26 +594,6 @@ class _RouteScheduleState extends State<RouteSchedule> {
                   const SizedBox(width: 8),
                   _filterChip('micro', context.texts.t('microBus')),
                   const Spacer(),
-                  TextButton(
-                    style: TextButton.styleFrom(
-                      foregroundColor: NavigoColors.primaryOrange,
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 10,
-                        vertical: 6,
-                      ),
-                      minimumSize: Size.zero,
-                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                    ),
-                    onPressed: _assignOneBusy ? null : _assignOneFromQueue,
-                    child: _assignOneBusy
-                        ? const SizedBox(
-                            width: 18,
-                            height: 18,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : Text(context.texts.t('assign1')),
-                  ),
-                  const SizedBox(width: 4),
                   Material(
                     color: NavigoColors.surfaceWhite,
                     elevation: 2,
@@ -759,6 +631,13 @@ class _RouteScheduleState extends State<RouteSchedule> {
                   if (!snapshot.hasData) {
                     return const Center(child: CircularProgressIndicator());
                   }
+
+                  // Auto-assign in the background when we receive slot updates.
+                  // Schedule after this frame to avoid setState during build.
+                  WidgetsBinding.instance.addPostFrameCallback((_) {
+                    if (!mounted) return;
+                    unawaited(_autoAssignNow());
+                  });
 
                   final filtered = snapshot.data!
                       .where((s) => s.vehicleType == _selectedType)

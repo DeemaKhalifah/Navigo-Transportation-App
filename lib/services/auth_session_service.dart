@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
 enum AppSessionDestination {
+  welcome,
   phoneLogin,
   passengerHome,
   driverHome,
@@ -21,7 +22,7 @@ class AuthSessionService {
 
   Future<AppSessionDestination> resolveStartupDestination() async {
     final user = _auth.currentUser;
-    if (user == null) return AppSessionDestination.phoneLogin;
+    if (user == null) return AppSessionDestination.welcome;
 
     final userDoc = await _db.collection('users').doc(user.uid).get();
     final role = _normalizeRole(userDoc.data()?['role']?.toString());
@@ -42,7 +43,7 @@ class AuthSessionService {
       return AppSessionDestination.routeManagerHome;
     }
 
-    return AppSessionDestination.phoneLogin;
+    return AppSessionDestination.welcome;
   }
 
   String _normalizeRole(String? role) {

@@ -14,6 +14,7 @@ import 'screens/authentication/signup_approval.dart';
 import 'screens/driver/driver_home_screen.dart';
 import 'screens/passenger/passenger_home_screen.dart';
 import 'screens/route_manager/route_schedule.dart';
+import 'screens/welcome_flow/welcome.dart';
 import 'services/auth_session_service.dart';
 import 'services/push_notification_service.dart';
 import 'theme/app_theme.dart';
@@ -148,6 +149,7 @@ class _SplashScreenState extends State<SplashScreen> {
     if (!mounted) return;
 
     final Widget targetScreen = switch (destination) {
+      AppSessionDestination.welcome => const OnboardingScreen(),
       AppSessionDestination.passengerHome => const PassengerHomeScreen(),
       AppSessionDestination.driverHome => const DriverHomeScreen(),
       AppSessionDestination.driverApproval => const SignupApprovalScreen(),

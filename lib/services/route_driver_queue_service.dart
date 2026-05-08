@@ -57,6 +57,36 @@ class RouteDriverQueueService {
     });
   }
 
+  /// Removes any drivers from this route queue that are NOT (online + available)
+  /// anymore, or whose driver document no longer exists.
+  ///
+  /// This is used to keep queues clean in real time (no offline/unavailable
+  /// drivers shown to route managers).
+  Future<void> pruneQueueToOnlineAvailableDrivers(String routeId) async {
+    final routeSnap = await _routeRef(routeId).get();
+    if (!routeSnap.exists) return;
+    final current = parseIds(routeSnap.data()?['driverQueueIds']);
+    if (current.isEmpty) return;
+
+    final keep = <String>[];
+    for (final id in current) {
+      final dSnap = await _db.collection('drivers').doc(id).get();
+      if (!dSnap.exists) continue;
+      final d = dSnap.data() ?? {};
+      final isOnline = d['isOnline'] == true;
+      final st = DriverStatus.normalize(d['status'] as String?);
+      final sameRoute = (d['routeId'] as String? ?? '') == routeId;
+      if (!isOnline) continue;
+      if (st != DriverStatus.available) continue;
+      if (!sameRoute) continue;
+      keep.add(id);
+    }
+
+    // No gaps: array order stays, removed entries collapse automatically.
+    if (keep.length == current.length) return;
+    await _routeRef(routeId).update({'driverQueueIds': keep});
+  }
+
   Future<void> queueAllAvailableDriversSorted(String routeId) async {
     final snap = await _db
         .collection('drivers')
@@ -89,6 +119,67 @@ class RouteDriverQueueService {
     });
 
     await setQueue(routeId, candidates.map((c) => c.driverDocId).toList());
+  }
+
+  /// Ensures that all (online + available) route drivers are present in the queue,
+  /// appended to the end (without changing existing order).
+  ///
+  /// This is the "auto queue" behavior: managers shouldn't have to manually build
+  /// or reorder the queue.
+  Future<void> syncQueueWithOnlineAvailableDrivers(String routeId) async {
+    // First, remove offline/unavailable drivers so UI never shows them.
+    await pruneQueueToOnlineAvailableDrivers(routeId);
+
+    final snap = await _db
+        .collection('drivers')
+        .where('routeId', isEqualTo: routeId)
+        .get();
+
+    final toAppend = <String>[];
+    for (final d in snap.docs) {
+      final data = d.data();
+      final st = DriverStatus.normalize(data['status'] as String?);
+      final isOnline = data['isOnline'] == true;
+      if (!isOnline) continue;
+      if (st != DriverStatus.available) continue;
+      toAppend.add(d.id);
+    }
+
+    if (toAppend.isEmpty) return;
+
+    await _db.runTransaction((txn) async {
+      final ref = _routeRef(routeId);
+      final routeSnap = await txn.get(ref);
+      if (!routeSnap.exists) return;
+      final q = parseIds(routeSnap.data()?['driverQueueIds']);
+      var changed = false;
+      for (final id in toAppend) {
+        if (q.contains(id)) continue;
+        q.add(id);
+        changed = true;
+      }
+      if (changed) {
+        txn.update(ref, {'driverQueueIds': q});
+      }
+    });
+  }
+
+  /// Rotate a driver to the end of the queue.
+  /// Used when a driver starts a trip.
+  Future<void> moveDriverToQueueEnd({
+    required String routeId,
+    required String driverId,
+  }) async {
+    if (driverId.trim().isEmpty) return;
+    await _db.runTransaction((txn) async {
+      final ref = _routeRef(routeId);
+      final snap = await txn.get(ref);
+      if (!snap.exists) return;
+      final q = parseIds(snap.data()?['driverQueueIds']);
+      q.removeWhere((id) => id == driverId);
+      q.add(driverId);
+      txn.update(ref, {'driverQueueIds': q});
+    });
   }
 
   Future<void> completeTripAndRequeueEnd({

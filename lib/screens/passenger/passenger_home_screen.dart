@@ -19,6 +19,7 @@ import '../../services/trip_driver_request_service.dart';
 import '../../services/geocoding_service.dart';
 import '../../services/notification_service.dart';
 import '../../services/google_route_path_service.dart';
+import '../../modules/route/route_path_info.dart';
 
 class PassengerHomeScreen extends StatefulWidget {
   const PassengerHomeScreen({
@@ -123,47 +124,77 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> {
     String startPoint,
     String endPoint, {
     String? routeId,
+    LatLng? startLocation,
+    LatLng? endLocation,
   }) async {
-    final renderKey = '${routeId?.trim() ?? ''}|$startPoint|$endPoint';
+    final renderKey =
+        '${routeId?.trim() ?? ''}|${startLocation?.latitude ?? ''},${startLocation?.longitude ?? ''}|${endLocation?.latitude ?? ''},${endLocation?.longitude ?? ''}';
     if (_activeRouteRenderKey == renderKey && _decodedRoutePoints.isNotEmpty) {
       debugPrint('[Map] reuse decoded polyline renderKey=$renderKey');
       _fitBoundsForPoints(_decodedRoutePoints);
       return;
     }
     RoutePathInfo? routeInfo;
-    LatLng? startLatLng;
-    LatLng? endLatLng;
+    final startLatLng = startLocation;
+    final endLatLng = endLocation;
 
     try {
-      routeInfo = routeId == null || routeId.trim().isEmpty
-          ? await _routePathService.fetchRoutePath(
-              startPoint: startPoint,
-              endPoint: endPoint,
-            )
-          : await _routePathService.getOrFetchRoutePathForRoute(
-              routeId: routeId,
-              startPoint: startPoint,
-              endPoint: endPoint,
-            );
-      startLatLng = routeInfo.startLocation;
-      endLatLng = routeInfo.endLocation;
+      // IMPORTANT: If coordinates are available, draw using them (do not rely on
+      // start/end point text for routing).
+      if (startLatLng != null && endLatLng != null) {
+        routeInfo = await _routePathService.fetchRoutePathByCoordinates(
+          start: startLatLng,
+          end: endLatLng,
+          requirePolyline: true,
+        );
+      } else {
+        // Backward-compatible fallback: use the existing routeId cache + text.
+        routeInfo = routeId == null || routeId.trim().isEmpty
+            ? await _routePathService.fetchRoutePath(
+                startPoint: startPoint,
+                endPoint: endPoint,
+              )
+            : await _routePathService.getOrFetchRoutePathForRoute(
+                routeId: routeId,
+                startPoint: startPoint,
+                endPoint: endPoint,
+              );
+      }
     } catch (e) {
       debugPrint('Route path API error: $e');
-      startLatLng = await GeocodingService.geocodeAddress(startPoint);
-      endLatLng = await GeocodingService.geocodeAddress(endPoint);
+      // Last-resort fallback only if we don't have coordinates.
+      if (startLatLng == null || endLatLng == null) {
+        final geocodedStart = await GeocodingService.geocodeAddress(startPoint);
+        final geocodedEnd = await GeocodingService.geocodeAddress(endPoint);
+        if (geocodedStart != null && geocodedEnd != null) {
+          routeInfo = await _routePathService.fetchRoutePathByCoordinates(
+            start: geocodedStart,
+            end: geocodedEnd,
+            requirePolyline: true,
+          );
+        }
+      }
     }
 
     if (!mounted) return;
 
-    if (startLatLng == null || endLatLng == null) {
+    final start = startLatLng ?? routeInfo?.startLocation;
+    final end = endLatLng ?? routeInfo?.endLocation;
+
+    if (start == null || end == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Could not geocode route points')),
       );
       return;
     }
-    final start = startLatLng;
-    final end = endLatLng;
-    final routePoints = routeInfo?.path ?? [start, end];
+
+    // Ensure the polyline starts/ends exactly at the pins.
+    final rawPoints = routeInfo?.path ?? const <LatLng>[];
+    final routePoints = rawPoints.isEmpty ? [start, end] : rawPoints;
+    if (routePoints.isNotEmpty) {
+      routePoints[0] = start;
+      routePoints[routePoints.length - 1] = end;
+    }
     _decodedRoutePoints = routePoints;
     _activeRouteRenderKey = renderKey;
 
@@ -683,10 +714,22 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> {
     try {
       final route = await _tripRepository.getRouteForLine(line);
       if (route == null) return;
+
+      final startLoc = route.startLocation;
+      final endLoc = route.endLocation;
+      final startLatLng = (startLoc != null && startLoc['lat'] != null && startLoc['lng'] != null)
+          ? LatLng(startLoc['lat']!, startLoc['lng']!)
+          : null;
+      final endLatLng = (endLoc != null && endLoc['lat'] != null && endLoc['lng'] != null)
+          ? LatLng(endLoc['lat']!, endLoc['lng']!)
+          : null;
+
       await _drawRoutePolyline(
         route.startPoint,
         route.endPoint,
         routeId: route.routeId,
+        startLocation: startLatLng,
+        endLocation: endLatLng,
       );
     } catch (e) {
       debugPrint('Draw selected route error: $e');

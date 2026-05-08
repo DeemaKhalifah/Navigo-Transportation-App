@@ -3,51 +3,15 @@ import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:navigo/models/driver_status.dart';
-import 'package:navigo/models/schedule_slot.dart';
-import 'package:navigo/services/schedule_slot_repository.dart';
 import 'package:navigo/screens/route_manager/route_schedule.dart';
-import 'package:navigo/services/manual_driver_assignment_service.dart';
 import 'package:navigo/services/route_manager_route_id.dart';
 import 'package:navigo/theme/app_theme.dart';
 import '../../localization/localization_x.dart';
+import '../../modules/driver/driver_row.dart';
+import '../../services/route_driver_queue_service.dart';
 
 import 'route_manager_notification_compose.dart';
 import 'route_manager_nav_bar.dart';
-
-class _DriverRow {
-  _DriverRow({
-    required this.driverId,
-    required this.userId,
-    required this.name,
-    required this.vehicleLabel,
-    required this.routeLine,
-    required this.rawStatus,
-  });
-
-  final String driverId;
-  final String userId;
-  final String name;
-  final String vehicleLabel;
-  final String routeLine;
-
-  /// Canonical driver statuses — see [DriverStatus].
-  final String rawStatus;
-
-  String get statusLabel {
-    switch (rawStatus) {
-      case DriverStatus.available:
-        return 'Available';
-      case DriverStatus.assigned:
-        return 'Assigned';
-      case DriverStatus.onTrip:
-        return 'On Trip';
-      case DriverStatus.offline:
-        return 'Offline';
-      default:
-        return rawStatus;
-    }
-  }
-}
 
 class AssignDriver extends StatefulWidget {
   const AssignDriver({super.key});
@@ -57,17 +21,17 @@ class AssignDriver extends StatefulWidget {
 }
 
 class _AssignDriverState extends State<AssignDriver> {
-  final ManualDriverAssignmentService _assignment =
-      ManualDriverAssignmentService();
+  final RouteDriverQueueService _queueSvc = RouteDriverQueueService();
 
   String selectedFilter = 'All';
-  String? _routeId;
   String _routeLine = 'Route';
   String? _loadError;
   bool _loading = true;
-  List<_DriverRow> _drivers = [];
+  List<DriverRow> _drivers = [];
+  List<String> _queueIds = [];
 
   StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _driversSub;
+  StreamSubscription<List<String>>? _queueSub;
 
   @override
   void initState() {
@@ -78,6 +42,7 @@ class _AssignDriverState extends State<AssignDriver> {
   @override
   void dispose() {
     _driversSub?.cancel();
+    _queueSub?.cancel();
     super.dispose();
   }
 
@@ -85,6 +50,8 @@ class _AssignDriverState extends State<AssignDriver> {
   Future<void> _attach() async {
     await _driversSub?.cancel();
     _driversSub = null;
+    await _queueSub?.cancel();
+    _queueSub = null;
 
     if (!mounted) return;
     setState(() {
@@ -98,7 +65,6 @@ class _AssignDriverState extends State<AssignDriver> {
 
       if (routeId == null || routeId.isEmpty) {
         setState(() {
-          _routeId = null;
           _drivers = [];
           _loadError =
               'No route linked to this account. Set routeId on users or route_manager.';
@@ -107,7 +73,11 @@ class _AssignDriverState extends State<AssignDriver> {
         return;
       }
 
-      _routeId = routeId;
+      _queueSub = _queueSvc.watchQueueIds(routeId).listen((ids) {
+        if (!mounted) return;
+        setState(() => _queueIds = ids);
+      });
+      unawaited(_queueSvc.syncQueueWithOnlineAvailableDrivers(routeId));
 
       final routeSnap = await FirebaseFirestore.instance
           .collection('route')
@@ -132,6 +102,8 @@ class _AssignDriverState extends State<AssignDriver> {
           .snapshots()
           .listen(
             (snap) async {
+              // Prune queue immediately when driver eligibility changes.
+              unawaited(_queueSvc.syncQueueWithOnlineAvailableDrivers(routeId));
               await _handleDriverSnapshot(snap.docs);
             },
             onError: (Object e, StackTrace st) {
@@ -187,7 +159,7 @@ class _AssignDriverState extends State<AssignDriver> {
     }
   }
 
-  Future<List<_DriverRow>> _buildRows(
+  Future<List<DriverRow>> _buildRows(
     List<QueryDocumentSnapshot<Map<String, dynamic>>> docs,
     String routeLine,
   ) async {
@@ -222,7 +194,7 @@ class _AssignDriverState extends State<AssignDriver> {
       vehicleById[s.id] = s.data();
     }
 
-    final rows = <_DriverRow>[];
+    final rows = <DriverRow>[];
     for (final d in docs) {
       final data = d.data();
       final uid = data['userId'] as String? ?? d.id;
@@ -250,15 +222,17 @@ class _AssignDriverState extends State<AssignDriver> {
       }
 
       final normalized = DriverStatus.normalize(data['status'] as String?);
+      final isOnline = data['isOnline'] == true;
 
       rows.add(
-        _DriverRow(
+        DriverRow(
           driverId: d.id,
           userId: uid,
           name: displayName,
           vehicleLabel: vehicleLabel,
           routeLine: routeLine,
           rawStatus: normalized,
+          isOnline: isOnline,
         ),
       );
     }
@@ -267,131 +241,22 @@ class _AssignDriverState extends State<AssignDriver> {
     return rows;
   }
 
-  List<_DriverRow> get filteredDrivers {
+  List<DriverRow> get filteredDrivers {
     if (selectedFilter == 'All') return _drivers;
     return _drivers.where((d) {
       switch (selectedFilter) {
         case 'Available':
-          return d.rawStatus == DriverStatus.available;
+          return d.isOnline && d.rawStatus == DriverStatus.available;
         case 'Assigned':
           return d.rawStatus == DriverStatus.assigned;
         case 'On Trip':
           return d.rawStatus == DriverStatus.onTrip;
         case 'Offline':
-          return d.rawStatus == DriverStatus.offline;
+          return !d.isOnline || d.rawStatus == DriverStatus.offline;
         default:
           return true;
       }
     }).toList();
-  }
-
-  Future<List<ScheduleSlot>> _upcomingSlotsForRoute() async {
-    final routeId = _routeId;
-    if (routeId == null) return [];
-
-    final snap = await FirebaseFirestore.instance
-        .collection('route')
-        .doc(routeId)
-        .get();
-    final raw = snap.data()?['scheduleSlots'];
-    final maps = ScheduleSlotRepository.parseSlotList(raw);
-
-    final now = DateTime.now();
-    final slots = <ScheduleSlot>[];
-    for (final m in maps) {
-      final sid = m['slotId'] as String? ?? '';
-      if (sid.isEmpty) continue;
-      final s = ScheduleSlot.fromMap(sid, m);
-      if (s.departureAt.isAfter(now.subtract(const Duration(minutes: 1)))) {
-        slots.add(s);
-      }
-    }
-    slots.sort((a, b) => a.departureAt.compareTo(b.departureAt));
-    return slots;
-  }
-
-  Future<void> _onAssign(_DriverRow driver) async {
-    final routeId = _routeId;
-    if (routeId == null) return;
-
-    showDialog<void>(
-      context: context,
-      barrierDismissible: false,
-      builder: (ctx) => const Center(child: CircularProgressIndicator()),
-    );
-
-    List<ScheduleSlot> slots;
-    try {
-      slots = await _upcomingSlotsForRoute();
-    } finally {
-      if (mounted) Navigator.of(context).pop();
-    }
-
-    if (!mounted) return;
-
-    if (slots.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(context.texts.t('noUpcomingTrips')),
-        ),
-      );
-      return;
-    }
-
-    final chosen = await showDialog<ScheduleSlot>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(context.texts.t('assignToTrip')),
-        content: SizedBox(
-          width: double.maxFinite,
-          child: ListView.builder(
-            shrinkWrap: true,
-            itemCount: slots.length,
-            itemBuilder: (_, i) {
-              final s = slots[i];
-              final start = s.departureAt;
-              final sub = s.driverId.isEmpty
-                  ? 'Unassigned'
-                  : 'Driver already set — will replace';
-              return ListTile(
-                title: Text(
-                  '${start.day}/${start.month}/${start.year} '
-                  '${start.hour.toString().padLeft(2, '0')}:'
-                  '${start.minute.toString().padLeft(2, '0')}',
-                ),
-                subtitle: Text('$sub · slot ${s.slotId.substring(0, 8)}…'),
-                onTap: () => Navigator.pop(ctx, s),
-              );
-            },
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: Text(context.texts.t('cancel')),
-          ),
-        ],
-      ),
-    );
-
-    if (chosen == null || !mounted) return;
-
-    try {
-      await _assignment.assignDriverToSlot(
-        routeId: routeId,
-        slotId: chosen.slotId,
-        newDriverId: driver.driverId,
-      );
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(context.texts.t('driverAssigned'))),
-      );
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Assignment failed: $e')));
-    }
   }
 
   @override
@@ -425,7 +290,7 @@ class _AssignDriverState extends State<AssignDriver> {
                   Text(context.texts.t('assignments'), style: NavigoTextStyles.titleLarge),
                   const SizedBox(height: 4),
                   Text(
-                    'Drivers on your route (status from drivers collection)',
+                    'Queue is automatic (online + available). New trips are assigned FIFO.',
                     style: NavigoTextStyles.bodySmall,
                   ),
                 ],
@@ -490,6 +355,7 @@ class _AssignDriverState extends State<AssignDriver> {
                               itemCount: filteredDrivers.length,
                               itemBuilder: (context, index) {
                                 final driver = filteredDrivers[index];
+                                final pos = _queueIds.indexOf(driver.driverId);
                                 return Container(
                                   margin: const EdgeInsets.only(
                                     bottom: NavigoSizes.itemGap,
@@ -525,6 +391,13 @@ class _AssignDriverState extends State<AssignDriver> {
                                               'Route: ${driver.routeLine}',
                                               style: NavigoTextStyles.label,
                                             ),
+                                            const SizedBox(height: 4),
+                                            Text(
+                                              pos >= 0
+                                                  ? 'Queue position: ${pos + 1}'
+                                                  : 'Not in queue',
+                                              style: NavigoTextStyles.bodySmall,
+                                            ),
                                           ],
                                         ),
                                       ),
@@ -533,41 +406,6 @@ class _AssignDriverState extends State<AssignDriver> {
                                             CrossAxisAlignment.end,
                                         children: [
                                           _statusChip(driver.statusLabel),
-                                          if (driver.rawStatus ==
-                                              DriverStatus.available) ...[
-                                            const SizedBox(height: 8),
-                                            ElevatedButton(
-                                              onPressed: () =>
-                                                  _onAssign(driver),
-                                              style: NavigoDecorations
-                                                  .kPrimaryButtonLargeStyle
-                                                  .copyWith(
-                                                    padding:
-                                                        const WidgetStatePropertyAll(
-                                                          EdgeInsets.symmetric(
-                                                            horizontal: 24,
-                                                            vertical: 10,
-                                                          ),
-                                                        ),
-                                                    elevation:
-                                                        const WidgetStatePropertyAll(
-                                                          4,
-                                                        ),
-                                                    shadowColor:
-                                                        WidgetStatePropertyAll(
-                                                          NavigoColors
-                                                              .primaryOrange
-                                                              .withValues(
-                                                                alpha: 0.4,
-                                                              ),
-                                                        ),
-                                                  ),
-                                              child: Text(
-                                                context.texts.t('assign'),
-                                                style: NavigoTextStyles.button,
-                                              ),
-                                            ),
-                                          ],
                                         ],
                                       ),
                                     ],

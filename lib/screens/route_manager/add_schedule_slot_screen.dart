@@ -448,13 +448,25 @@ class _AddScheduleSlotScreenState extends State<AddScheduleSlotScreen> {
                         NavigoDecorations.selectorChip(
                           label: context.texts.t('bus'),
                           selected: _selectedType == 'bus',
-                          onTap: () => setState(() => _selectedType = 'bus'),
+                          onTap: () => setState(() {
+                            _selectedType = 'bus';
+                            // Ensure dropdown value exists in items (prevents assertion).
+                            _capacity =
+                                (_capacity != null &&
+                                        const {'45', '14'}.contains(_capacity))
+                                    ? _capacity
+                                    : '45';
+                          }),
                         ),
                         const SizedBox(width: 10),
                         NavigoDecorations.selectorChip(
                           label: context.texts.t('microBus'),
                           selected: _selectedType == 'micro',
-                          onTap: () => setState(() => _selectedType = 'micro'),
+                          onTap: () => setState(() {
+                            _selectedType = 'micro';
+                            // Ensure dropdown value exists in items (prevents assertion).
+                            _capacity = '7';
+                          }),
                         ),
                       ],
                     ),
@@ -565,29 +577,39 @@ class _AddScheduleSlotScreenState extends State<AddScheduleSlotScreen> {
                             style: NavigoTextStyles.label,
                           ),
                           const SizedBox(height: 6),
-                          DropdownButtonFormField<String>(
-                            initialValue: _capacity,
-                            decoration: NavigoDecorations.kInputDecoration,
-                            style: NavigoTextStyles.fieldText,
-                            items: _selectedType == 'bus'
-                                ? const [
-                                    DropdownMenuItem(
-                                      value: '45',
-                                      child: Text('45 seats'),
-                                    ),
-                                    DropdownMenuItem(
-                                      value: '14',
-                                      child: Text('14 seats'),
-                                    ),
-                                  ]
-                                : const [
-                                    DropdownMenuItem(
-                                      value: '7',
-                                      child: Text('7 seats'),
-                                    ),
-                                  ],
-                            onChanged: (value) =>
-                                setState(() => _capacity = value),
+                          Builder(
+                            builder: (context) {
+                              final capacityItems = _selectedType == 'bus'
+                                  ? const [
+                                      DropdownMenuItem(
+                                        value: '45',
+                                        child: Text('45 seats'),
+                                      ),
+                                      DropdownMenuItem(
+                                        value: '14',
+                                        child: Text('14 seats'),
+                                      ),
+                                    ]
+                                  : const [
+                                      DropdownMenuItem(
+                                        value: '7',
+                                        child: Text('7 seats'),
+                                      ),
+                                    ];
+                              final selectedCapacity = capacityItems
+                                      .any((i) => i.value == _capacity)
+                                  ? _capacity
+                                  : null;
+
+                              return DropdownButtonFormField<String>(
+                                value: selectedCapacity,
+                                decoration: NavigoDecorations.kInputDecoration,
+                                style: NavigoTextStyles.fieldText,
+                                items: capacityItems,
+                                onChanged: (value) =>
+                                    setState(() => _capacity = value),
+                              );
+                            },
                           ),
 
                           const SizedBox(height: NavigoSizes.itemGap),

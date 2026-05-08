@@ -6,68 +6,9 @@ import 'package:flutter/foundation.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:http/http.dart' as http;
 
+import 'geocoding_service.dart';
 import 'schedule_slot_repository.dart';
-
-class RoutePathInfo {
-  const RoutePathInfo({
-    required this.startLocation,
-    required this.endLocation,
-    required this.path,
-    required this.etaMinutes,
-    required this.etaText,
-    required this.distanceMeters,
-    required this.distanceText,
-    required this.encodedPolyline,
-    required this.provider,
-  });
-
-  final LatLng startLocation;
-  final LatLng endLocation;
-  final List<LatLng> path;
-  final int etaMinutes;
-  final String etaText;
-  final int distanceMeters;
-  final String distanceText;
-  final String encodedPolyline;
-  final String provider;
-
-  double get distanceKm => distanceMeters / 1000;
-
-  Map<String, dynamic> toRouteModuleMap() {
-    return {
-      'etaMinutes': etaMinutes,
-      'etaText': etaText,
-      'distanceMeters': distanceMeters,
-      'distanceKm': distanceKm,
-      'distanceText': distanceText,
-      'provider': provider,
-      'updatedAt': Timestamp.now(),
-    };
-  }
-
-  Map<String, dynamic> toFirestoreRouteMap() {
-    return {
-      'startLocation': {
-        'lat': startLocation.latitude,
-        'lng': startLocation.longitude,
-      },
-      'endLocation': {
-        'lat': endLocation.latitude,
-        'lng': endLocation.longitude,
-      },
-      'routePolyline': encodedPolyline,
-      'etaMinutes': etaMinutes,
-      'etaText': etaText,
-      'estimatedTime': etaMinutes,
-      'distanceMeters': distanceMeters,
-      'distanceKm': distanceKm,
-      'distanceText': distanceText,
-      'routeModule': toRouteModuleMap(),
-      'routePathProvider': provider,
-      'updatedAt': FieldValue.serverTimestamp(),
-    };
-  }
-}
+import '../modules/route/route_path_info.dart';
 
 class GoogleRoutePathService {
   GoogleRoutePathService({FirebaseFirestore? firestore, http.Client? client})
@@ -83,8 +24,6 @@ class GoogleRoutePathService {
     'GOOGLE_MAPS_API_KEY',
     defaultValue: '',
   );
-  static const LatLng _fixedStart = LatLng(31.903, 35.206);
-  static const LatLng _fixedEnd = LatLng(31.9582684, 35.1801401);
 
   static String _coordsKey(LatLng start, LatLng end) =>
       '${start.latitude.toStringAsFixed(6)},${start.longitude.toStringAsFixed(6)}->${end.latitude.toStringAsFixed(6)},${end.longitude.toStringAsFixed(6)}';
@@ -138,23 +77,36 @@ class GoogleRoutePathService {
       if (doc.exists && data != null) {
         final encoded = (data['routePolyline'] ?? '').toString().trim();
         if (encoded.isNotEmpty) {
-          final start = _fixedStart;
-          final end = _fixedEnd;
+          final decodedPath = decodePolyline(encoded);
+          final start =
+              _parseLatLng(data['startLocation']) ??
+              (decodedPath.isNotEmpty ? decodedPath.first : null);
+          final end =
+              _parseLatLng(data['endLocation']) ??
+              (decodedPath.isNotEmpty ? decodedPath.last : null);
+          if (start == null || end == null) {
+            throw Exception(
+              'Route $routeId is missing start/end coordinates and could not infer them from routePolyline.',
+            );
+          }
           debugPrint(
             '[Directions] using Firebase routePolyline routeId=$routeId',
           );
-          final distanceMeters = (data['distanceMeters'] as num?)?.toInt() ??
+          final distanceMeters =
+              (data['distanceMeters'] as num?)?.toInt() ??
               _estimateMeters(start, end);
-          final etaMinutes = (data['etaMinutes'] as num?)?.toInt() ??
+          final etaMinutes =
+              (data['etaMinutes'] as num?)?.toInt() ??
               math.max(1, (_estimateSeconds(start, end) / 60).ceil());
           final info = RoutePathInfo(
             startLocation: start,
             endLocation: end,
-            path: decodePolyline(encoded),
+            path: decodedPath,
             etaMinutes: etaMinutes,
             etaText: data['etaText']?.toString() ?? _formatEta(etaMinutes),
             distanceMeters: distanceMeters,
-            distanceText: data['distanceText']?.toString() ??
+            distanceText:
+                data['distanceText']?.toString() ??
                 _formatDistance(distanceMeters),
             encodedPolyline: encoded,
             provider: 'firebase_cached',
@@ -162,11 +114,34 @@ class GoogleRoutePathService {
           _memoryCache[cacheKey] = info;
           return info;
         }
+
+        // If coordinates exist but no cached polyline, compute using coordinates.
+        final start = _parseLatLng(data['startLocation']);
+        final end = _parseLatLng(data['endLocation']);
+        if (start == null || end == null) {
+          throw Exception(
+            'Route $routeId is missing startLocation/endLocation in Firestore.',
+          );
+        }
+
+        debugPrint(
+          '[Directions] API call using Firestore coordinates routeId=$routeId',
+        );
+        final info = await fetchRoutePathByCoordinates(
+          start: start,
+          end: end,
+          requirePolyline: true,
+        );
+        await saveRoutePath(routeId: routeId, info: info);
+        return info;
       }
     }
 
     debugPrint('[Directions] API call for routeId=$routeId');
-    final info = await fetchRoutePath(startPoint: startPoint, endPoint: endPoint);
+    final info = await fetchRoutePath(
+      startPoint: startPoint,
+      endPoint: endPoint,
+    );
     if (routeId.isNotEmpty) {
       await saveRoutePath(routeId: routeId, info: info);
     }
@@ -176,17 +151,28 @@ class GoogleRoutePathService {
   Future<RoutePathInfo> fetchRoutePath({
     required String startPoint,
     required String endPoint,
+    bool requirePolyline = true,
   }) async {
-    return fetchRoutePathByCoordinates(start: _fixedStart, end: _fixedEnd);
+    final start = await GeocodingService.geocodeAddress(startPoint);
+    final end = await GeocodingService.geocodeAddress(endPoint);
+    if (start != null && end != null) {
+      return fetchRoutePathByCoordinates(
+        start: start,
+        end: end,
+        requirePolyline: requirePolyline,
+      );
+    }
+    throw Exception(
+      'Could not resolve route coordinates (missing geocoding results).',
+    );
   }
 
   Future<RoutePathInfo> fetchRoutePathByCoordinates({
     required LatLng start,
     required LatLng end,
+    bool requirePolyline = false,
   }) async {
-    final fixedStart = _fixedStart;
-    final fixedEnd = _fixedEnd;
-    final key = 'coords:${_coordsKey(fixedStart, fixedEnd)}';
+    final key = 'coords:${_coordsKey(start, end)}';
     final cached = _memoryCache[key];
     if (cached != null) return cached;
 
@@ -194,8 +180,9 @@ class GoogleRoutePathService {
     if (inflight != null) return inflight;
 
     final future = _fetchRoutePathByCoordinatesInternal(
-      start: fixedStart,
-      end: fixedEnd,
+      start: start,
+      end: end,
+      requirePolyline: requirePolyline,
     );
     _inflight[key] = future;
     try {
@@ -210,19 +197,30 @@ class GoogleRoutePathService {
   Future<RoutePathInfo> _fetchRoutePathByCoordinatesInternal({
     required LatLng start,
     required LatLng end,
+    required bool requirePolyline,
   }) async {
     if (_apiKey.trim().isEmpty) {
       throw Exception(
         'Missing GOOGLE_MAPS_API_KEY. Pass it with --dart-define=GOOGLE_MAPS_API_KEY=YOUR_KEY',
       );
     }
-    debugPrint('[Directions] API call for coordinates ${_coordsKey(start, end)}');
+    debugPrint(
+      '[Directions] API call for coordinates ${_coordsKey(start, end)}',
+    );
 
     final fromRoutesApi = await _fetchFromRoutesApi(start, end);
     if (fromRoutesApi != null) return fromRoutesApi;
 
     final fromDirectionsApi = await _fetchFromDirectionsApi(start, end);
     if (fromDirectionsApi != null) return fromDirectionsApi;
+
+    // Distance Matrix does not return an actual path polyline.
+    // If the UI requires an actual path, we must not fall back to a straight line.
+    if (requirePolyline) {
+      throw Exception(
+        'Could not fetch route polyline. Enable Google Routes API or Directions API for this API key.',
+      );
+    }
 
     final fromDistanceMatrix = await _fetchFromDistanceMatrix(start, end);
     if (fromDistanceMatrix != null) return fromDistanceMatrix;
@@ -240,9 +238,21 @@ class GoogleRoutePathService {
       throw Exception('Route ID is missing.');
     }
 
-    final info = await fetchRoutePath(
-      startPoint: startPoint,
-      endPoint: endPoint,
+    final routeSnap = await _db.collection('route').doc(safeRouteId).get();
+    final routeData = routeSnap.data() ?? {};
+
+    final start = _parseLatLng(routeData['startLocation']);
+    final end = _parseLatLng(routeData['endLocation']);
+    if (start == null || end == null) {
+      throw Exception(
+        'Route $safeRouteId is missing startLocation/endLocation in Firestore.',
+      );
+    }
+
+    final info = await fetchRoutePathByCoordinates(
+      start: start,
+      end: end,
+      requirePolyline: true,
     );
     await saveRoutePath(routeId: safeRouteId, info: info);
     return info;
@@ -492,6 +502,14 @@ class GoogleRoutePathService {
     slot['estimatedArrivalAt'] = _estimatedArrival(slot, info.etaMinutes);
   }
 
+  static LatLng? _parseLatLng(dynamic raw) {
+    if (raw is! Map) return null;
+    final lat = (raw['lat'] as num?)?.toDouble();
+    final lng = (raw['lng'] as num?)?.toDouble();
+    if (lat == null || lng == null) return null;
+    return LatLng(lat, lng);
+  }
+
   static Timestamp? _estimatedArrival(
     Map<String, dynamic> slot,
     int etaMinutes,
@@ -590,5 +608,6 @@ class GoogleRoutePathService {
     return points;
   }
 
-  static List<LatLng> _decodePolyline(String encoded) => decodePolyline(encoded);
+  static List<LatLng> _decodePolyline(String encoded) =>
+      decodePolyline(encoded);
 }
