@@ -57,8 +57,18 @@ class _RouteManagerNavBarState extends State<RouteManagerNavBar> {
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceAround,
             children: [
-              _buildItem(context, 0, Icons.schedule, context.texts.t('schedule')),
-              _buildItem(context, 1, Icons.assignment, context.texts.t('assign')),
+              _buildItem(
+                context,
+                0,
+                Icons.schedule,
+                context.texts.t('schedule'),
+              ),
+              _buildItem(
+                context,
+                1,
+                Icons.assignment,
+                context.texts.t('driverStatus'),
+              ),
               _buildReportsItem(context),
               _buildItem(context, 3, Icons.person, context.texts.t('profile')),
             ],

@@ -31,9 +31,8 @@ class _AddScheduleSlotScreenState extends State<AddScheduleSlotScreen> {
 
   final TextEditingController _priceController = TextEditingController();
   final TextEditingController _frequencyController = TextEditingController();
-  final TextEditingController _tripLengthController = TextEditingController(
-    text: '60',
-  );
+  final TextEditingController _tripLengthController =
+      TextEditingController(text: '60');
 
   String? _capacity;
 
@@ -47,6 +46,7 @@ class _AddScheduleSlotScreenState extends State<AddScheduleSlotScreen> {
   void initState() {
     super.initState();
     final e = widget.existingSlot;
+
     if (e != null) {
       _selectedType = e.vehicleType;
       _selectedDate = DateTime(
@@ -55,22 +55,28 @@ class _AddScheduleSlotScreenState extends State<AddScheduleSlotScreen> {
         e.serviceDate.day,
       );
       _fromTime = TimeOfDay.fromDateTime(e.departureAt);
+
       if (e.vehicleType == 'micro') {
         _toTime = null;
       } else {
         _toTime = TimeOfDay.fromDateTime(e.arrivalAt);
+
         if (e.frequencyMinutes != null && e.frequencyMinutes! > 0) {
           _frequencyController.text = e.frequencyMinutes!.toString();
+
           final mins = e.arrivalAt.difference(e.departureAt).inMinutes;
           if (mins > 0) {
             _tripLengthController.text = mins.toString();
           }
         }
       }
+
       _capacity = e.capacity.toString();
+
       if (_selectedType == 'micro' && _capacity == '14') {
         _capacity = '7';
       }
+
       final p = e.price;
       if (p != null) {
         _priceController.text = p.toStringAsFixed(
@@ -93,6 +99,7 @@ class _AddScheduleSlotScreenState extends State<AddScheduleSlotScreen> {
       context: context,
       initialTime: TimeOfDay.now(),
     );
+
     if (picked != null) {
       setState(() {
         if (isFrom) {
@@ -111,6 +118,7 @@ class _AddScheduleSlotScreenState extends State<AddScheduleSlotScreen> {
       lastDate: DateTime(2035),
       initialDate: _selectedDate ?? DateTime.now(),
     );
+
     if (picked != null) {
       setState(() => _selectedDate = picked);
     }
@@ -127,7 +135,13 @@ class _AddScheduleSlotScreenState extends State<AddScheduleSlotScreen> {
   }
 
   DateTime _combine(DateTime date, TimeOfDay time) {
-    return DateTime(date.year, date.month, date.day, time.hour, time.minute);
+    return DateTime(
+      date.year,
+      date.month,
+      date.day,
+      time.hour,
+      time.minute,
+    );
   }
 
   List<ScheduleSlot> _buildSlotsToCreate({
@@ -139,9 +153,11 @@ class _AddScheduleSlotScreenState extends State<AddScheduleSlotScreen> {
     if (widget.isEditing && widget.existingSlot != null) {
       final e = widget.existingSlot!;
       final dep = _combine(_selectedDate!, _fromTime!);
+
       final arr = _selectedType == 'micro'
           ? dep.add(e.arrivalAt.difference(e.departureAt))
           : _combine(_selectedDate!, _toTime!);
+
       return [
         ScheduleSlot(
           slotId: e.slotId,
@@ -169,6 +185,7 @@ class _AddScheduleSlotScreenState extends State<AddScheduleSlotScreen> {
     if (_selectedType == 'micro') {
       final dep = _combine(_selectedDate!, _fromTime!);
       final arr = dep.add(const Duration(minutes: 45));
+
       return [
         ScheduleSlot(
           slotId: '',
@@ -183,11 +200,12 @@ class _AddScheduleSlotScreenState extends State<AddScheduleSlotScreen> {
       ];
     }
 
-    // Bus
     final freq = frequencyMinutes ?? 0;
+
     if (freq <= 0) {
       final dep = _combine(_selectedDate!, _fromTime!);
       final arr = _combine(_selectedDate!, _toTime!);
+
       return [
         ScheduleSlot(
           slotId: '',
@@ -204,13 +222,16 @@ class _AddScheduleSlotScreenState extends State<AddScheduleSlotScreen> {
 
     final firstDep = _combine(_selectedDate!, _fromTime!);
     final lastStart = _combine(_selectedDate!, _toTime!);
+
     if (lastStart.isBefore(firstDep)) {
       return [];
     }
 
     final tripLen = Duration(minutes: tripLengthMinutes);
     final out = <ScheduleSlot>[];
+
     var dep = firstDep;
+
     while (!dep.isAfter(lastStart)) {
       out.add(
         ScheduleSlot(
@@ -224,8 +245,10 @@ class _AddScheduleSlotScreenState extends State<AddScheduleSlotScreen> {
           frequencyMinutes: freq,
         ),
       );
+
       dep = dep.add(Duration(minutes: freq));
     }
+
     return out;
   }
 
@@ -239,47 +262,51 @@ class _AddScheduleSlotScreenState extends State<AddScheduleSlotScreen> {
 
     if (_selectedType == 'bus' && _toTime == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(context.texts.t('chooseEndTime')),
-        ),
+        SnackBar(content: Text(context.texts.t('chooseEndTime'))),
       );
       return;
     }
 
     final cap = int.tryParse(_capacity ?? '');
+
     if (cap == null || cap <= 0) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(context.texts.t('selectCapacity'))));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(context.texts.t('selectCapacity'))),
+      );
       return;
     }
 
     int? frequencyMinutes;
-    if (_selectedType == 'bus' && _frequencyController.text.trim().isNotEmpty) {
+
+    if (_selectedType == 'bus' &&
+        _frequencyController.text.trim().isNotEmpty) {
       frequencyMinutes = int.tryParse(_frequencyController.text.trim());
+
       if (frequencyMinutes != null && frequencyMinutes <= 0) {
         frequencyMinutes = null;
       }
     }
 
     int tripLengthMinutes = 60;
+
     if (_selectedType == 'bus' &&
         frequencyMinutes != null &&
         frequencyMinutes > 0) {
       final t = int.tryParse(_tripLengthController.text.trim());
+
       if (t == null || t <= 0) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(context.texts.t('enterTripLength')),
-          ),
+          SnackBar(content: Text(context.texts.t('enterTripLength'))),
         );
         return;
       }
+
       tripLengthMinutes = t;
     } else if (_selectedType == 'bus' &&
         (frequencyMinutes == null || frequencyMinutes <= 0)) {
       final dep = _combine(_selectedDate!, _fromTime!);
       final arr = _combine(_selectedDate!, _toTime!);
+
       if (!arr.isAfter(dep)) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text(context.texts.t('endTimeAfterStart'))),
@@ -290,12 +317,14 @@ class _AddScheduleSlotScreenState extends State<AddScheduleSlotScreen> {
 
     double? price;
     final priceText = _priceController.text.trim();
+
     if (priceText.isNotEmpty) {
       price = double.tryParse(priceText.replaceAll(',', '.'));
+
       if (price == null) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(context.texts.t('invalidPrice'))));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(context.texts.t('invalidPrice'))),
+        );
         return;
       }
     }
@@ -309,71 +338,50 @@ class _AddScheduleSlotScreenState extends State<AddScheduleSlotScreen> {
 
     if (slots.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(context.texts.t('checkDepartureTimes')),
-        ),
+        SnackBar(content: Text(context.texts.t('checkDepartureTimes'))),
       );
       return;
     }
 
     setState(() => _saving = true);
+
     try {
       if (widget.isEditing) {
         await _repo.upsertSlot(slots.first);
+
+        await _assignment.autoAssignUpcomingUnassignedSlots(
+          routeId: widget.routeId,
+        );
       } else {
-        var assigned = 0;
-        var noQueue = 0;
         for (final slot in slots) {
-          final slotId = await _repo.addSlot(slot);
-          final assign = await _assignment.tryAssignDriverForNewSlot(
+          await _repo.addSlot(slot);
+
+          await _assignment.autoAssignUpcomingUnassignedSlots(
             routeId: widget.routeId,
-            slotId: slotId,
           );
-          if (assign.outcome == SlotAssignmentOutcome.assigned) {
-            assigned++;
-          } else {
-            noQueue++;
-          }
         }
+
         if (!mounted) return;
-        if (noQueue > 0 && assigned == 0) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(
-                slots.length > 1
-                    ? '${context.texts.t('savedTrips')} ${slots.length} ${context.texts.t('tripsLabel')}. ${context.texts.t('noDriversQueue')}'
-                    : '${context.texts.t('tripSaved')} ${context.texts.t('noDriversQueue')}',
-              ),
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              slots.length > 1
+                  ? '${context.texts.t('savedTrips')} ${slots.length} ${context.texts.t('tripsLabel')}'
+                  : context.texts.t('tripSaved'),
             ),
-          );
-        } else if (noQueue > 0) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(
-                '${context.texts.t('savedTrips')} ${slots.length} ${context.texts.t('tripsLabel')}. $assigned ${context.texts.t('autoAssigned')}; '
-                '$noQueue ${context.texts.t('withoutQueueDriver')}.',
-              ),
-            ),
-          );
-        } else {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(
-                slots.length > 1
-                    ? '${context.texts.t('savedTrips')} ${slots.length} ${context.texts.t('tripsLabel')}. ${context.texts.t('driversAssignedQueue')}'
-                    : '${context.texts.t('tripSaved')} ${context.texts.t('driverAssignedQueue')}',
-              ),
-            ),
-          );
-        }
+          ),
+        );
       }
+
       if (!mounted) return;
       Navigator.pop(context, true);
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('${context.texts.t('couldNotSave')}: $e')));
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('${context.texts.t('couldNotSave')}: $e')),
+      );
     } finally {
       if (mounted) setState(() => _saving = false);
     }
@@ -382,6 +390,7 @@ class _AddScheduleSlotScreenState extends State<AddScheduleSlotScreen> {
   @override
   Widget build(BuildContext context) {
     final isMicro = _selectedType == 'micro';
+
     final busRepeat =
         !isMicro &&
         int.tryParse(_frequencyController.text.trim()) != null &&
@@ -389,12 +398,8 @@ class _AddScheduleSlotScreenState extends State<AddScheduleSlotScreen> {
 
     return Scaffold(
       backgroundColor: NavigoColors.backgroundLight,
-      // ✅ Fix: bottomNavigationBar is correctly at the Scaffold root,
-      // completely outside SafeArea so it always renders.
       bottomNavigationBar: const RouteManagerNavBar(currentIndex: 0),
       body: SafeArea(
-        // ✅ Fix: bottom: false so SafeArea doesn't consume the nav bar's space,
-        // preventing layout conflicts that caused the nav bar to not appear.
         bottom: false,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -417,7 +422,9 @@ class _AddScheduleSlotScreenState extends State<AddScheduleSlotScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    widget.isEditing ? context.texts.t('editTrip') : context.texts.t('scheduleATrip'),
+                    widget.isEditing
+                        ? context.texts.t('editTrip')
+                        : context.texts.t('scheduleATrip'),
                     style: NavigoTextStyles.titleLarge,
                   ),
                   const SizedBox(height: 4),
@@ -425,8 +432,8 @@ class _AddScheduleSlotScreenState extends State<AddScheduleSlotScreen> {
                     isMicro
                         ? context.texts.t('microSubtitle')
                         : busRepeat
-                        ? context.texts.t('busRepeatSubtitle')
-                        : context.texts.t('busSubtitle'),
+                            ? context.texts.t('busRepeatSubtitle')
+                            : context.texts.t('busSubtitle'),
                     style: NavigoTextStyles.bodySmall,
                   ),
                 ],
@@ -450,10 +457,10 @@ class _AddScheduleSlotScreenState extends State<AddScheduleSlotScreen> {
                           selected: _selectedType == 'bus',
                           onTap: () => setState(() {
                             _selectedType = 'bus';
-                            // Ensure dropdown value exists in items (prevents assertion).
                             _capacity =
                                 (_capacity != null &&
-                                        const {'45', '14'}.contains(_capacity))
+                                        const {'45', '14'}
+                                            .contains(_capacity))
                                     ? _capacity
                                     : '45';
                           }),
@@ -464,7 +471,6 @@ class _AddScheduleSlotScreenState extends State<AddScheduleSlotScreen> {
                           selected: _selectedType == 'micro',
                           onTap: () => setState(() {
                             _selectedType = 'micro';
-                            // Ensure dropdown value exists in items (prevents assertion).
                             _capacity = '7';
                           }),
                         ),
@@ -487,7 +493,8 @@ class _AddScheduleSlotScreenState extends State<AddScheduleSlotScreen> {
                               onTap: () => _pickTime(isFrom: true),
                             ),
                           ] else if (!busRepeat &&
-                              (int.tryParse(_frequencyController.text.trim()) ??
+                              (int.tryParse(
+                                          _frequencyController.text.trim()) ??
                                       0) <=
                                   0) ...[
                             Row(
@@ -551,17 +558,21 @@ class _AddScheduleSlotScreenState extends State<AddScheduleSlotScreen> {
                               controller: _frequencyController,
                               keyboardType: TextInputType.number,
                               style: NavigoTextStyles.fieldText,
-                              decoration: NavigoDecorations.kInputDecoration
-                                  .copyWith(
-                                    hintText: context.texts.t('leaveEmptySingle'),
-                                  ),
+                              decoration:
+                                  NavigoDecorations.kInputDecoration.copyWith(
+                                hintText:
+                                    context.texts.t('leaveEmptySingle'),
+                              ),
                               onChanged: (_) => setState(() {}),
                             ),
                           ],
 
                           const SizedBox(height: NavigoSizes.itemGap),
 
-                          Text(context.texts.t('date'), style: NavigoTextStyles.label),
+                          Text(
+                            context.texts.t('date'),
+                            style: NavigoTextStyles.label,
+                          ),
                           const SizedBox(height: 6),
                           _buildPickerBox(
                             label: '',
@@ -596,14 +607,16 @@ class _AddScheduleSlotScreenState extends State<AddScheduleSlotScreen> {
                                         child: Text('7 seats'),
                                       ),
                                     ];
-                              final selectedCapacity = capacityItems
-                                      .any((i) => i.value == _capacity)
-                                  ? _capacity
-                                  : null;
+
+                              final selectedCapacity =
+                                  capacityItems.any((i) => i.value == _capacity)
+                                      ? _capacity
+                                      : null;
 
                               return DropdownButtonFormField<String>(
                                 initialValue: selectedCapacity,
-                                decoration: NavigoDecorations.kInputDecoration,
+                                decoration:
+                                    NavigoDecorations.kInputDecoration,
                                 style: NavigoTextStyles.fieldText,
                                 items: capacityItems,
                                 onChanged: (value) =>
@@ -621,14 +634,16 @@ class _AddScheduleSlotScreenState extends State<AddScheduleSlotScreen> {
                           const SizedBox(height: 6),
                           TextField(
                             controller: _priceController,
-                            keyboardType: const TextInputType.numberWithOptions(
+                            keyboardType:
+                                const TextInputType.numberWithOptions(
                               decimal: true,
                             ),
                             style: NavigoTextStyles.fieldText,
-                            decoration: NavigoDecorations.kInputDecoration
-                                .copyWith(
-                                    hintText: context.texts.t('leaveEmptyDefault'),
-                                ),
+                            decoration:
+                                NavigoDecorations.kInputDecoration.copyWith(
+                              hintText:
+                                  context.texts.t('leaveEmptyDefault'),
+                            ),
                           ),
                         ],
                       ),
@@ -652,7 +667,9 @@ class _AddScheduleSlotScreenState extends State<AddScheduleSlotScreen> {
                                 ),
                               )
                             : Text(
-                                widget.isEditing ? context.texts.t('saveChanges') : context.texts.t('saveTrip'),
+                                widget.isEditing
+                                    ? context.texts.t('saveChanges')
+                                    : context.texts.t('saveTrip'),
                                 style: NavigoTextStyles.button,
                               ),
                       ),
@@ -664,15 +681,14 @@ class _AddScheduleSlotScreenState extends State<AddScheduleSlotScreen> {
                       width: double.infinity,
                       height: NavigoSizes.buttonHeight,
                       child: ElevatedButton(
-                        onPressed: _saving
-                            ? null
-                            : () => Navigator.pop(context),
-                        style: NavigoDecorations.kPrimaryButtonLargeStyle
-                            .copyWith(
-                              backgroundColor: const WidgetStatePropertyAll(
-                                NavigoColors.accentRed,
-                              ),
-                            ),
+                        onPressed:
+                            _saving ? null : () => Navigator.pop(context),
+                        style:
+                            NavigoDecorations.kPrimaryButtonLargeStyle.copyWith(
+                          backgroundColor: const WidgetStatePropertyAll(
+                            NavigoColors.accentRed,
+                          ),
+                        ),
                         child: Text(
                           context.texts.t('cancel'),
                           style: NavigoTextStyles.button,
@@ -708,7 +724,10 @@ class _AddScheduleSlotScreenState extends State<AddScheduleSlotScreen> {
           onTap: onTap,
           child: Container(
             width: double.infinity,
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+            padding: const EdgeInsets.symmetric(
+              horizontal: 12,
+              vertical: 14,
+            ),
             decoration: NavigoDecorations.surfaceDecoration(
               radius: NavigoSizes.inputRadius,
               color: NavigoColors.inputFill,
@@ -718,7 +737,12 @@ class _AddScheduleSlotScreenState extends State<AddScheduleSlotScreen> {
               children: [
                 Icon(icon, size: 18, color: NavigoColors.accentGreen),
                 const SizedBox(width: 8),
-                Expanded(child: Text(value, style: NavigoTextStyles.fieldText)),
+                Expanded(
+                  child: Text(
+                    value,
+                    style: NavigoTextStyles.fieldText,
+                  ),
+                ),
               ],
             ),
           ),

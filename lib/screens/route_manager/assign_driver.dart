@@ -66,8 +66,7 @@ class _AssignDriverState extends State<AssignDriver> {
       if (routeId == null || routeId.isEmpty) {
         setState(() {
           _drivers = [];
-          _loadError =
-              'No route linked to this account. Set routeId on users or route_manager.';
+          _loadError = context.texts.t('noRouteLinkedAccount');
           _loading = false;
         });
         return;
@@ -92,7 +91,7 @@ class _AssignDriverState extends State<AssignDriver> {
         if (a.toString().isNotEmpty || b.toString().isNotEmpty) {
           _routeLine = '$a → $b';
         } else {
-          _routeLine = 'Route';
+          _routeLine = context.texts.t('route');
         }
       }
 
@@ -141,7 +140,14 @@ class _AssignDriverState extends State<AssignDriver> {
         return;
       }
 
-      final rows = await _buildRows(docs, _routeLine);
+      final texts = context.texts;
+      final rows = await _buildRows(
+        docs,
+        _routeLine,
+        driverLabel: texts.t('driver'),
+        noVehicleLabel: texts.t('noVehicle'),
+        vehicleLabel: texts.t('vehicle'),
+      );
       if (!mounted) return;
       setState(() {
         _drivers = rows;
@@ -161,8 +167,11 @@ class _AssignDriverState extends State<AssignDriver> {
 
   Future<List<DriverRow>> _buildRows(
     List<QueryDocumentSnapshot<Map<String, dynamic>>> docs,
-    String routeLine,
-  ) async {
+    String routeLine, {
+    required String driverLabel,
+    required String noVehicleLabel,
+    required String vehicleLabel,
+  }) async {
     final fs = FirebaseFirestore.instance;
 
     final userRefs = <String, DocumentReference<Map<String, dynamic>>>{};
@@ -203,21 +212,25 @@ class _AssignDriverState extends State<AssignDriver> {
       final last = u?['lastName'] ?? '';
       final name = '$first $last'.trim();
       final displayName = name.isEmpty
-          ? 'Driver ${d.id.substring(0, 6)}'
+          ? '$driverLabel ${d.id.substring(0, 6)}'
           : name;
 
       final vid = data['vehicleId'] as String? ?? '';
-      String vehicleLabel = vid.isEmpty ? 'No vehicle' : 'Vehicle: $vid';
+      String vehicleDisplay = vid.isEmpty
+          ? noVehicleLabel
+          : '$vehicleLabel: $vid';
       if (vid.isNotEmpty) {
         final vm = vehicleById[vid];
         if (vm != null) {
           final plate = vm['plateNumber'] ?? '';
           final type = vm['type'] ?? '';
-          vehicleLabel = [
+          vehicleDisplay = [
             type,
             plate,
           ].where((e) => e.toString().isNotEmpty).join(' · ');
-          if (vehicleLabel.isEmpty) vehicleLabel = 'Vehicle: $vid';
+          if (vehicleDisplay.isEmpty) {
+            vehicleDisplay = '$vehicleLabel: $vid';
+          }
         }
       }
 
@@ -229,7 +242,7 @@ class _AssignDriverState extends State<AssignDriver> {
           driverId: d.id,
           userId: uid,
           name: displayName,
-          vehicleLabel: vehicleLabel,
+          vehicleLabel: vehicleDisplay,
           routeLine: routeLine,
           rawStatus: normalized,
           isOnline: isOnline,
@@ -261,6 +274,14 @@ class _AssignDriverState extends State<AssignDriver> {
 
   @override
   Widget build(BuildContext context) {
+    final filters = {
+      'All': context.texts.t('all'),
+      'Available': context.texts.t('available'),
+      'Assigned': context.texts.t('assigned'),
+      'On Trip': context.texts.t('onTrip'),
+      'Offline': context.texts.t('offline'),
+    };
+
     return Scaffold(
       backgroundColor: NavigoColors.backgroundLight,
       body: SafeArea(
@@ -287,10 +308,13 @@ class _AssignDriverState extends State<AssignDriver> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(context.texts.t('assignments'), style: NavigoTextStyles.titleLarge),
+                  Text(
+                    context.texts.t('driverStatus'),
+                    style: NavigoTextStyles.titleLarge,
+                  ),
                   const SizedBox(height: 4),
                   Text(
-                    'Queue is automatic (online + available). New trips are assigned FIFO.',
+                    context.texts.t('driverStatusSubtitle'),
                     style: NavigoTextStyles.bodySmall,
                   ),
                 ],
@@ -304,20 +328,19 @@ class _AssignDriverState extends State<AssignDriver> {
               child: SingleChildScrollView(
                 scrollDirection: Axis.horizontal,
                 child: Row(
-                  children:
-                      ['All', 'Available', 'Assigned', 'On Trip', 'Offline']
-                          .map(
-                            (label) => Padding(
-                              padding: const EdgeInsets.only(right: 8),
-                              child: NavigoDecorations.selectorChip(
-                                label: label,
-                                selected: selectedFilter == label,
-                                onTap: () =>
-                                    setState(() => selectedFilter = label),
-                              ),
-                            ),
-                          )
-                          .toList(),
+                  children: filters.entries
+                      .map(
+                        (filter) => Padding(
+                          padding: const EdgeInsets.only(right: 8),
+                          child: NavigoDecorations.selectorChip(
+                            label: filter.value,
+                            selected: selectedFilter == filter.key,
+                            onTap: () =>
+                                setState(() => selectedFilter = filter.key),
+                          ),
+                        ),
+                      )
+                      .toList(),
                 ),
               ),
             ),
@@ -344,7 +367,9 @@ class _AssignDriverState extends State<AssignDriver> {
                               children: [
                                 SizedBox(height: 120),
                                 Center(
-                                  child: Text(context.texts.t('noDriversForRoute')),
+                                  child: Text(
+                                    context.texts.t('noDriversForRoute'),
+                                  ),
                                 ),
                               ],
                             )
@@ -388,14 +413,16 @@ class _AssignDriverState extends State<AssignDriver> {
                                             ),
                                             const SizedBox(height: 4),
                                             Text(
-                                              'Route: ${driver.routeLine}',
+                                              '${context.texts.t('route')}: ${driver.routeLine}',
                                               style: NavigoTextStyles.label,
                                             ),
                                             const SizedBox(height: 4),
                                             Text(
                                               pos >= 0
-                                                  ? 'Queue position: ${pos + 1}'
-                                                  : 'Not in queue',
+                                                  ? '${context.texts.t('queuePosition')}: ${pos + 1}'
+                                                  : context.texts.t(
+                                                      'notInQueue',
+                                                    ),
                                               style: NavigoTextStyles.bodySmall,
                                             ),
                                           ],
@@ -405,7 +432,10 @@ class _AssignDriverState extends State<AssignDriver> {
                                         crossAxisAlignment:
                                             CrossAxisAlignment.end,
                                         children: [
-                                          _statusChip(driver.statusLabel),
+                                          _statusChip(
+                                            driver.rawStatus,
+                                            driver.isOnline,
+                                          ),
                                         ],
                                       ),
                                     ],
@@ -422,26 +452,34 @@ class _AssignDriverState extends State<AssignDriver> {
     );
   }
 
-  Widget _statusChip(String status) {
+  Widget _statusChip(String rawStatus, bool isOnline) {
     final Color color;
+    final String label;
 
-    switch (status) {
-      case 'Available':
-        color = NavigoColors.accentGreen;
+    switch (rawStatus) {
+      case DriverStatus.available:
+        label = isOnline
+            ? context.texts.t('available')
+            : context.texts.t('offline');
+        color = isOnline ? NavigoColors.accentGreen : NavigoColors.accentRed;
         break;
-      case 'Assigned':
+      case DriverStatus.assigned:
+        label = context.texts.t('assigned');
         color = NavigoColors.primaryOrange;
         break;
-      case 'On Trip':
+      case DriverStatus.onTrip:
+        label = context.texts.t('onTrip');
         color = NavigoColors.accentBlue;
         break;
-      case 'Offline':
+      case DriverStatus.offline:
+        label = context.texts.t('offline');
         color = NavigoColors.accentRed;
         break;
       default:
+        label = rawStatus;
         color = NavigoColors.textMuted;
     }
 
-    return NavigoDecorations.statusChip(label: status, color: color);
+    return NavigoDecorations.statusChip(label: label, color: color);
   }
 }

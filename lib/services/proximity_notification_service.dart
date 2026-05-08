@@ -39,15 +39,14 @@ class ProximityNotificationService {
       final notificationRef = _db.collection(_notificationsCollection).doc();
       final rounded = distanceMeters.round();
       final pickupText = pickupDescription.trim();
-      final message =
-          pickupText.isEmpty
-              ? 'Your driver is nearby (${rounded}m away).'
-              : 'Your driver is nearby (${rounded}m from $pickupText).';
+      final message = pickupText.isEmpty
+          ? 'السائق قريب منك، المسافة المتبقية حوالي $rounded متر.'
+          : 'السائق قريب من $pickupText، المسافة المتبقية حوالي $rounded متر.';
 
       tx.set(notificationRef, {
         'notificationId': notificationRef.id,
         'userId': safePassengerId,
-        'title': 'Driver Nearby',
+        'title': 'السائق قريب منك',
         'message': message,
         'body': message,
         'type': 'driver_nearby',

@@ -1,19 +1,20 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'dart:async';
 
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:navigo/models/route.dart';
 import 'package:navigo/models/schedule_slot.dart';
 import 'package:navigo/services/google_route_path_service.dart';
-import 'package:navigo/services/route_manager_route_id.dart';
 import 'package:navigo/services/route_driver_queue_service.dart';
+import 'package:navigo/services/route_manager_route_id.dart';
 import 'package:navigo/services/schedule_slot_repository.dart';
 import 'package:navigo/services/slot_driver_assignment_service.dart';
-import 'add_schedule_slot_screen.dart';
-import 'route_manager_notification_compose.dart';
-import 'route_manager_nav_bar.dart';
+
 import '../../localization/localization_x.dart';
 import '../../theme/app_theme.dart';
+import 'add_schedule_slot_screen.dart';
+import 'route_manager_nav_bar.dart';
+import 'route_manager_notification_compose.dart';
 
 class RouteSchedule extends StatefulWidget {
   const RouteSchedule({super.key});
@@ -29,7 +30,6 @@ class _RouteScheduleState extends State<RouteSchedule> {
   final GoogleRoutePathService _routePathService = GoogleRoutePathService();
 
   final Map<String, Future<String>> _driverLabelFutures = {};
-  StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _driversSub;
 
   String _selectedType = 'bus';
   bool _autoAssignBusy = false;
@@ -46,15 +46,11 @@ class _RouteScheduleState extends State<RouteSchedule> {
     _loadRouteContext();
   }
 
-  @override
-  void dispose() {
-    _driversSub?.cancel();
-    super.dispose();
-  }
-
   Future<void> _loadRouteContext() async {
     final id = await resolveManagedRouteId();
+
     if (!mounted) return;
+
     if (id == null || id.isEmpty) {
       setState(() {
         _routeId = null;
@@ -66,31 +62,26 @@ class _RouteScheduleState extends State<RouteSchedule> {
     setState(() => _routeId = id);
 
     try {
-      final snap = await FirebaseFirestore.instance
-          .collection('route')
-          .doc(id)
-          .get();
+      final snap =
+          await FirebaseFirestore.instance.collection('route').doc(id).get();
+
       if (!mounted) return;
+
       if (snap.exists && snap.data() != null) {
         final data = Map<String, dynamic>.from(snap.data()!);
         data['routeId'] = data['routeId'] ?? id;
+
         setState(() {
           _route = RouteModel.fromMap(data);
           _loadingRoute = false;
         });
+
         unawaited(_syncRoutePath(id, _route!));
-        // Keep queue in sync and pruned in real time based on driver snapshots.
-        await _driversSub?.cancel();
-        _driversSub = FirebaseFirestore.instance
-            .collection('drivers')
-            .where('routeId', isEqualTo: id)
-            .snapshots()
-            .listen((_) async {
-              await _queueSvc.syncQueueWithOnlineAvailableDrivers(id);
-              if (!mounted) return;
-              unawaited(_autoAssignNow());
-            });
+
+        // One-time queue sync only.
+        // No repeated listener here because it caused heavy refreshing.
         unawaited(_queueSvc.syncQueueWithOnlineAvailableDrivers(id));
+
         return;
       }
     } catch (e) {
@@ -120,29 +111,36 @@ class _RouteScheduleState extends State<RouteSchedule> {
     final result = await Navigator.push<bool>(
       context,
       MaterialPageRoute(
-        builder: (_) =>
-            AddScheduleSlotScreen(routeId: id, existingSlot: existing),
+        builder: (_) => AddScheduleSlotScreen(
+          routeId: id,
+          existingSlot: existing,
+        ),
       ),
     );
 
     if (result == true && mounted && existing != null) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(context.texts.t('tripUpdated'))));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(context.texts.t('tripUpdated'))),
+      );
     }
   }
 
   String _timeRange(ScheduleSlot s) {
     final a = TimeOfDay.fromDateTime(s.departureAt);
+
     if (s.vehicleType == 'micro') {
       return a.format(context);
     }
+
     final b = TimeOfDay.fromDateTime(s.arrivalAt);
     return '${a.format(context)} – ${b.format(context)}';
   }
 
   Future<String> _driverLabelFuture(String driverDocId) {
-    if (driverDocId.isEmpty) return Future.value(context.texts.t('unassigned'));
+    if (driverDocId.isEmpty) {
+      return Future.value(context.texts.t('unassigned'));
+    }
+
     return _driverLabelFutures.putIfAbsent(
       driverDocId,
       () => _loadDriverLabel(driverDocId),
@@ -151,31 +149,36 @@ class _RouteScheduleState extends State<RouteSchedule> {
 
   Future<String> _loadDriverLabel(String driverDocId) async {
     final fs = FirebaseFirestore.instance;
+
     final d = await fs.collection('drivers').doc(driverDocId).get();
     final uid = d.data()?['userId'] as String? ?? driverDocId;
+
     final u = await fs.collection('users').doc(uid).get();
     final m = u.data();
+
     final first = m?['firstName'] ?? '';
     final last = m?['lastName'] ?? '';
     final n = '$first $last'.trim();
+
     return n.isEmpty ? 'Driver ${driverDocId.substring(0, 6)}…' : n;
   }
 
-  Future<void> _autoAssignNow({int maxAssignments = 10}) async {
+  Future<void> _autoAssignNow() async {
     final id = _routeId;
     if (id == null) return;
     if (_autoAssignBusy) return;
 
     final now = DateTime.now();
-    if (now.difference(_lastAutoAssign) < const Duration(seconds: 3)) return;
-    _lastAutoAssign = now;
 
+    if (now.difference(_lastAutoAssign) < const Duration(seconds: 3)) {
+      return;
+    }
+
+    _lastAutoAssign = now;
     _autoAssignBusy = true;
+
     try {
-      await _slotAssign.autoAssignUpcomingUnassignedSlots(
-        routeId: id,
-        maxAssignments: maxAssignments,
-      );
+      await _slotAssign.autoAssignUpcomingUnassignedSlots(routeId: id);
     } catch (e) {
       debugPrint('Auto-assign failed: $e');
     } finally {
@@ -185,21 +188,25 @@ class _RouteScheduleState extends State<RouteSchedule> {
 
   Future<void> _refreshQueueNow(String routeId) async {
     if (_queueRefreshing) return;
-    _queueRefreshing = true;
+
+    setState(() => _queueRefreshing = true);
+
     try {
       await _queueSvc.syncQueueWithOnlineAvailableDrivers(routeId);
       await _autoAssignNow();
     } catch (e) {
       debugPrint('Queue refresh failed: $e');
     } finally {
-      _queueRefreshing = false;
-      if (mounted) setState(() {});
+      if (mounted) {
+        setState(() => _queueRefreshing = false);
+      }
     }
   }
 
   void _openDriverQueueBottomSheet() {
     final rid = _routeId;
     if (rid == null) return;
+
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
@@ -207,6 +214,7 @@ class _RouteScheduleState extends State<RouteSchedule> {
       builder: (ctx) {
         final bottomInset = MediaQuery.viewPaddingOf(ctx).bottom;
         final maxH = MediaQuery.sizeOf(ctx).height * 0.72;
+
         return Padding(
           padding: EdgeInsets.only(bottom: bottomInset),
           child: Container(
@@ -248,9 +256,8 @@ class _RouteScheduleState extends State<RouteSchedule> {
                         ),
                       ),
                       IconButton(
-                        onPressed: _queueRefreshing
-                            ? null
-                            : () => _refreshQueueNow(rid),
+                        onPressed:
+                            _queueRefreshing ? null : () => _refreshQueueNow(rid),
                         icon: _queueRefreshing
                             ? const SizedBox(
                                 width: 16,
@@ -291,6 +298,7 @@ class _RouteScheduleState extends State<RouteSchedule> {
 
   Widget _filterChip(String type, String label) {
     final selected = _selectedType == type;
+
     return NavigoDecorations.selectorChip(
       label: label,
       selected: selected,
@@ -299,32 +307,35 @@ class _RouteScheduleState extends State<RouteSchedule> {
   }
 
   bool _matchesSelectedType(String rawVehicleType) {
-    final normalized = rawVehicleType.trim().toLowerCase().replaceAll(
-      RegExp(r'[\s_-]+'),
-      '',
-    );
+    final normalized = rawVehicleType
+        .trim()
+        .toLowerCase()
+        .replaceAll(RegExp(r'[\s_-]+'), '');
+
     if (_selectedType == 'bus') {
       return normalized == 'bus';
     }
+
     if (_selectedType == 'micro') {
       return normalized == 'micro' || normalized == 'microbus';
     }
+
     return false;
   }
 
   String _vehicleTypeLabel(ScheduleSlot slot) {
     final raw = slot.vehicleType.trim();
-    final normalized = raw.toLowerCase().replaceAll(
-      RegExp(r'[\s_-]+'),
-      '',
-    );
+
+    final normalized = raw
+        .toLowerCase()
+        .replaceAll(RegExp(r'[\s_-]+'), '');
 
     if (normalized == 'bus') return context.texts.t('bus');
+
     if (normalized == 'micro' || normalized == 'microbus') {
       return context.texts.t('microBus');
     }
 
-    // Fallback to Firestore value for any custom/new vehicle types.
     return raw.isEmpty ? context.texts.t('bus') : raw;
   }
 
@@ -334,23 +345,22 @@ class _RouteScheduleState extends State<RouteSchedule> {
       children: [
         Text(
           'Queue is automatic: online + available drivers are appended. '
-          'New trips are assigned to the first eligible driver (FIFO). '
-          'When a driver starts a trip, they are rotated to the end.',
+          'New trips are assigned to eligible drivers in FIFO order.',
           style: NavigoTextStyles.bodySmall.copyWith(fontSize: 11),
         ),
         const SizedBox(height: 10),
-        FutureBuilder<void>(
-          future: _queueSvc.syncQueueWithOnlineAvailableDrivers(routeId),
-          builder: (context, _) => const SizedBox.shrink(),
-        ),
+
+        // FIXED:
+        // No FutureBuilder here.
+        // No auto refresh when queue is empty.
+        // Only refresh when user presses refresh button.
+
         StreamBuilder<List<String>>(
           stream: _queueSvc.watchQueueIds(routeId),
           builder: (context, qSnap) {
             final ids = qSnap.data ?? [];
+
             if (ids.isEmpty) {
-              // Retry once when stream shows empty, to rebuild queue from driver
-              // statuses and avoid stale "empty queue" UI.
-              unawaited(_refreshQueueNow(routeId));
               return Padding(
                 padding: const EdgeInsets.symmetric(vertical: 12),
                 child: Text(
@@ -359,9 +369,11 @@ class _RouteScheduleState extends State<RouteSchedule> {
                 ),
               );
             }
+
             return Column(
               children: List.generate(ids.length, (i) {
                 final id = ids[i];
+
                 return ListTile(
                   dense: true,
                   contentPadding: EdgeInsets.zero,
@@ -379,8 +391,12 @@ class _RouteScheduleState extends State<RouteSchedule> {
                   ),
                   title: FutureBuilder<String>(
                     future: _driverLabelFuture(id),
-                    builder: (c, s) =>
-                        Text(s.data ?? '…', style: NavigoTextStyles.bodySmall),
+                    builder: (c, s) {
+                      return Text(
+                        s.data ?? '…',
+                        style: NavigoTextStyles.bodySmall,
+                      );
+                    },
                   ),
                 );
               }),
@@ -423,17 +439,21 @@ class _RouteScheduleState extends State<RouteSchedule> {
       onDismissed: (_) async {
         final id = _routeId;
         if (id == null) return;
+
         try {
           await _repo.deleteSlot(id, slot.slotId);
+
           if (!mounted) return;
+
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(content: Text(context.texts.t('tripRemoved'))),
           );
         } catch (e) {
           if (!mounted) return;
-          ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(SnackBar(content: Text('Could not delete: $e')));
+
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Could not delete: $e')),
+          );
         }
       },
       background: Container(
@@ -528,9 +548,9 @@ class _RouteScheduleState extends State<RouteSchedule> {
                   FutureBuilder<String>(
                     future: _driverLabelFuture(slot.driverId),
                     builder: (context, snap) {
-                      final t =
-                          snap.data ??
+                      final t = snap.data ??
                           (slot.driverId.isEmpty ? 'Unassigned' : 'Driver…');
+
                       return Text(
                         'Driver: $t',
                         style: NavigoTextStyles.bodySmall.copyWith(
@@ -646,7 +666,10 @@ class _RouteScheduleState extends State<RouteSchedule> {
             ),
             const SizedBox(height: 16),
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+              padding: const EdgeInsets.symmetric(
+                horizontal: 20,
+                vertical: 8,
+              ),
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
@@ -688,16 +711,14 @@ class _RouteScheduleState extends State<RouteSchedule> {
                       ),
                     );
                   }
+
                   if (!snapshot.hasData) {
                     return const Center(child: CircularProgressIndicator());
                   }
 
-                  // Auto-assign in the background when we receive slot updates.
-                  // Schedule after this frame to avoid setState during build.
-                  WidgetsBinding.instance.addPostFrameCallback((_) {
-                    if (!mounted) return;
-                    unawaited(_autoAssignNow());
-                  });
+                  // FIXED:
+                  // Do NOT auto assign here.
+                  // This StreamBuilder rebuilds many times and caused repeated loading.
 
                   final filtered = snapshot.data!
                       .where((s) => _matchesSelectedType(s.vehicleType))

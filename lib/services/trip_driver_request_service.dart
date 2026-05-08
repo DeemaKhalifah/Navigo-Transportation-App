@@ -115,7 +115,9 @@ class TripDriverRequestService {
         .map((snap) {
           var count = 0;
           for (final doc in snap.docs) {
-            final status = (doc.data()['status'] ?? '').toString().toLowerCase();
+            final status = (doc.data()['status'] ?? '')
+                .toString()
+                .toLowerCase();
             if (status != TripDriverRequest.accepted) {
               count++;
             }
@@ -213,14 +215,16 @@ class TripDriverRequestService {
     required int seatsRequested,
   }) async {
     final ref = _db.collection(_notificationsCollection).doc();
-    final lineText = lineLabel.isEmpty ? 'your route' : lineLabel;
+    final lineText = lineLabel.isEmpty ? 'مسارك' : lineLabel;
+    final seatWord = seatsRequested == 1 ? 'مقعد' : 'مقاعد';
+    final message = 'طلب راكب حجز $seatsRequested $seatWord على $lineText.';
 
     await ref.set({
       'notificationId': ref.id,
       'userId': driverId,
-      'title': 'New Trip Request',
-      'message': 'A passenger requested $seatsRequested seat(s) on $lineText.',
-      'body': 'A passenger requested $seatsRequested seat(s) on $lineText.',
+      'title': 'طلب رحلة جديد',
+      'message': message,
+      'body': message,
       'type': 'driver_request',
       'routeId': routeId,
       'requestId': requestId,

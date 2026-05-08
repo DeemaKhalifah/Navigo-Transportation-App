@@ -44,7 +44,7 @@ class NotificationService {
       batch.set(ref, {
         'notificationId': ref.id,
         'userId': userId,
-        'title': 'Route Manager Message',
+        'title': 'رسالة من مدير المسار',
         'message': safeMessage,
         'body': safeMessage,
         'type': 'route_manager_message',
@@ -84,9 +84,9 @@ class NotificationService {
       batch.set(ref, {
         'notificationId': ref.id,
         'userId': passengerId,
-        'title': 'Trip Started',
-        'message': 'Your trip has started 🚍',
-        'body': 'Your trip has started 🚍',
+        'title': 'بدأت الرحلة',
+        'message': 'بدأت رحلتك الآن، يمكنك متابعة السائق على الخريطة.',
+        'body': 'بدأت رحلتك الآن، يمكنك متابعة السائق على الخريطة.',
         'type': 'trip_started',
         'driverId': driverId,
         'tripId': tripId,
@@ -122,9 +122,9 @@ class NotificationService {
     final safeUserId = userId.trim();
     if (safeUserId.isEmpty) return Stream.value(0);
 
-    return watchUserNotifications(safeUserId).map(
-      (notifications) => notifications.where((n) => !n.isRead).length,
-    );
+    return watchUserNotifications(
+      safeUserId,
+    ).map((notifications) => notifications.where((n) => !n.isRead).length);
   }
 
   Future<void> markAsRead(String notificationId) async {

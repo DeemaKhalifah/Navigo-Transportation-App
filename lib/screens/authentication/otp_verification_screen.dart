@@ -81,105 +81,129 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
     super.dispose();
   }
 
-  Future<void> _handleDriverFlow({
-    required String uid,
-    required String firstName,
-    required String lastName,
-  }) async {
-    final driverInfo = widget.driverData ?? {};
-    final fs = FirebaseFirestore.instance;
+ Future<void> _handleDriverFlow({
+  required String uid,
+  required String firstName,
+  required String lastName,
+}) async {
+  final driverInfo = widget.driverData ?? {};
+  final fs = FirebaseFirestore.instance;
 
-    String vehicleId = (driverInfo['vehicleId'] as String?)?.trim() ?? '';
-    final String plate = (driverInfo['plateNumber'] as String?)?.trim() ?? '';
-    final String vType =
-        (driverInfo['vehicleType'] as String?)?.trim() ?? 'Unknown';
-    final String license =
-        (driverInfo['licenseNumber'] as String?)?.trim() ?? '';
-    final String routeId =
-        (driverInfo['routeId'] as String?)?.trim() ??
-        (driverInfo['route'] as String?)?.trim() ??
-        '';
-    final String driverStatus =
-        (driverInfo['status'] as String?)?.trim().isNotEmpty == true
-        ? (driverInfo['status'] as String).trim()
-        : DriverStatus.offline;
-    final bool isApproved = driverInfo['isApproved'] == true;
+  String vehicleId = (driverInfo['vehicleId'] as String?)?.trim() ?? '';
+  final String plate = (driverInfo['plateNumber'] as String?)?.trim() ?? '';
 
-    if (vehicleId.isEmpty) {
-      final vehicleRef = fs.collection('vehicles').doc();
-      vehicleId = vehicleRef.id;
+  final String vehicleType =
+      (driverInfo['vehicleType'] as String?)?.trim().isNotEmpty == true
+          ? (driverInfo['vehicleType'] as String).trim()
+          : 'bus';
 
-      final vehicle = Vehicle(
-        vehicleId: vehicleId,
-        type: vType,
-        plateNumber: plate,
-        seatCount: defaultSeatCountForVehicleType(vType),
-        licenseNumber: license,
-      );
+  final int capacity =
+      (driverInfo['capacity'] as num?)?.toInt() ??
+      defaultSeatCountForVehicleType(vehicleType);
 
-      final batch = fs.batch();
+  final String vehicleClass =
+      (driverInfo['vehicleClass'] as String?)?.trim().isNotEmpty == true
+          ? (driverInfo['vehicleClass'] as String).trim()
+          : vehicleType == 'microbus'
+              ? 'microbus-7'
+              : 'bus-$capacity';
 
-      batch.set(vehicleRef, {...vehicle.toMap(), 'driverId': uid});
+  final String license =
+      (driverInfo['licenseNumber'] as String?)?.trim() ?? '';
 
-      batch.set(fs.collection('drivers').doc(uid), {
-        'userId': uid,
-        'firstName': firstName,
-        'lastName': lastName,
-        'phone': widget.phoneNumber,
-        'image': null,
-        'role': 'driver',
-        'isVerified': true,
-        'isOnline': false,
-        'vehicleId': vehicleId,
-        'routeId': routeId,
-        'status': driverStatus,
-        'isApproved': isApproved,
-        'latitude': null,
-        'longitude': null,
-        'location': null,
-        'lastLocationUpdate': null,
-      });
+  final String routeId =
+      (driverInfo['routeId'] as String?)?.trim() ??
+      (driverInfo['route'] as String?)?.trim() ??
+      '';
 
-      await batch.commit();
-    } else {
-      await fs.collection('drivers').doc(uid).set({
-        'userId': uid,
-        'firstName': firstName,
-        'lastName': lastName,
-        'phone': widget.phoneNumber,
-        'image': null,
-        'role': 'driver',
-        'isVerified': true,
-        'isOnline': false,
-        'vehicleId': vehicleId,
-        'routeId': routeId,
-        'status': driverStatus,
-        'isApproved': isApproved,
-        'latitude': null,
-        'longitude': null,
-        'location': null,
-        'lastLocationUpdate': null,
-      }, SetOptions(merge: true));
-    }
+  final String driverStatus =
+      (driverInfo['status'] as String?)?.trim().isNotEmpty == true
+          ? (driverInfo['status'] as String).trim()
+          : DriverStatus.offline;
 
-    final driverDoc = await fs.collection('drivers').doc(uid).get();
-    final bool approved = driverDoc.data()?['isApproved'] == true;
+  final bool isApproved = driverInfo['isApproved'] == true;
 
-    if (!mounted) return;
+  if (vehicleId.isEmpty) {
+    final vehicleRef = fs.collection('vehicles').doc();
+    vehicleId = vehicleRef.id;
 
-    if (approved) {
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (_) => const DriverHomeScreen()),
-      );
-    } else {
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (_) => const SignupApprovalScreen()),
-      );
-    }
+    final batch = fs.batch();
+
+    batch.set(vehicleRef, {
+      'vehicleId': vehicleId,
+      'type': vehicleType,
+      'vehicleType': vehicleType,
+      'vehicleClass': vehicleClass,
+      'plateNumber': plate,
+      'seatCount': capacity,
+      'capacity': capacity,
+      'licenseNumber': license,
+      'driverId': uid,
+      'createdAt': FieldValue.serverTimestamp(),
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
+
+    batch.set(fs.collection('drivers').doc(uid), {
+      'userId': uid,
+      'firstName': firstName,
+      'lastName': lastName,
+      'phone': widget.phoneNumber,
+      'image': null,
+      'role': 'driver',
+      'isVerified': true,
+      'isOnline': false,
+      'vehicleId': vehicleId,
+      'routeId': routeId,
+      'status': driverStatus,
+      'isApproved': isApproved,
+      'latitude': null,
+      'longitude': null,
+      'location': null,
+      'lastLocationUpdate': null,
+      'createdAt': FieldValue.serverTimestamp(),
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
+
+    await batch.commit();
+  } else {
+    await fs.collection('drivers').doc(uid).set({
+      'userId': uid,
+      'firstName': firstName,
+      'lastName': lastName,
+      'phone': widget.phoneNumber,
+      'image': null,
+      'role': 'driver',
+      'isVerified': true,
+      'isOnline': false,
+      'vehicleId': vehicleId,
+      'routeId': routeId,
+      'status': driverStatus,
+      'isApproved': isApproved,
+      'latitude': null,
+      'longitude': null,
+      'location': null,
+      'lastLocationUpdate': null,
+      'updatedAt': FieldValue.serverTimestamp(),
+    }, SetOptions(merge: true));
   }
 
+  final driverDoc = await fs.collection('drivers').doc(uid).get();
+  final bool approved = driverDoc.data()?['isApproved'] == true;
+
+  if (!mounted) return;
+
+  if (approved) {
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(builder: (_) => const DriverHomeScreen()),
+    );
+  } else {
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(builder: (_) => const SignupApprovalScreen()),
+    );
+  }
+}
   Future<void> _onContinue() async {
     final texts = context.texts;
     final otp = _otpControllers.map((e) => e.text).join().trim();

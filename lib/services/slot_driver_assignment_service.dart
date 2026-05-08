@@ -1,31 +1,28 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/foundation.dart';
 
-import '../models/driver_status.dart';
-import '../models/schedule_slot.dart';
-import '../models/trip_status.dart';
-import 'route_driver_queue_service.dart';
-import 'schedule_slot_repository.dart';
+enum SlotAssignmentOutcome {
+  assigned,
+  noQueue,
+  noMatchingDriver,
+  noPendingSlot,
+  error,
+}
 
-enum SlotAssignmentOutcome { assigned, noDriversInQueue }
-
-class SlotDriverAssignmentResult {
-  SlotDriverAssignmentResult._({required this.outcome, this.driverId});
-
-  factory SlotDriverAssignmentResult.assigned({required String driverId}) {
-    return SlotDriverAssignmentResult._(
-      outcome: SlotAssignmentOutcome.assigned,
-      driverId: driverId,
-    );
-  }
-
-  factory SlotDriverAssignmentResult.noDrivers() {
-    return SlotDriverAssignmentResult._(
-      outcome: SlotAssignmentOutcome.noDriversInQueue,
-    );
-  }
+class SlotAssignmentResult {
+  const SlotAssignmentResult({
+    required this.outcome,
+    this.driverId,
+    this.slotId,
+    this.message,
+    this.assignedCount = 0,
+  });
 
   final SlotAssignmentOutcome outcome;
   final String? driverId;
+  final String? slotId;
+  final String? message;
+  final int assignedCount;
 }
 
 class SlotDriverAssignmentService {
@@ -33,293 +30,374 @@ class SlotDriverAssignmentService {
       : _db = firestore ?? FirebaseFirestore.instance;
 
   final FirebaseFirestore _db;
-  final RouteDriverQueueService _queueSvc = RouteDriverQueueService();
 
-  DocumentReference<Map<String, dynamic>> _routeRef(String routeId) =>
-      _db.collection('route').doc(routeId);
+  static const String _routeCollection = 'route';
+  static const String _driversCollection = 'drivers';
+  static const String _vehiclesCollection = 'vehicles';
 
-  bool _isUnassigned(dynamic v) =>
-      (v ?? '').toString().trim().isEmpty;
-
-  bool _isScheduled(Map<String, dynamic> m) {
-    final s = TripStatus.normalize(m['status'] as String?);
-    return s == TripStatus.scheduled;
+  DocumentReference<Map<String, dynamic>> _routeRef(String routeId) {
+    return _db.collection(_routeCollection).doc(routeId.trim());
   }
 
-  String _normalizeVehicleType(String? value) {
-    final v = (value ?? '')
+  DocumentReference<Map<String, dynamic>> _driverRef(String driverId) {
+    return _db.collection(_driversCollection).doc(driverId.trim());
+  }
+
+  DocumentReference<Map<String, dynamic>> _vehicleRef(String vehicleId) {
+    return _db.collection(_vehiclesCollection).doc(vehicleId.trim());
+  }
+
+  String _normalizeVehicleType(dynamic value) {
+    final text = value
+        .toString()
+        .trim()
         .toLowerCase()
-        .replaceAll(RegExp(r'[\s_-]+'), '')
-        .trim();
-    if (v.contains('micro')) return 'microbus';
-    if (v.contains('bus') && !v.contains('micro')) return 'bus';
-    return v;
+        .replaceAll(RegExp(r'[\s_-]+'), '');
+
+    if (text.contains('micro')) return 'micro';
+    if (text == 'bus') return 'bus';
+
+    return text;
   }
 
-  String _driverVehicle(Map<String, dynamic> d) {
-    final direct = d['vehicleType'] as String?;
-    final nested =
-        d['vehicle'] is Map ? (d['vehicle']['type'] as String?) : null;
-    return _normalizeVehicleType(direct ?? nested);
+  List<String> _parseQueue(dynamic raw) {
+    if (raw is! List) return [];
+
+    final seen = <String>{};
+    final out = <String>[];
+
+    for (final item in raw) {
+      final id = item.toString().trim();
+      if (id.isEmpty || seen.contains(id)) continue;
+      seen.add(id);
+      out.add(id);
+    }
+
+    return out;
   }
 
-  String _slotVehicle(Map<String, dynamic> m) =>
-      _normalizeVehicleType(m['vehicleType'] as String?);
+  List<Map<String, dynamic>> _parseSlots(dynamic raw) {
+    if (raw is! List) return [];
 
-  String _driverId(Map<String, dynamic> m) =>
-      (m['driverId'] ?? '').toString().trim();
-
-  // ======================================================
-  // MAIN AUTO ASSIGN
-  // ======================================================
-  Future<int> autoAssignUpcomingUnassignedSlots({
-    required String routeId,
-    int maxAssignments = 10,
-  }) async {
-    await _queueSvc.syncQueueWithOnlineAvailableDrivers(routeId);
-
-    return _db.runTransaction((txn) async {
-      final ref = _routeRef(routeId);
-      final snap = await txn.get(ref);
-      if (!snap.exists) return 0;
-
-      final data = snap.data()!;
-      final queue = RouteDriverQueueService.parseIds(data['driverQueueIds']);
-      final list =
-          ScheduleSlotRepository.parseSlotList(data['scheduleSlots']);
-
-      int assigned = 0;
-
-      for (final driverId in queue) {
-        if (assigned >= maxAssignments) break;
-        final driverRef = _db.collection('drivers').doc(driverId);
-        final driverSnap = await txn.get(driverRef);
-        if (!driverSnap.exists) continue;
-
-        final driver = driverSnap.data()!;
-        final driverStatus =
-            DriverStatus.normalize(driver['status'] as String?);
-
-        if (driverStatus != DriverStatus.available) {
-          continue;
-        }
-
-        final driverVehicle = _driverVehicle(driver);
-
-        for (int i = 0; i < list.length; i++) {
-          final slot = list[i];
-
-          if (!_isScheduled(slot)) continue;
-
-          final slotDriverId = _driverId(slot);
-          if (slotDriverId.isNotEmpty) continue;
-
-          final slotVehicle = _slotVehicle(slot);
-
-          if (slotVehicle != driverVehicle) continue;
-
-          // =========================
-          // FIXED NULL CHECK
-          // =========================
-          final fresh = await txn.get(ref);
-          final freshList =
-              ScheduleSlotRepository.parseSlotList(fresh.data()?['scheduleSlots']);
-
-          final current = _driverId(freshList[i]);
-          if (current.isNotEmpty) continue;
-
-          // ASSIGN
-          final updated = Map<String, dynamic>.from(freshList[i]);
-          updated['driverId'] = driverId;
-          updated['assignedAt'] = FieldValue.serverTimestamp();
-          updated['status'] = TripStatus.scheduled;
-
-          freshList[i] = updated;
-
-          txn.update(ref, {'scheduleSlots': freshList});
-
-          txn.update(driverRef, {
-            'status': DriverStatus.assigned,
-          });
-
-          // rotate queue
-          final newQueue = List<String>.from(queue);
-          newQueue.remove(driverId);
-          newQueue.add(driverId);
-
-          txn.update(ref, {'driverQueueIds': newQueue});
-
-          assigned++;
-          break;
-        }
-      }
-
-      return assigned;
-    });
+    return raw
+        .whereType<Map>()
+        .map((e) => Map<String, dynamic>.from(e))
+        .toList();
   }
 
-  // ======================================================
-  // ASSIGN SINGLE SLOT
-  // ======================================================
-  Future<bool> tryAssignDriverForSlot({
-    required String routeId,
-    required String slotId,
-  }) async {
-    await _queueSvc.syncQueueWithOnlineAvailableDrivers(routeId);
+  bool _slotHasNoDriver(Map<String, dynamic> slot) {
+    final driverId = slot['driverId'];
+    return driverId == null || driverId.toString().trim().isEmpty;
+  }
 
-    return _db.runTransaction((txn) async {
-      final ref = _routeRef(routeId);
-      final snap = await txn.get(ref);
-      if (!snap.exists) return false;
+  DateTime _dateValue(dynamic value) {
+    if (value is Timestamp) return value.toDate();
+    if (value is DateTime) return value;
+    if (value is String) return DateTime.tryParse(value) ?? DateTime(1900);
+    return DateTime(1900);
+  }
 
-      final data = snap.data()!;
-      final queue = RouteDriverQueueService.parseIds(data['driverQueueIds']);
-      final list =
-          ScheduleSlotRepository.parseSlotList(data['scheduleSlots']);
+  DateTime _slotDeparture(Map<String, dynamic> slot) {
+    return _dateValue(slot['departureAt']);
+  }
 
-      final idx = list.indexWhere((e) => e['slotId'] == slotId);
-      if (idx < 0) return false;
+  DateTime _slotArrival(Map<String, dynamic> slot) {
+    final arrival = _dateValue(slot['arrivalAt']);
+    if (arrival.year > 1900) return arrival;
 
-      final slot = list[idx];
+    return _slotDeparture(slot).add(const Duration(minutes: 45));
+  }
 
-      // FIXED: null-safe check
-      if (_driverId(slot).isNotEmpty) return false;
+  bool _timesOverlap(Map<String, dynamic> a, Map<String, dynamic> b) {
+    final aStart = _slotDeparture(a);
+    final aEnd = _slotArrival(a);
 
-      final slotVehicle = _slotVehicle(slot);
+    final bStart = _slotDeparture(b);
+    final bEnd = _slotArrival(b);
 
-      for (final driverId in queue) {
-        final driverRef = _db.collection('drivers').doc(driverId);
-        final driverSnap = await txn.get(driverRef);
-        if (!driverSnap.exists) continue;
+    return aStart.isBefore(bEnd) && bStart.isBefore(aEnd);
+  }
 
-        final driver = driverSnap.data()!;
-        final driverStatus =
-            DriverStatus.normalize(driver['status'] as String?);
-        if (driverStatus != DriverStatus.available) continue;
-        final driverVehicle = _driverVehicle(driver);
+  bool _driverHasTimeConflict({
+    required List<Map<String, dynamic>> slots,
+    required String driverId,
+    required Map<String, dynamic> targetSlot,
+  }) {
+    for (final slot in slots) {
+      final existingDriverId = slot['driverId']?.toString().trim();
 
-        if (driverVehicle != slotVehicle) continue;
+      if (existingDriverId != driverId) continue;
 
-        // assign
-        final updated = Map<String, dynamic>.from(slot);
-        updated['driverId'] = driverId;
-        updated['assignedAt'] = FieldValue.serverTimestamp();
-        updated['status'] = TripStatus.scheduled;
-
-        list[idx] = updated;
-
-        txn.update(ref, {'scheduleSlots': list});
-
-        txn.update(driverRef, {
-          'status': DriverStatus.assigned,
-        });
-
+      if (_timesOverlap(slot, targetSlot)) {
         return true;
       }
+    }
 
-      return false;
-    });
+    return false;
   }
 
-  Future<SlotDriverAssignmentResult> tryAssignDriverForNewSlot({
+  String _driverStatus(Map<String, dynamic> driverData) {
+    return driverData['status']
+        .toString()
+        .trim()
+        .toLowerCase()
+        .replaceAll(RegExp(r'[\s_-]+'), '');
+  }
+
+  bool _canUseDriverStatus(String status) {
+    return status == 'available' || status == 'assigned';
+  }
+
+  String _vehicleTypeFromDriverAndVehicle({
+    required Map<String, dynamic> driverData,
+    required Map<String, dynamic>? vehicleData,
+  }) {
+    final fromDriver =
+        driverData['vehicleType'] ?? driverData['type'] ?? driverData['vehicle'];
+
+    if (fromDriver != null && fromDriver.toString().trim().isNotEmpty) {
+      return _normalizeVehicleType(fromDriver);
+    }
+
+    final fromVehicle = vehicleData?['vehicleType'] ??
+        vehicleData?['type'] ??
+        vehicleData?['vehicle'] ??
+        vehicleData?['vehicle_type'];
+
+    return _normalizeVehicleType(fromVehicle ?? '');
+  }
+
+  Future<SlotAssignmentResult> autoAssignUpcomingUnassignedSlots({
     required String routeId,
-    required String slotId,
   }) async {
-    final assigned = await tryAssignDriverForSlot(routeId: routeId, slotId: slotId);
-    if (!assigned) return SlotDriverAssignmentResult.noDrivers();
+    try {
+      return await _db.runTransaction<SlotAssignmentResult>((tx) async {
+        final cleanRouteId = routeId.trim();
+        final routeRef = _routeRef(cleanRouteId);
 
-    final snap = await _routeRef(routeId).get();
-    final list = ScheduleSlotRepository.parseSlotList(snap.data()?['scheduleSlots']);
-    final idx = list.indexWhere((e) => e['slotId'] == slotId);
-    if (idx < 0) return SlotDriverAssignmentResult.noDrivers();
-    final did = _driverId(list[idx]);
-    if (did.isEmpty) return SlotDriverAssignmentResult.noDrivers();
-    return SlotDriverAssignmentResult.assigned(driverId: did);
+        // =========================
+        // 1. READS FIRST
+        // =========================
+
+        final routeSnap = await tx.get(routeRef);
+
+        if (!routeSnap.exists) {
+          debugPrint('[AutoAssign] route not found: $cleanRouteId');
+          return const SlotAssignmentResult(
+            outcome: SlotAssignmentOutcome.error,
+            message: 'Route not found',
+          );
+        }
+
+        final routeData = routeSnap.data() ?? {};
+        final originalQueue = _parseQueue(routeData['driverQueueIds']);
+        final slots = _parseSlots(routeData['scheduleSlots']);
+
+        debugPrint('================ AUTO ASSIGN MANY ================');
+        debugPrint('[AutoAssign] routeId=$cleanRouteId');
+        debugPrint('[AutoAssign] queue=$originalQueue');
+        debugPrint('[AutoAssign] slots=${slots.length}');
+
+        if (originalQueue.isEmpty) {
+          return const SlotAssignmentResult(
+            outcome: SlotAssignmentOutcome.noQueue,
+            message: 'Queue is empty',
+          );
+        }
+
+        final pendingIndexes = <int>[];
+
+        for (int i = 0; i < slots.length; i++) {
+          if (_slotHasNoDriver(slots[i])) {
+            pendingIndexes.add(i);
+          }
+        }
+
+        pendingIndexes.sort(
+          (a, b) => _slotDeparture(slots[a]).compareTo(_slotDeparture(slots[b])),
+        );
+
+        if (pendingIndexes.isEmpty) {
+          return const SlotAssignmentResult(
+            outcome: SlotAssignmentOutcome.noPendingSlot,
+            message: 'No pending slots',
+          );
+        }
+
+        final driverSnaps =
+            <String, DocumentSnapshot<Map<String, dynamic>>>{};
+
+        final vehicleSnaps =
+            <String, DocumentSnapshot<Map<String, dynamic>>>{};
+
+        for (final driverId in originalQueue) {
+          final driverSnap = await tx.get(_driverRef(driverId));
+          driverSnaps[driverId] = driverSnap;
+
+          final driverData = driverSnap.data();
+          final vehicleId = driverData?['vehicleId'];
+
+          if (vehicleId != null && vehicleId.toString().trim().isNotEmpty) {
+            final cleanVehicleId = vehicleId.toString().trim();
+            final vehicleSnap = await tx.get(_vehicleRef(cleanVehicleId));
+            vehicleSnaps[cleanVehicleId] = vehicleSnap;
+          }
+        }
+
+        // =========================
+        // 2. DECIDE ALL ASSIGNMENTS
+        // =========================
+
+        final updatedSlots = slots
+            .map((slot) => Map<String, dynamic>.from(slot))
+            .toList();
+
+        final queue = List<String>.from(originalQueue);
+        final selectedDrivers = <String>{};
+
+        String? firstDriverId;
+        String? firstSlotId;
+        int assignedCount = 0;
+
+        for (final slotIndex in pendingIndexes) {
+          final slot = updatedSlots[slotIndex];
+
+          if (!_slotHasNoDriver(slot)) continue;
+
+          final slotVehicleType = _normalizeVehicleType(slot['vehicleType']);
+
+          debugPrint('[AutoAssign] checking slot=${slot['slotId']}');
+          debugPrint('[AutoAssign] slotVehicleType=$slotVehicleType');
+
+          String? selectedDriverId;
+
+          for (final driverId in List<String>.from(queue)) {
+            final driverSnap = driverSnaps[driverId];
+
+            if (driverSnap == null || !driverSnap.exists) {
+              debugPrint('[AutoAssign] skip $driverId: driver not found');
+              continue;
+            }
+
+            final driverData = driverSnap.data() ?? {};
+            final status = _driverStatus(driverData);
+            final isOnline = driverData['isOnline'] == true;
+
+            if (!isOnline) {
+              debugPrint('[AutoAssign] skip $driverId: offline');
+              continue;
+            }
+
+            if (!_canUseDriverStatus(status)) {
+              debugPrint('[AutoAssign] skip $driverId: status=$status');
+              continue;
+            }
+
+            final vehicleId = driverData['vehicleId']?.toString().trim() ?? '';
+            final vehicleData =
+                vehicleId.isEmpty ? null : vehicleSnaps[vehicleId]?.data();
+
+            final driverVehicleType = _vehicleTypeFromDriverAndVehicle(
+              driverData: driverData,
+              vehicleData: vehicleData,
+            );
+
+            debugPrint('[AutoAssign] driver=$driverId');
+            debugPrint('[AutoAssign] driverVehicleType=$driverVehicleType');
+            debugPrint('[AutoAssign] slotVehicleType=$slotVehicleType');
+
+            if (driverVehicleType != slotVehicleType) {
+              debugPrint('[AutoAssign] skip $driverId: vehicle mismatch');
+              continue;
+            }
+
+            if (_driverHasTimeConflict(
+              slots: updatedSlots,
+              driverId: driverId,
+              targetSlot: slot,
+            )) {
+              debugPrint('[AutoAssign] skip $driverId: time conflict');
+              continue;
+            }
+
+            selectedDriverId = driverId;
+            break;
+          }
+
+          if (selectedDriverId == null) {
+            debugPrint('[AutoAssign] no driver for slot=${slot['slotId']}');
+            continue;
+          }
+
+          updatedSlots[slotIndex]['driverId'] = selectedDriverId;
+          updatedSlots[slotIndex]['status'] = 'assigned';
+          updatedSlots[slotIndex]['assignedAt'] = Timestamp.now();
+
+          queue.remove(selectedDriverId);
+          queue.add(selectedDriverId);
+
+          selectedDrivers.add(selectedDriverId);
+
+          firstDriverId ??= selectedDriverId;
+          firstSlotId ??= slot['slotId']?.toString();
+
+          assignedCount++;
+
+          debugPrint(
+            '[AutoAssign] assigned slot=${slot['slotId']} driver=$selectedDriverId',
+          );
+          debugPrint('[AutoAssign] queue after rotation=$queue');
+        }
+
+        if (assignedCount == 0) {
+          return const SlotAssignmentResult(
+            outcome: SlotAssignmentOutcome.noMatchingDriver,
+            message: 'No matching driver found',
+          );
+        }
+
+        // =========================
+        // 3. WRITES AFTER READS
+        // =========================
+
+        tx.update(routeRef, {
+          'scheduleSlots': updatedSlots,
+          'driverQueueIds': queue,
+        });
+
+        for (final driverId in selectedDrivers) {
+          tx.update(_driverRef(driverId), {
+            'status': 'assigned',
+            'isOnline': true,
+            'updatedAt': FieldValue.serverTimestamp(),
+          });
+        }
+
+        debugPrint('[AutoAssign] SUCCESS assignedCount=$assignedCount');
+        debugPrint('[AutoAssign] finalQueue=$queue');
+
+        return SlotAssignmentResult(
+          outcome: SlotAssignmentOutcome.assigned,
+          driverId: firstDriverId,
+          slotId: firstSlotId,
+          assignedCount: assignedCount,
+          message: 'Assigned $assignedCount trips',
+        );
+      });
+    } catch (e) {
+      debugPrint('[AutoAssign] ERROR: $e');
+
+      return SlotAssignmentResult(
+        outcome: SlotAssignmentOutcome.error,
+        message: e.toString(),
+      );
+    }
   }
 
-  Future<SlotDriverAssignmentResult> tryAssignOldestPendingTripForDriver({
+  Future<SlotAssignmentResult> tryAssignOldestPendingTripForDriver({
     required String routeId,
     required String driverId,
   }) async {
-    await _queueSvc.syncQueueWithOnlineAvailableDrivers(routeId);
-
-    return _db.runTransaction((txn) async {
-      final ref = _routeRef(routeId);
-      final snap = await txn.get(ref);
-      if (!snap.exists) return SlotDriverAssignmentResult.noDrivers();
-
-      final data = snap.data()!;
-      final list = ScheduleSlotRepository.parseSlotList(data['scheduleSlots']);
-      if (list.isEmpty) return SlotDriverAssignmentResult.noDrivers();
-
-      final driverRef = _db.collection('drivers').doc(driverId);
-      final driverSnap = await txn.get(driverRef);
-      if (!driverSnap.exists) return SlotDriverAssignmentResult.noDrivers();
-      final driver = driverSnap.data()!;
-      final st = DriverStatus.normalize(driver['status'] as String?);
-      if (st != DriverStatus.available) return SlotDriverAssignmentResult.noDrivers();
-      final vehicle = _driverVehicle(driver);
-
-      int? targetIdx;
-      DateTime? bestDep;
-      for (var i = 0; i < list.length; i++) {
-        final slot = list[i];
-        if (!_isScheduled(slot)) continue;
-        if (_driverId(slot).isNotEmpty) continue;
-        if (_slotVehicle(slot) != vehicle) continue;
-        final sid = (slot['slotId'] ?? '').toString();
-        if (sid.isEmpty) continue;
-        final dep = ScheduleSlot.fromMap(sid, slot).departureAt;
-        if (bestDep == null || dep.isBefore(bestDep)) {
-          bestDep = dep;
-          targetIdx = i;
-        }
-      }
-      if (targetIdx == null) return SlotDriverAssignmentResult.noDrivers();
-
-      final updated = Map<String, dynamic>.from(list[targetIdx]);
-      updated['driverId'] = driverId;
-      updated['assignedAt'] = FieldValue.serverTimestamp();
-      updated['status'] = TripStatus.scheduled;
-      list[targetIdx] = updated;
-
-      final queue = RouteDriverQueueService.parseIds(data['driverQueueIds']);
-      queue.remove(driverId);
-      queue.add(driverId);
-
-      txn.update(ref, {'scheduleSlots': list, 'driverQueueIds': queue});
-      txn.update(driverRef, {'status': DriverStatus.assigned});
-
-      return SlotDriverAssignmentResult.assigned(driverId: driverId);
-    });
-  }
-
-  // ======================================================
-  // CLEANUP FUNCTION (IMPORTANT)
-  // ======================================================
-  Future<void> normalizeBadDriverIds(String routeId) async {
-    await _db.runTransaction((txn) async {
-      final ref = _routeRef(routeId);
-      final snap = await txn.get(ref);
-      if (!snap.exists) return;
-
-      final list =
-          ScheduleSlotRepository.parseSlotList(snap.data()?['scheduleSlots']);
-
-      bool changed = false;
-
-      for (int i = 0; i < list.length; i++) {
-        final d = list[i]['driverId'];
-
-        if (_isUnassigned(d)) {
-          list[i]['driverId'] = null;
-          changed = true;
-        }
-      }
-
-      if (changed) {
-        txn.update(ref, {'scheduleSlots': list});
-      }
-    });
+    return autoAssignUpcomingUnassignedSlots(routeId: routeId);
   }
 }

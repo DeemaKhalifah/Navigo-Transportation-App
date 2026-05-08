@@ -1,10 +1,11 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/foundation.dart';
 
 import '../models/driver_status.dart';
 
 class RouteDriverQueueService {
   RouteDriverQueueService({FirebaseFirestore? firestore})
-    : _db = firestore ?? FirebaseFirestore.instance;
+      : _db = firestore ?? FirebaseFirestore.instance;
 
   final FirebaseFirestore _db;
 
@@ -13,477 +14,226 @@ class RouteDriverQueueService {
 
   static List<String> parseIds(dynamic raw) {
     if (raw is! List) return [];
-
-    return raw
-        .map((e) => e.toString().trim())
-        .where((s) => s.isNotEmpty)
-        .toList();
+    final seen = <String>{};
+    final out = <String>[];
+    for (final e in raw) {
+      final id = e.toString().trim();
+      if (id.isEmpty || seen.contains(id)) continue;
+      seen.add(id);
+      out.add(id);
+    }
+    return out;
   }
 
   Stream<List<String>> watchQueueIds(String routeId) {
-    return _routeRef(
-      routeId,
-    ).snapshots().map((s) => parseIds(s.data()?['driverQueueIds']));
+    return _routeRef(routeId)
+        .snapshots()
+        .map((s) => parseIds(s.data()?['driverQueueIds']));
   }
 
   Future<void> clearQueue(String routeId) async {
-    await _routeRef(routeId).update({
-      'driverQueueIds': <String>[],
-    });
+    await _routeRef(routeId).update({'driverQueueIds': <String>[]});
   }
 
-  Future<void> setQueue(
-    String routeId,
-    List<String> driverIds,
-  ) async {
-    await _routeRef(routeId).update({
-      'driverQueueIds': driverIds,
-    });
+  Future<void> setQueue(String routeId, List<String> driverIds) async {
+    await _routeRef(routeId).update({'driverQueueIds': parseIds(driverIds)});
   }
 
-  /// =========================================================
-  /// APPEND DRIVER
-  /// =========================================================
-  ///
-  /// FIX:
-  /// After adding a driver to queue,
-  /// immediately try assigning old pending trips.
-  ///
-  Future<void> appendDriver(
-    String routeId,
-    String driverId,
-  ) async {
-    if (driverId.isEmpty) return;
-
-    var added = false;
+  Future<void> appendDriver(String routeId, String driverId) async {
+    final cleanRouteId = routeId.trim();
+    final cleanDriverId = driverId.trim();
+    if (cleanRouteId.isEmpty || cleanDriverId.isEmpty) return;
 
     await _db.runTransaction((txn) async {
-      final ref = _routeRef(routeId);
-
+      final ref = _routeRef(cleanRouteId);
       final snap = await txn.get(ref);
 
+      if (!snap.exists) {
+        debugPrint('[Queue] append failed route/$cleanRouteId not found');
+        return;
+      }
+
+      final q = parseIds(snap.data()?['driverQueueIds']);
+      debugPrint('[Queue] append routeId=$cleanRouteId driverId=$cleanDriverId before=$q');
+
+      if (!q.contains(cleanDriverId)) {
+        q.add(cleanDriverId);
+        txn.update(ref, {'driverQueueIds': q});
+      }
+
+      debugPrint('[Queue] append routeId=$cleanRouteId after=$q');
+    });
+  }
+
+  Future<void> removeDriver(String routeId, String driverId) async {
+    final cleanRouteId = routeId.trim();
+    final cleanDriverId = driverId.trim();
+    if (cleanRouteId.isEmpty || cleanDriverId.isEmpty) return;
+
+    await _db.runTransaction((txn) async {
+      final ref = _routeRef(cleanRouteId);
+      final snap = await txn.get(ref);
       if (!snap.exists) return;
 
       final q = parseIds(snap.data()?['driverQueueIds']);
+      q.removeWhere((id) => id == cleanDriverId);
+      txn.update(ref, {'driverQueueIds': q});
 
-      if (q.contains(driverId)) return;
-
-      q.add(driverId);
-
-      txn.update(ref, {
-        'driverQueueIds': q,
-      });
-
-      added = true;
-    });
-
-    /// IMPORTANT FIX
-    /// Immediately assign existing scheduled trips.
-    if (added) {
-      await autoAssignPendingTrips(routeId);
-    }
-  }
-
-  Future<void> removeDriver(
-    String routeId,
-    String driverId,
-  ) async {
-    await _db.runTransaction((txn) async {
-      final ref = _routeRef(routeId);
-
-      final snap = await txn.get(ref);
-
-      if (!snap.exists) return;
-
-      final q = parseIds(snap.data()?['driverQueueIds']);
-
-      q.removeWhere((id) => id == driverId);
-
-      txn.update(ref, {
-        'driverQueueIds': q,
-      });
+      debugPrint('[Queue] remove routeId=$cleanRouteId driverId=$cleanDriverId after=$q');
     });
   }
 
-  /// =========================================================
-  /// REMOVE ONLY OFFLINE DRIVERS
-  /// =========================================================
-  Future<void> pruneQueueToOnlineAvailableDrivers(
-    String routeId,
-  ) async {
-    final routeSnap = await _routeRef(routeId).get();
+  /// Remove drivers that should not stay in the route queue.
+  /// Important: assigned drivers can stay in the queue at the end for FIFO rotation,
+  /// but they will not be assigned again until their status becomes available.
+  Future<void> pruneQueue(String routeId) async {
+    final cleanRouteId = routeId.trim();
+    if (cleanRouteId.isEmpty) return;
 
+    final routeSnap = await _routeRef(cleanRouteId).get();
     if (!routeSnap.exists) return;
 
-    final current = parseIds(
-      routeSnap.data()?['driverQueueIds'],
-    );
-
+    final current = parseIds(routeSnap.data()?['driverQueueIds']);
     if (current.isEmpty) return;
 
     final keep = <String>[];
 
     for (final id in current) {
-      final dSnap =
-          await _db.collection('drivers').doc(id).get();
-
+      final dSnap = await _db.collection('drivers').doc(id).get();
       if (!dSnap.exists) continue;
 
       final d = dSnap.data() ?? {};
-
-      final st = DriverStatus.normalize(
-        d['status'] as String?,
-      );
-
-      final sameRoute =
-          (d['routeId'] as String? ?? '') == routeId;
-
-      /// REMOVE ONLY OFFLINE
-      if (st == DriverStatus.offline) continue;
+      final st = DriverStatus.normalize(d['status'] as String?);
+      final sameRoute = (d['routeId'] ?? '').toString().trim() == cleanRouteId;
 
       if (!sameRoute) continue;
+      if (st == DriverStatus.offline) continue;
 
       keep.add(id);
     }
 
-    if (keep.length == current.length) return;
-
-    await _routeRef(routeId).update({
-      'driverQueueIds': keep,
-    });
+    if (keep.length != current.length || keep.join('|') != current.join('|')) {
+      await _routeRef(cleanRouteId).update({'driverQueueIds': keep});
+      debugPrint('[Queue] prune routeId=$cleanRouteId before=$current after=$keep');
+    }
   }
 
-  Future<void> queueAllAvailableDriversSorted(
-    String routeId,
-  ) async {
-    final snap = await _db
-        .collection('drivers')
-        .where('routeId', isEqualTo: routeId)
-        .get();
-
-    final candidates =
-        <({String driverDocId, String userKey})>[];
-
-    for (final d in snap.docs) {
-      final st = DriverStatus.normalize(
-        d.data()['status'] as String?,
-      );
-
-      if (st == DriverStatus.offline) continue;
-
-      final uid =
-          d.data()['userId'] as String? ?? d.id;
-
-      candidates.add((
-        driverDocId: d.id,
-        userKey: uid,
-      ));
-    }
-
-    final names = <String, String>{};
-
-    for (final c in candidates) {
-      if (names.containsKey(c.userKey)) continue;
-
-      final u =
-          await _db.collection('users').doc(c.userKey).get();
-
-      final m = u.data();
-
-      final first = m?['firstName'] ?? '';
-      final last = m?['lastName'] ?? '';
-
-      final n = '$first $last'.trim();
-
-      names[c.userKey] =
-          n.isEmpty ? c.userKey : n;
-    }
-
-    candidates.sort((a, b) {
-      final na = names[a.userKey] ?? a.driverDocId;
-      final nb = names[b.userKey] ?? b.driverDocId;
-
-      return na.toLowerCase().compareTo(
-        nb.toLowerCase(),
-      );
-    });
-
-    await setQueue(
-      routeId,
-      candidates.map((c) => c.driverDocId).toList(),
-    );
+  /// Backward-compatible method name.
+  Future<void> pruneQueueToOnlineAvailableDrivers(String routeId) async {
+    await pruneQueue(routeId);
   }
 
-  /// =========================================================
-  /// SYNC QUEUE
-  /// =========================================================
-  Future<void> syncQueueWithOnlineAvailableDrivers(
-    String routeId,
-  ) async {
-    await pruneQueueToOnlineAvailableDrivers(
-      routeId,
-    );
+  /// Append currently available drivers for this route without changing existing order.
+  Future<void> syncQueueWithOnlineAvailableDrivers(String routeId) async {
+    final cleanRouteId = routeId.trim();
+    if (cleanRouteId.isEmpty) return;
+
+    await pruneQueue(cleanRouteId);
 
     final snap = await _db
         .collection('drivers')
-        .where('routeId', isEqualTo: routeId)
+        .where('routeId', isEqualTo: cleanRouteId)
         .get();
 
-    final toAppend = <String>[];
-
+    final availableIds = <String>[];
     for (final d in snap.docs) {
       final data = d.data();
-
-      final st = DriverStatus.normalize(
-        data['status'] as String?,
-      );
-
-      if (st == DriverStatus.offline) continue;
-
-      toAppend.add(d.id);
+      final st = DriverStatus.normalize(data['status'] as String?);
+      if (st == DriverStatus.available) availableIds.add(d.id);
     }
 
-    if (toAppend.isEmpty) return;
-
-    var changed = false;
+    if (availableIds.isEmpty) {
+      debugPrint('[Queue] sync routeId=$cleanRouteId no available drivers found');
+      return;
+    }
 
     await _db.runTransaction((txn) async {
-      final ref = _routeRef(routeId);
-
+      final ref = _routeRef(cleanRouteId);
       final routeSnap = await txn.get(ref);
-
       if (!routeSnap.exists) return;
 
-      final q = parseIds(
-        routeSnap.data()?['driverQueueIds'],
-      );
+      final q = parseIds(routeSnap.data()?['driverQueueIds']);
+      final before = List<String>.from(q);
 
-      for (final id in toAppend) {
-        if (q.contains(id)) continue;
-
-        q.add(id);
-
-        changed = true;
+      for (final id in availableIds) {
+        if (!q.contains(id)) q.add(id);
       }
 
-      if (changed) {
-        txn.update(ref, {
-          'driverQueueIds': q,
-        });
+      if (q.join('|') != before.join('|')) {
+        txn.update(ref, {'driverQueueIds': q});
       }
+
+      debugPrint('[Queue] sync routeId=$cleanRouteId before=$before available=$availableIds after=$q');
     });
-
-    /// IMPORTANT FIX
-    if (changed) {
-      await autoAssignPendingTrips(routeId);
-    }
   }
 
-  /// =========================================================
-  /// MOVE DRIVER TO END
-  /// =========================================================
+  Future<void> queueAllAvailableDriversSorted(String routeId) async {
+    final cleanRouteId = routeId.trim();
+    if (cleanRouteId.isEmpty) return;
+
+    final snap = await _db
+        .collection('drivers')
+        .where('routeId', isEqualTo: cleanRouteId)
+        .get();
+
+    final ids = <String>[];
+    for (final d in snap.docs) {
+      final st = DriverStatus.normalize(d.data()['status'] as String?);
+      if (st == DriverStatus.available) ids.add(d.id);
+    }
+
+    await setQueue(cleanRouteId, ids);
+  }
+
   Future<void> moveDriverToQueueEnd({
     required String routeId,
     required String driverId,
   }) async {
-    if (driverId.trim().isEmpty) return;
+    final cleanRouteId = routeId.trim();
+    final cleanDriverId = driverId.trim();
+    if (cleanRouteId.isEmpty || cleanDriverId.isEmpty) return;
 
     await _db.runTransaction((txn) async {
-      final ref = _routeRef(routeId);
-
+      final ref = _routeRef(cleanRouteId);
       final snap = await txn.get(ref);
-
       if (!snap.exists) return;
 
-      final q = parseIds(
-        snap.data()?['driverQueueIds'],
-      );
+      final q = parseIds(snap.data()?['driverQueueIds']);
+      q.removeWhere((id) => id == cleanDriverId);
+      q.add(cleanDriverId);
 
-      q.removeWhere((id) => id == driverId);
-
-      q.add(driverId);
-
-      txn.update(ref, {
-        'driverQueueIds': q,
-      });
+      txn.update(ref, {'driverQueueIds': q});
+      debugPrint('[Queue] moveEnd routeId=$cleanRouteId driverId=$cleanDriverId after=$q');
     });
   }
 
-  /// =========================================================
-  /// COMPLETE TRIP
-  /// =========================================================
   Future<void> completeTripAndRequeueEnd({
     required String routeId,
     required String driverId,
   }) async {
-    if (driverId.isEmpty) return;
+    final cleanRouteId = routeId.trim();
+    final cleanDriverId = driverId.trim();
+    if (cleanRouteId.isEmpty || cleanDriverId.isEmpty) return;
 
     await _db.runTransaction((txn) async {
-      final ref = _routeRef(routeId);
-
+      final ref = _routeRef(cleanRouteId);
       final snap = await txn.get(ref);
-
       if (!snap.exists) return;
 
-      final q = parseIds(
-        snap.data()?['driverQueueIds'],
-      );
+      final q = parseIds(snap.data()?['driverQueueIds']);
+      q.removeWhere((id) => id == cleanDriverId);
+      q.add(cleanDriverId);
 
-      q.removeWhere((id) => id == driverId);
-
-      q.add(driverId);
-
-      txn.update(ref, {
-        'driverQueueIds': q,
-      });
-
-      txn.update(
-        _db.collection('drivers').doc(driverId),
+      txn.update(ref, {'driverQueueIds': q});
+      txn.set(
+        _db.collection('drivers').doc(cleanDriverId),
         {
           'status': DriverStatus.available,
+          'isOnline': true,
+          'updatedAt': FieldValue.serverTimestamp(),
         },
+        SetOptions(merge: true),
       );
     });
-
-    /// Try assigning next pending trip
-    await autoAssignPendingTrips(routeId);
-  }
-
-  /// =========================================================
-  /// AUTO ASSIGN PENDING TRIPS
-  /// =========================================================
-  ///
-  /// MAIN FIX:
-  /// - When drivers appear in queue
-  /// - Assign old scheduled trips immediately
-  ///
-  Future<void> autoAssignPendingTrips(
-    String routeId,
-  ) async {
-    /// Clean queue first
-    await pruneQueueToOnlineAvailableDrivers(
-      routeId,
-    );
-
-    final routeSnap = await _routeRef(routeId).get();
-
-    if (!routeSnap.exists) return;
-
-    final queue = parseIds(
-      routeSnap.data()?['driverQueueIds'],
-    );
-
-    if (queue.isEmpty) return;
-
-    /// Avoid composite-index requirement by querying route only, then filtering
-    /// and sorting in memory.
-    final tripsSnap = await _db
-        .collection('trips')
-        .where('routeId', isEqualTo: routeId)
-        .get();
-
-    final pendingTrips = tripsSnap.docs.where((doc) {
-      final trip = doc.data();
-      final status = (trip['status'] ?? '').toString().trim().toLowerCase();
-      if (status != 'scheduled') return false;
-      final assigned = (trip['driverId'] ?? '').toString().trim();
-      return assigned.isEmpty;
-    }).toList()
-      ..sort((a, b) {
-        DateTime toDate(dynamic v) {
-          if (v is Timestamp) return v.toDate();
-          if (v is String) return DateTime.tryParse(v) ?? DateTime(1970);
-          return DateTime(1970);
-        }
-
-        final ad = toDate(a.data()['createdAt']);
-        final bd = toDate(b.data()['createdAt']);
-        return ad.compareTo(bd);
-      });
-
-    if (pendingTrips.isEmpty) return;
-
-    for (final driverId in queue) {
-      final driverSnap =
-          await _db.collection('drivers').doc(driverId).get();
-
-      if (!driverSnap.exists) continue;
-
-      final driver = driverSnap.data()!;
-
-      final status = DriverStatus.normalize(
-        driver['status'],
-      );
-
-      /// Skip unavailable drivers
-      if (status == DriverStatus.offline ||
-          status == DriverStatus.onTrip) {
-        continue;
-      }
-
-      final driverVehicleType =
-          (driver['vehicleType'] ?? '')
-              .toString()
-              .trim();
-
-      for (final tripDoc in pendingTrips) {
-        final trip = tripDoc.data();
-
-        /// Already assigned
-        if ((trip['driverId'] ?? '')
-            .toString()
-            .isNotEmpty) {
-          continue;
-        }
-
-        final tripVehicleType =
-            (trip['vehicleType'] ?? '')
-                .toString()
-                .trim();
-
-        /// Vehicle mismatch
-        if (tripVehicleType !=
-            driverVehicleType) {
-          continue;
-        }
-
-        /// ASSIGN
-        await _db.runTransaction((txn) async {
-          final freshTrip =
-              await txn.get(tripDoc.reference);
-
-          final freshData = freshTrip.data();
-
-          /// Double-check still unassigned
-          if (freshData == null ||
-              freshData['driverId'] != null) {
-            return;
-          }
-
-          txn.update(
-            tripDoc.reference,
-            {
-              'driverId': driverId,
-            },
-          );
-
-          txn.update(
-            _db.collection('drivers').doc(driverId),
-            {
-              'status': DriverStatus.assigned,
-            },
-          );
-        });
-
-        /// Round-robin
-        await moveDriverToQueueEnd(
-          routeId: routeId,
-          driverId: driverId,
-        );
-
-        /// One trip per driver
-        break;
-      }
-    }
   }
 }

@@ -1,16 +1,14 @@
 import 'package:flutter/material.dart';
 
 import '../services/schedule_api_service.dart';
+import '../services/slot_driver_assignment_service.dart';
 
-/// Manages add schedule slot screen state and operations.
-/// Slot creation delegates to [ScheduleApiService].
 class AddScheduleSlotController extends ChangeNotifier {
   final ScheduleApiService _scheduleApi = ScheduleApiService();
+  final SlotDriverAssignmentService _slotAssign = SlotDriverAssignmentService();
 
   bool isSaving = false;
 
-  /// Create one or more slots via backend API.
-  /// Returns error message or null on success.
   Future<String?> saveSlots({
     required String routeId,
     required List<Map<String, dynamic>> slots,
@@ -22,6 +20,11 @@ class AddScheduleSlotController extends ChangeNotifier {
 
     try {
       await _scheduleApi.addSlots(routeId, slots);
+
+      await _slotAssign.autoAssignUpcomingUnassignedSlots(
+        routeId: routeId,
+      );
+
       isSaving = false;
       notifyListeners();
       return null;
@@ -32,16 +35,16 @@ class AddScheduleSlotController extends ChangeNotifier {
     }
   }
 
-  /// Build slot data maps from form input.
   List<Map<String, dynamic>> buildSlotsToCreate({
     required DateTime departureAt,
     required DateTime arrivalAt,
     required int capacity,
     required String vehicleType,
-    required String driverId,
+    String? driverId,
     int count = 1,
   }) {
     final slots = <Map<String, dynamic>>[];
+
     for (int i = 0; i < count; i++) {
       slots.add({
         'departureAt': departureAt.toIso8601String(),
@@ -52,6 +55,7 @@ class AddScheduleSlotController extends ChangeNotifier {
         'status': 'scheduled',
       });
     }
+
     return slots;
   }
 

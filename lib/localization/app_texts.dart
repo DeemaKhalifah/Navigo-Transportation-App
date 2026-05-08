@@ -291,9 +291,16 @@ class AppTexts {
       'unassigned': 'Unassigned',
       // Assign driver
       'assignments': 'Assignments',
+      'driverStatusSubtitle':
+          'Queue is automatic (online + available). New trips are assigned FIFO.',
       'driversOnRoute':
           'Drivers on your route (status from drivers collection)',
       'noDriversForRoute': 'No drivers for this route.',
+      'noRouteLinkedAccount':
+          'No route linked to this account. Set routeId on users or route_manager.',
+      'noVehicle': 'No vehicle',
+      'queuePosition': 'Queue position',
+      'notInQueue': 'Not in queue',
       'assignToTrip': 'Assign to trip',
       'driverAssigned': 'Driver assigned to scheduled trip.',
       'assignmentFailed': 'Assignment failed',
@@ -651,8 +658,15 @@ class AppTexts {
       'tripUpdated': 'تم تحديث الرحلة',
       'unassigned': 'غير معين',
       'assignments': 'التعيينات',
+      'driverStatusSubtitle':
+          'القائمة تلقائية (متصل + متاح). يتم تعيين الرحلات الجديدة حسب ترتيب القائمة.',
       'driversOnRoute': 'السائقون على مسارك (الحالة من مجموعة السائقين)',
       'noDriversForRoute': 'لا يوجد سائقون لهذا المسار.',
+      'noRouteLinkedAccount':
+          'لا يوجد مسار مرتبط بهذا الحساب. عيّن routeId في users أو route_manager.',
+      'noVehicle': 'لا توجد مركبة',
+      'queuePosition': 'ترتيب القائمة',
+      'notInQueue': 'ليس في القائمة',
       'assignToTrip': 'تعيين لرحلة',
       'driverAssigned': 'تم تعيين السائق لرحلة مجدولة.',
       'assignmentFailed': 'فشل التعيين',

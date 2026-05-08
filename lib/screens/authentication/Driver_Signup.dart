@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+
 import '../../localization/localization_x.dart';
 import '../../theme/app_theme.dart';
 import 'otp_verification_screen.dart';
@@ -21,9 +22,36 @@ class _DriverSignupScreenState extends State<DriverSignupScreen> {
   final TextEditingController _licenseController = TextEditingController();
 
   String? _selectedRouteId;
-  String? _selectedCarType;
+  String? _selectedVehicleClass;
 
-  static const List<String> _carTypes = ['Bus', 'Micro Bus'];
+  static const List<Map<String, dynamic>> _vehicleOptions = [
+    {
+      'label': 'Bus - 45 seats',
+      'vehicleType': 'bus',
+      'capacity': 45,
+      'vehicleClass': 'bus-45',
+    },
+    {
+      'label': 'Bus - 14 seats',
+      'vehicleType': 'bus',
+      'capacity': 14,
+      'vehicleClass': 'bus-14',
+    },
+    {
+      'label': 'Microbus - 7 seats',
+      'vehicleType': 'microbus',
+      'capacity': 7,
+      'vehicleClass': 'microbus-7',
+    },
+  ];
+
+  Map<String, dynamic>? get _selectedVehicleOption {
+    if (_selectedVehicleClass == null) return null;
+
+    return _vehicleOptions.firstWhere(
+      (e) => e['vehicleClass'] == _selectedVehicleClass,
+    );
+  }
 
   bool _isLoading = false;
   bool _routesLoading = true;
@@ -41,17 +69,21 @@ class _DriverSignupScreenState extends State<DriverSignupScreen> {
       _routesLoading = true;
       _routesError = null;
     });
+
     try {
       final snap = await FirebaseFirestore.instance
           .collection('route')
           .limit(50)
           .get();
+
       final items = <DropdownMenuItem<String>>[];
+
       for (final d in snap.docs) {
         final m = d.data();
         final a = m['startPoint']?.toString() ?? '';
         final b = m['endPoint']?.toString() ?? '';
         final label = a.isNotEmpty || b.isNotEmpty ? '$a → $b' : d.id;
+
         items.add(
           DropdownMenuItem<String>(
             value: d.id,
@@ -59,13 +91,16 @@ class _DriverSignupScreenState extends State<DriverSignupScreen> {
           ),
         );
       }
+
       if (!mounted) return;
+
       setState(() {
         _routeItems = items;
         _routesLoading = false;
       });
     } catch (e) {
       if (!mounted) return;
+
       setState(() {
         _routesError = e.toString();
         _routesLoading = false;
@@ -102,18 +137,22 @@ class _DriverSignupScreenState extends State<DriverSignupScreen> {
 
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
+
     if (_selectedRouteId == null || _selectedRouteId!.isEmpty) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(context.texts.t('selectRoute'))));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(context.texts.t('selectRoute'))),
+      );
       return;
     }
-    if (_selectedCarType == null || _selectedCarType!.isEmpty) {
+
+    if (_selectedVehicleOption == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(context.texts.t('selectVehicleType'))),
       );
       return;
     }
+
+    final selectedVehicle = _selectedVehicleOption!;
 
     final name = _nameController.text.trim();
     final formattedPhone = _formatPhoneNumber(_phoneController.text.trim());
@@ -126,9 +165,12 @@ class _DriverSignupScreenState extends State<DriverSignupScreen> {
           .where('phone', isEqualTo: formattedPhone)
           .limit(1)
           .get();
+
       if (exists.docs.isNotEmpty) {
         if (!mounted) return;
+
         setState(() => _isLoading = false);
+
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text(context.texts.t('phoneAlreadyUsed'))),
         );
@@ -143,7 +185,9 @@ class _DriverSignupScreenState extends State<DriverSignupScreen> {
         },
         verificationFailed: (FirebaseAuthException e) {
           if (!mounted) return;
+
           setState(() => _isLoading = false);
+
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text('${context.texts.t('errorLabel')}: ${e.message}'),
@@ -152,7 +196,9 @@ class _DriverSignupScreenState extends State<DriverSignupScreen> {
         },
         codeSent: (String verificationId, int? resendToken) {
           if (!mounted) return;
+
           setState(() => _isLoading = false);
+
           Navigator.push(
             context,
             MaterialPageRoute(
@@ -160,11 +206,13 @@ class _DriverSignupScreenState extends State<DriverSignupScreen> {
                 phoneNumber: formattedPhone,
                 verificationId: verificationId,
                 fullName: name,
-                role: "driver",
+                role: 'driver',
                 driverData: {
                   'routeId': _selectedRouteId,
                   'plateNumber': _carNumberController.text.trim(),
-                  'vehicleType': _selectedCarType,
+                  'vehicleType': selectedVehicle['vehicleType'],
+                  'capacity': selectedVehicle['capacity'],
+                  'vehicleClass': selectedVehicle['vehicleClass'],
                   'licenseNumber': _licenseController.text.trim(),
                 },
               ),
@@ -178,13 +226,19 @@ class _DriverSignupScreenState extends State<DriverSignupScreen> {
       );
     } catch (e) {
       if (!mounted) return;
+
       setState(() => _isLoading = false);
+
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('${context.texts.t('couldNotVerifyPhone')}: $e'),
         ),
       );
     }
+  }
+
+  String _vehicleLabel(Map<String, dynamic> option) {
+    return option['label'] as String;
   }
 
   @override
@@ -216,6 +270,7 @@ class _DriverSignupScreenState extends State<DriverSignupScreen> {
                               style: NavigoTextStyles.titleLarge,
                             ),
                             const SizedBox(height: 20),
+
                             _label(context.texts.t('fullName')),
                             _inputField(
                               controller: _nameController,
@@ -223,6 +278,7 @@ class _DriverSignupScreenState extends State<DriverSignupScreen> {
                               prefixIcon: Icons.person_outline,
                             ),
                             const SizedBox(height: 16),
+
                             _label(context.texts.t('phoneNumber')),
                             _inputField(
                               controller: _phoneController,
@@ -231,6 +287,7 @@ class _DriverSignupScreenState extends State<DriverSignupScreen> {
                               keyboard: TextInputType.phone,
                             ),
                             const SizedBox(height: 16),
+
                             _label(context.texts.t('routeFromFirestore')),
                             if (_routesLoading)
                               const Padding(
@@ -258,6 +315,7 @@ class _DriverSignupScreenState extends State<DriverSignupScreen> {
                                     setState(() => _selectedRouteId = val),
                               ),
                             const SizedBox(height: 16),
+
                             _label(context.texts.t('carNumberPlate')),
                             _inputField(
                               controller: _carNumberController,
@@ -265,6 +323,7 @@ class _DriverSignupScreenState extends State<DriverSignupScreen> {
                               prefixIcon: Icons.confirmation_number_outlined,
                             ),
                             const SizedBox(height: 16),
+
                             _label(context.texts.t('drivingLicenseOptional')),
                             _inputField(
                               controller: _licenseController,
@@ -273,32 +332,30 @@ class _DriverSignupScreenState extends State<DriverSignupScreen> {
                               validator: (_) => null,
                             ),
                             const SizedBox(height: 16),
+
                             _label(context.texts.t('carType')),
                             _dropdownField(
-                              value: _selectedCarType,
+                              value: _selectedVehicleClass,
                               hint: context.texts.t('selectCarType'),
-                              items: _carTypes
+                              items: _vehicleOptions
                                   .map(
-                                    (e) => DropdownMenuItem(
-                                      value: e,
-                                      child: Text(
-                                        e == 'Bus'
-                                            ? context.texts.t('bus')
-                                            : context.texts.t('microBus'),
-                                      ),
+                                    (e) => DropdownMenuItem<String>(
+                                      value: e['vehicleClass'] as String,
+                                      child: Text(_vehicleLabel(e)),
                                     ),
                                   )
                                   .toList(),
                               onChanged: (val) =>
-                                  setState(() => _selectedCarType = val),
+                                  setState(() => _selectedVehicleClass = val),
                             ),
+
                             const SizedBox(height: 25),
+
                             SizedBox(
                               width: double.infinity,
                               height: 55,
                               child: ElevatedButton(
-                                onPressed:
-                                    _isLoading ||
+                                onPressed: _isLoading ||
                                         _routesLoading ||
                                         _routeItems.isEmpty
                                     ? null
@@ -330,7 +387,9 @@ class _DriverSignupScreenState extends State<DriverSignupScreen> {
                                       ),
                               ),
                             ),
+
                             const SizedBox(height: 10),
+
                             Center(
                               child: Text(
                                 context.texts.t('accountMayRequireApproval'),
@@ -369,16 +428,14 @@ class _DriverSignupScreenState extends State<DriverSignupScreen> {
       controller: controller,
       keyboardType: keyboard,
       style: const TextStyle(color: Colors.black, fontSize: 16),
-      validator:
-          validator ??
+      validator: validator ??
           (value) => value == null || value.isEmpty
               ? context.texts.t('required')
               : null,
       decoration: NavigoDecorations.kInputDecoration.copyWith(
         hintText: hint,
-        prefixIcon: prefixIcon != null
-            ? Icon(prefixIcon, color: Colors.green)
-            : null,
+        prefixIcon:
+            prefixIcon != null ? Icon(prefixIcon, color: Colors.green) : null,
         suffixIcon: prefixIcon != null
             ? IconButton(
                 icon: const Icon(Icons.clear),
