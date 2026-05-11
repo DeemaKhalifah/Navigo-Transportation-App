@@ -243,10 +243,17 @@ class PassengerTripRepository {
   }
 
   static LatLng? _latLngFromMap(dynamic location) {
+    if (location is GeoPoint) {
+      return LatLng(location.latitude, location.longitude);
+    }
     if (location is! Map) return null;
 
-    final lat = (location['lat'] as num?)?.toDouble();
-    final lng = (location['lng'] as num?)?.toDouble();
+    final lat =
+        (location['lat'] as num?)?.toDouble() ??
+        (location['latitude'] as num?)?.toDouble();
+    final lng =
+        (location['lng'] as num?)?.toDouble() ??
+        (location['longitude'] as num?)?.toDouble();
 
     if (lat == null || lng == null) return null;
     return LatLng(lat, lng);

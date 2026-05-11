@@ -4,7 +4,17 @@ import 'package:firebase_core/firebase_core.dart' show FirebaseOptions;
 import 'package:flutter/foundation.dart'
     show defaultTargetPlatform, kIsWeb, TargetPlatform;
 
-
+/// Default [FirebaseOptions] for use with your Firebase apps.
+///
+/// Example:
+/// ```dart
+/// import 'firebase_options.dart';
+/// // ...
+///
+/// await Firebase.initializeApp(
+///   options: DefaultFirebaseOptions.currentPlatform,
+/// );
+/// ```
 class DefaultFirebaseOptions {
   static FirebaseOptions get currentPlatform {
     if (kIsWeb) {
@@ -31,25 +41,7 @@ class DefaultFirebaseOptions {
     }
   }
 
-  static FirebaseOptions android = FirebaseOptions(
-    apiKey: 'AIzaSyArZ7y1NxNDTf5_SGBy7cKprbosW7_TERk',
-    appId: '1:1085605678072:android:your_android_app_id',
-    messagingSenderId: '1085605678072',
-    projectId: 'navigo-c89a0',
-    storageBucket: 'navigo-c89a0.firebasestorage.app',
-    databaseURL: 'https://navigo-c89a0-default-rtdb.firebaseio.com',
-  );
-
-  static FirebaseOptions ios = FirebaseOptions(
-    apiKey: 'AIzaSyD36tzEGJK8mFyIwH75ZBORvJMVbuJI9cM',
-    appId: '1:1085605678072:ios:980567764eed54cf5f640d',
-    messagingSenderId: '1085605678072',
-    projectId: 'navigo-c89a0',
-    storageBucket: 'navigo-c89a0.firebasestorage.app',
-    iosBundleId: 'com.birzeit.navigo',
-  );
-
-  static FirebaseOptions web = FirebaseOptions(
+  static const FirebaseOptions web = FirebaseOptions(
     apiKey: 'AIzaSyArZ7y1NxNDTf5_SGBy7cKprbosW7_TERk',
     appId: '1:1085605678072:web:ad6a33607bc263555f640d',
     messagingSenderId: '1085605678072',
@@ -59,7 +51,15 @@ class DefaultFirebaseOptions {
     measurementId: 'G-EZCKHRZKY1',
   );
 
-  static FirebaseOptions macos = FirebaseOptions(
+  static const FirebaseOptions android = FirebaseOptions(
+    apiKey: 'AIzaSyCYq1-adwyvioIvSHrmCVVZ8IOwh5wiPso',
+    appId: '1:1085605678072:android:64ad1aa5eed918ad5f640d',
+    messagingSenderId: '1085605678072',
+    projectId: 'navigo-c89a0',
+    storageBucket: 'navigo-c89a0.firebasestorage.app',
+  );
+
+  static const FirebaseOptions ios = FirebaseOptions(
     apiKey: 'AIzaSyD36tzEGJK8mFyIwH75ZBORvJMVbuJI9cM',
     appId: '1:1085605678072:ios:980567764eed54cf5f640d',
     messagingSenderId: '1085605678072',
@@ -68,7 +68,16 @@ class DefaultFirebaseOptions {
     iosBundleId: 'com.example.navigo',
   );
 
-  static FirebaseOptions windows = FirebaseOptions(
+  static const FirebaseOptions macos = FirebaseOptions(
+    apiKey: 'AIzaSyD36tzEGJK8mFyIwH75ZBORvJMVbuJI9cM',
+    appId: '1:1085605678072:ios:980567764eed54cf5f640d',
+    messagingSenderId: '1085605678072',
+    projectId: 'navigo-c89a0',
+    storageBucket: 'navigo-c89a0.firebasestorage.app',
+    iosBundleId: 'com.example.navigo',
+  );
+
+  static const FirebaseOptions windows = FirebaseOptions(
     apiKey: 'AIzaSyArZ7y1NxNDTf5_SGBy7cKprbosW7_TERk',
     appId: '1:1085605678072:web:c06dc00e6c91264f5f640d',
     messagingSenderId: '1085605678072',

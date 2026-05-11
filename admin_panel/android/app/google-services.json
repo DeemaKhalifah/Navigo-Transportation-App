@@ -1,0 +1,48 @@
+{
+  "project_info": {
+    "project_number": "1085605678072",
+    "project_id": "navigo-c89a0",
+    "storage_bucket": "navigo-c89a0.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1085605678072:android:64ad1aa5eed918ad5f640d",
+        "android_client_info": {
+          "package_name": "com.birzeit.navigo"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCYq1-adwyvioIvSHrmCVVZ8IOwh5wiPso"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1085605678072:android:7cb1f54261033b635f640d",
+        "android_client_info": {
+          "package_name": "com.example.admin_panel"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCYq1-adwyvioIvSHrmCVVZ8IOwh5wiPso"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

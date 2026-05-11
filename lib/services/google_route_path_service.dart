@@ -39,11 +39,10 @@ class GoogleRoutePathService {
     final cacheKey = safeTripId.isEmpty
         ? 'route:$safeRouteId'
         : 'route:$safeRouteId:trip:$safeTripId';
-    final cached = _memoryCache[cacheKey];
-    if (cached != null) {
-      return cached;
-    }
 
+    // Route documents can be edited in Firestore while the app is running, so
+    // route-id lookups intentionally avoid the memory cache. Coordinate-based
+    // calls still cache by the exact origin/destination pair below.
     final inflight = _inflight[cacheKey];
     if (inflight != null) {
       return inflight;
@@ -91,6 +90,12 @@ class GoogleRoutePathService {
           }
           debugPrint(
             '[Directions] using Firebase routePolyline routeId=$routeId',
+          );
+          _debugRouteCoordinates(
+            source: 'firebase_cached routeId=$routeId',
+            origin: start,
+            destination: end,
+            decodedPath: decodedPath,
           );
           final distanceMeters =
               (data['distanceMeters'] as num?)?.toInt() ??
@@ -206,6 +211,12 @@ class GoogleRoutePathService {
     }
     debugPrint(
       '[Directions] API call for coordinates ${_coordsKey(start, end)}',
+    );
+    _debugRouteCoordinates(
+      source: 'request',
+      origin: start,
+      destination: end,
+      decodedPath: const [],
     );
 
     final fromRoutesApi = await _fetchFromRoutesApi(start, end);
@@ -466,13 +477,19 @@ class GoogleRoutePathService {
     final safeSeconds = seconds ?? _estimateSeconds(start, end);
     final etaMinutes = math.max(1, (safeSeconds / 60).ceil());
     final path = encodedPolyline.isEmpty
-        ? [start, end]
+        ? const <LatLng>[]
         : _decodePolyline(encodedPolyline);
+    _debugRouteCoordinates(
+      source: provider,
+      origin: start,
+      destination: end,
+      decodedPath: path,
+    );
 
     return RoutePathInfo(
       startLocation: start,
       endLocation: end,
-      path: path.isEmpty ? [start, end] : path,
+      path: path,
       etaMinutes: etaMinutes,
       etaText: _formatEta(etaMinutes),
       distanceMeters: distanceMeters > 0
@@ -503,12 +520,40 @@ class GoogleRoutePathService {
   }
 
   static LatLng? _parseLatLng(dynamic raw) {
+    if (raw is GeoPoint) return LatLng(raw.latitude, raw.longitude);
     if (raw is! Map) return null;
-    final lat = (raw['lat'] as num?)?.toDouble();
-    final lng = (raw['lng'] as num?)?.toDouble();
+    final lat =
+        (raw['lat'] as num?)?.toDouble() ??
+        (raw['latitude'] as num?)?.toDouble();
+    final lng =
+        (raw['lng'] as num?)?.toDouble() ??
+        (raw['longitude'] as num?)?.toDouble();
     if (lat == null || lng == null) return null;
     return LatLng(lat, lng);
   }
+
+  static void _debugRouteCoordinates({
+    required String source,
+    required LatLng origin,
+    required LatLng destination,
+    required List<LatLng> decodedPath,
+  }) {
+    debugPrint('[Directions][$source] route origin=${_fmt(origin)}');
+    debugPrint('[Directions][$source] route destination=${_fmt(destination)}');
+    if (decodedPath.isEmpty) {
+      debugPrint('[Directions][$source] decoded polyline is empty');
+      return;
+    }
+    debugPrint(
+      '[Directions][$source] first decoded polyline point=${_fmt(decodedPath.first)}',
+    );
+    debugPrint(
+      '[Directions][$source] last decoded polyline point=${_fmt(decodedPath.last)}',
+    );
+  }
+
+  static String _fmt(LatLng p) =>
+      '${p.latitude.toStringAsFixed(7)},${p.longitude.toStringAsFixed(7)}';
 
   static Timestamp? _estimatedArrival(
     Map<String, dynamic> slot,

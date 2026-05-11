@@ -131,6 +131,7 @@ async function createNotificationDoc(input) {
   }
 
   const doc = {
+    notificationId: '',
     userId,
     title: (data.title || 'Navigo').toString(),
     // Keep compatibility with clients that read either `message` or `body`.
@@ -139,9 +140,8 @@ async function createNotificationDoc(input) {
     type: (data.type || '').toString(),
     tripId: data.tripId == null ? '' : data.tripId.toString(),
     routeId: data.routeId == null ? '' : data.routeId.toString(),
-    createdAt: admin.firestore.FieldValue.serverTimestamp(),
-    // Many apps expect a "read" boolean; keep it optional and default false.
-    read: data.read === true,
+    timestamp: admin.firestore.FieldValue.serverTimestamp(),
+    isRead: false,
     // Allow callers to attach arbitrary structured metadata without changing
     // push logic. This does not affect the existing trigger unless used there.
     meta: data.meta && typeof data.meta === 'object' ? data.meta : undefined,
@@ -161,7 +161,10 @@ async function createNotificationDoc(input) {
   // Remove undefined fields to avoid writing them to Firestore.
   Object.keys(doc).forEach((k) => doc[k] === undefined && delete doc[k]);
 
-  return await db.collection('notifications').add(doc);
+  const ref = db.collection('notifications').doc();
+  doc.notificationId = ref.id;
+  await ref.set(doc);
+  return ref;
 }
 
 exports.sendNotificationOnCreate = functions.firestore

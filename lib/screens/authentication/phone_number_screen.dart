@@ -58,9 +58,7 @@ class _PhoneNumberScreenState extends State<PhoneNumberScreen> {
   }
 
   String? _formatPhoneForFirebase(String raw) {
-    final cleaned = raw
-        .trim()
-        .replaceAll(RegExp(r'[\s\-\(\)\[\]\{\}]'), '');
+    final cleaned = raw.trim().replaceAll(RegExp(r'[\s\-\(\)\[\]\{\}]'), '');
 
     // Accept already formatted E.164-style values.
     if (cleaned.startsWith('+970') || cleaned.startsWith('+972')) {
@@ -102,7 +100,9 @@ class _PhoneNumberScreenState extends State<PhoneNumberScreen> {
   String? _validatePalestinianMobile(String formatted) {
     // +97059xxxxxxx or +97259xxxxxxx (9 digits after country code).
     final ok = RegExp(r'^\+(970|972)59\d{7}$').hasMatch(formatted);
-    return ok ? null : 'Invalid phone number. Use +97059xxxxxxx or +97259xxxxxxx';
+    return ok
+        ? null
+        : 'Invalid phone number. Use +97059xxxxxxx or +97259xxxxxxx';
   }
 
   void _showPhoneErrorForCode(String code) {
@@ -207,7 +207,9 @@ class _PhoneNumberScreenState extends State<PhoneNumberScreen> {
           );
         },
         codeAutoRetrievalTimeout: (String verificationId) {
-          debugPrint('OTP codeAutoRetrievalTimeout verificationId: $verificationId');
+          debugPrint(
+            'OTP codeAutoRetrievalTimeout verificationId: $verificationId',
+          );
           if (!mounted) return;
           setState(() => _isSending = false);
         },
@@ -292,24 +294,27 @@ class _PhoneNumberScreenState extends State<PhoneNumberScreen> {
                                   SizedBox(
                                     width: 110,
                                     child: DropdownButtonFormField<String>(
-                                      value: _phonePrefix,
-                                      style:
-                                          const TextStyle(color: Colors.grey),
+                                      initialValue: _phonePrefix,
+                                      style: const TextStyle(
+                                        color: Colors.grey,
+                                      ),
                                       items: const [
                                         DropdownMenuItem(
                                           value: '+970',
                                           child: Text(
                                             '+970',
-                                            style:
-                                                TextStyle(color: Colors.grey),
+                                            style: TextStyle(
+                                              color: Colors.grey,
+                                            ),
                                           ),
                                         ),
                                         DropdownMenuItem(
                                           value: '+972',
                                           child: Text(
                                             '+972',
-                                            style:
-                                                TextStyle(color: Colors.grey),
+                                            style: TextStyle(
+                                              color: Colors.grey,
+                                            ),
                                           ),
                                         ),
                                       ],
@@ -349,7 +354,8 @@ class _PhoneNumberScreenState extends State<PhoneNumberScreen> {
                                             suffixIcon: IconButton(
                                               icon: const Icon(Icons.clear),
                                               onPressed: () =>
-                                                  _phoneDigitsController.clear(),
+                                                  _phoneDigitsController
+                                                      .clear(),
                                             ),
                                           ),
                                     ),

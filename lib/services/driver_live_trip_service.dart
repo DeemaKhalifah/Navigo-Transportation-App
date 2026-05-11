@@ -673,6 +673,10 @@ class DriverLiveTripService {
   }
 
   double? _nestedLocationValue(dynamic value, String key) {
+    if (value is GeoPoint) {
+      if (key == 'lat' || key == 'latitude') return value.latitude;
+      if (key == 'lng' || key == 'longitude') return value.longitude;
+    }
     if (value is Map) {
       return _toDouble(value[key]);
     }

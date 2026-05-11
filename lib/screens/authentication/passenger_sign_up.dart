@@ -42,8 +42,7 @@ class _PassengerSignupScreenState extends State<PassengerSignupScreen> {
 
     setState(() => _isLoading = true);
     final name = _nameController.text.trim();
-    final formattedPhone =
-        '$_phonePrefix${_phoneDigitsController.text.trim()}';
+    final formattedPhone = '$_phonePrefix${_phoneDigitsController.text.trim()}';
 
     try {
       final exists = await FirebaseFirestore.instance
@@ -159,8 +158,9 @@ class _PassengerSignupScreenState extends State<PassengerSignupScreen> {
                                   AppFormValidators.fullName(context, v),
                               decoration: NavigoDecorations.kInputDecoration
                                   .copyWith(
-                                    hintText:
-                                        context.texts.t('exampleFullName'),
+                                    hintText: context.texts.t(
+                                      'exampleFullName',
+                                    ),
                                     prefixIcon: const Icon(
                                       Icons.person_outline,
                                       color: NavigoColors.accentGreen,
@@ -183,7 +183,7 @@ class _PassengerSignupScreenState extends State<PassengerSignupScreen> {
                                 SizedBox(
                                   width: 110,
                                   child: DropdownButtonFormField<String>(
-                                    value: _phonePrefix,
+                                    initialValue: _phonePrefix,
                                     style: const TextStyle(color: Colors.grey),
                                     items: const [
                                       DropdownMenuItem(
@@ -226,8 +226,8 @@ class _PassengerSignupScreenState extends State<PassengerSignupScreen> {
                                       FilteringTextInputFormatter.digitsOnly,
                                       LengthLimitingTextInputFormatter(9),
                                     ],
-                                    validator: (_) => AppFormValidators
-                                        .palestinianPhone(
+                                    validator: (_) =>
+                                        AppFormValidators.palestinianPhone(
                                           context,
                                           '$_phonePrefix${_phoneDigitsController.text.trim()}',
                                         ),
@@ -267,8 +267,8 @@ class _PassengerSignupScreenState extends State<PassengerSignupScreen> {
                                 Expanded(
                                   child: RichText(
                                     text: TextSpan(
-                                      style:
-                                          NavigoTextStyles.bodyMedium.copyWith(
+                                      style: NavigoTextStyles.bodyMedium
+                                          .copyWith(
                                             color: NavigoColors.textDark,
                                             fontSize: 13,
                                           ),
@@ -310,8 +310,9 @@ class _PassengerSignupScreenState extends State<PassengerSignupScreen> {
                               child: ElevatedButton(
                                 style:
                                     NavigoDecorations.kPrimaryButtonLargeStyle,
-                                onPressed:
-                                    (!_agreeToTerms || _isLoading) ? null : _submit,
+                                onPressed: (!_agreeToTerms || _isLoading)
+                                    ? null
+                                    : _submit,
                                 child: _isLoading
                                     ? const SizedBox(
                                         height: 24,

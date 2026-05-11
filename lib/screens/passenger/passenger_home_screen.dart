@@ -130,7 +130,7 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> {
     LatLng? endLocation,
   }) async {
     final renderKey =
-        '${routeId?.trim() ?? ''}|${startLocation?.latitude ?? ''},${startLocation?.longitude ?? ''}|${endLocation?.latitude ?? ''},${endLocation?.longitude ?? ''}';
+        '${routeId?.trim() ?? ''}|$startPoint|$endPoint|${startLocation?.latitude ?? ''},${startLocation?.longitude ?? ''}|${endLocation?.latitude ?? ''},${endLocation?.longitude ?? ''}';
     if (_activeRouteRenderKey == renderKey && _decodedRoutePoints.isNotEmpty) {
       debugPrint('[Map] reuse decoded polyline renderKey=$renderKey');
       _fitBoundsForPoints(_decodedRoutePoints);
@@ -188,12 +188,23 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> {
       return;
     }
 
-    // Ensure the polyline starts/ends exactly at the pins.
-    final rawPoints = routeInfo?.path ?? const <LatLng>[];
-    final routePoints = rawPoints.isEmpty ? [start, end] : rawPoints;
-    if (routePoints.isNotEmpty) {
-      routePoints[0] = start;
-      routePoints[routePoints.length - 1] = end;
+    // Use only the decoded Directions API points. Manually forcing the marker
+    // coordinates into the polyline creates a fake straight segment before the
+    // road-snapped route begins.
+    final routePoints = _dedupeConsecutivePoints(
+      routeInfo?.path ?? const <LatLng>[],
+    );
+    _debugRouteDraw(
+      source: 'PassengerHome',
+      startMarker: start,
+      endMarker: end,
+      routeOrigin: routeInfo?.startLocation ?? start,
+      routeDestination: routeInfo?.endLocation ?? end,
+      decodedPoints: routePoints,
+    );
+    if (routePoints.length < 2) {
+      AppMessage.showError(context, 'Could not load route polyline');
+      return;
     }
     _decodedRoutePoints = routePoints;
     _activeRouteRenderKey = renderKey;
@@ -244,6 +255,47 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> {
     // Zoom to fit both points
     _fitBoundsForPoints(routePoints);
   }
+
+  List<LatLng> _dedupeConsecutivePoints(List<LatLng> points) {
+    final cleaned = <LatLng>[];
+    for (final point in points) {
+      if (cleaned.isNotEmpty && _sameLatLng(cleaned.last, point)) continue;
+      cleaned.add(point);
+    }
+    return cleaned;
+  }
+
+  bool _sameLatLng(LatLng a, LatLng b) =>
+      a.latitude == b.latitude && a.longitude == b.longitude;
+
+  void _debugRouteDraw({
+    required String source,
+    required LatLng startMarker,
+    required LatLng endMarker,
+    required LatLng routeOrigin,
+    required LatLng routeDestination,
+    required List<LatLng> decodedPoints,
+  }) {
+    debugPrint('[$source] start marker coordinates=${_fmt(startMarker)}');
+    debugPrint('[$source] end marker coordinates=${_fmt(endMarker)}');
+    debugPrint('[$source] route origin coordinates=${_fmt(routeOrigin)}');
+    debugPrint(
+      '[$source] route destination coordinates=${_fmt(routeDestination)}',
+    );
+    if (decodedPoints.isEmpty) {
+      debugPrint('[$source] decoded polyline has no points');
+      return;
+    }
+    debugPrint(
+      '[$source] first decoded polyline point=${_fmt(decodedPoints.first)}',
+    );
+    debugPrint(
+      '[$source] last decoded polyline point=${_fmt(decodedPoints.last)}',
+    );
+  }
+
+  String _fmt(LatLng point) =>
+      '${point.latitude.toStringAsFixed(7)},${point.longitude.toStringAsFixed(7)}';
 
   void _fitBoundsForPoints(List<LatLng> points) {
     final c = _mapController;
@@ -1379,6 +1431,8 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> {
                       onTap: () {
                         setState(() {
                           _polylines.clear();
+                          _decodedRoutePoints = const [];
+                          _activeRouteRenderKey = null;
                           _markers.removeWhere(
                             (m) =>
                                 m.markerId.value == 'route_start' ||

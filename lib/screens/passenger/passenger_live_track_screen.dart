@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 
 import '../../localization/localization_x.dart';
+import '../../services/google_route_path_service.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/responsive.dart';
 import 'passenger_bottom_nav_bar.dart';
@@ -37,6 +38,10 @@ class _PassengerLiveTrackScreenState extends State<PassengerLiveTrackScreen> {
   Map<String, dynamic>? _driverDocData;
 
   Map<String, dynamic>? _passengerData;
+  final GoogleRoutePathService _routePathService = GoogleRoutePathService();
+  Set<Polyline> _polylines = {};
+  String? _activeLiveRouteKey;
+  String? _pendingLiveRouteKey;
 
   StreamSubscription<DocumentSnapshot>? _driversSub;
   StreamSubscription<DocumentSnapshot>? _passengerSub;
@@ -57,6 +62,7 @@ class _PassengerLiveTrackScreenState extends State<PassengerLiveTrackScreen> {
           if (!mounted) return;
           setState(() => _driverDocData = snap.data());
           _scheduleFollowDriver();
+          unawaited(_refreshLiveRoute());
         });
 
     if (uid != null && uid.isNotEmpty) {
@@ -65,6 +71,7 @@ class _PassengerLiveTrackScreenState extends State<PassengerLiveTrackScreen> {
       ) {
         if (!mounted) return;
         setState(() => _passengerData = snap.data());
+        unawaited(_refreshLiveRoute());
       });
     }
   }
@@ -75,7 +82,12 @@ class _PassengerLiveTrackScreenState extends State<PassengerLiveTrackScreen> {
       final c = _mapController;
       final d = _driverLatLng();
       if (c == null || d == null) return;
-      c.animateCamera(CameraUpdate.newLatLngZoom(d, 14.2));
+      final p = _passengerLatLng();
+      if (p != null) {
+        unawaited(_recenter());
+      } else {
+        c.animateCamera(CameraUpdate.newLatLngZoom(d, 14.2));
+      }
     });
   }
 
@@ -102,13 +114,20 @@ class _PassengerLiveTrackScreenState extends State<PassengerLiveTrackScreen> {
     final lat = (p['latitude'] as num?)?.toDouble();
     final lng = (p['longitude'] as num?)?.toDouble();
     if (lat != null && lng != null) return LatLng(lat, lng);
-    return null;
+    return _latLngFromMap(p['location']);
   }
 
   static LatLng? _latLngFromMap(dynamic location) {
+    if (location is GeoPoint) {
+      return LatLng(location.latitude, location.longitude);
+    }
     if (location is! Map) return null;
-    final lat = (location['lat'] as num?)?.toDouble();
-    final lng = (location['lng'] as num?)?.toDouble();
+    final lat =
+        (location['lat'] as num?)?.toDouble() ??
+        (location['latitude'] as num?)?.toDouble();
+    final lng =
+        (location['lng'] as num?)?.toDouble() ??
+        (location['longitude'] as num?)?.toDouble();
     if (lat == null || lng == null) return null;
     return LatLng(lat, lng);
   }
@@ -160,6 +179,119 @@ class _PassengerLiveTrackScreenState extends State<PassengerLiveTrackScreen> {
     }
 
     return markers;
+  }
+
+  Future<void> _refreshLiveRoute() async {
+    final driver = _driverLatLng();
+    final passenger = _passengerLatLng();
+    _debugRouteDraw(
+      source: 'PassengerLiveTrack',
+      startMarker: driver,
+      endMarker: passenger,
+      routeOrigin: driver,
+      routeDestination: passenger,
+      decodedPoints: _polylines.isEmpty
+          ? const <LatLng>[]
+          : _polylines.first.points,
+    );
+
+    if (driver == null || passenger == null) {
+      if (!mounted) return;
+      setState(() {
+        _polylines = {};
+        _activeLiveRouteKey = null;
+        _pendingLiveRouteKey = null;
+      });
+      return;
+    }
+
+    final key =
+        '${_fmt(driver)}->${_fmt(passenger)}';
+    if (_activeLiveRouteKey == key || _pendingLiveRouteKey == key) return;
+
+    _pendingLiveRouteKey = key;
+    try {
+      final info = await _routePathService.fetchRoutePathByCoordinates(
+        start: driver,
+        end: passenger,
+        requirePolyline: true,
+      );
+      final points = _dedupeConsecutivePoints(info.path);
+      _debugRouteDraw(
+        source: 'PassengerLiveTrack',
+        startMarker: driver,
+        endMarker: passenger,
+        routeOrigin: info.startLocation,
+        routeDestination: info.endLocation,
+        decodedPoints: points,
+      );
+      if (!mounted || _pendingLiveRouteKey != key || points.length < 2) return;
+      setState(() {
+        _activeLiveRouteKey = key;
+        _pendingLiveRouteKey = null;
+        // Draw only the decoded route points returned by Google. No manual
+        // driver/passenger endpoint points are inserted into the path.
+        _polylines = {
+          Polyline(
+            polylineId: const PolylineId('live_driver_to_passenger'),
+            points: points,
+            color: NavigoColors.primaryOrange,
+            width: 5,
+          ),
+        };
+      });
+    } catch (e) {
+      debugPrint('[PassengerLiveTrack] live route redraw failed: $e');
+      if (!mounted || _pendingLiveRouteKey != key) return;
+      setState(() => _pendingLiveRouteKey = null);
+    }
+  }
+
+  List<LatLng> _dedupeConsecutivePoints(List<LatLng> points) {
+    final cleaned = <LatLng>[];
+    for (final point in points) {
+      if (cleaned.isNotEmpty &&
+          cleaned.last.latitude == point.latitude &&
+          cleaned.last.longitude == point.longitude) {
+        continue;
+      }
+      cleaned.add(point);
+    }
+    return cleaned;
+  }
+
+  void _debugRouteDraw({
+    required String source,
+    required LatLng? startMarker,
+    required LatLng? endMarker,
+    required LatLng? routeOrigin,
+    required LatLng? routeDestination,
+    required List<LatLng> decodedPoints,
+  }) {
+    debugPrint('[$source] start marker coordinates=${_fmtNullable(startMarker)}');
+    debugPrint('[$source] end marker coordinates=${_fmtNullable(endMarker)}');
+    debugPrint('[$source] route origin coordinates=${_fmtNullable(routeOrigin)}');
+    debugPrint(
+      '[$source] route destination coordinates=${_fmtNullable(routeDestination)}',
+    );
+    if (decodedPoints.isEmpty) {
+      debugPrint('[$source] decoded polyline has no points');
+      return;
+    }
+    debugPrint(
+      '[$source] first decoded polyline point=${_fmtNullable(decodedPoints.first)}',
+    );
+    debugPrint(
+      '[$source] last decoded polyline point=${_fmtNullable(decodedPoints.last)}',
+    );
+  }
+
+  String _fmt(LatLng point) =>
+      '${point.latitude.toStringAsFixed(5)},${point.longitude.toStringAsFixed(5)}';
+
+  String _fmtNullable(LatLng? point) {
+    if (point == null) return 'null';
+    return '${point.latitude.toStringAsFixed(7)},${point.longitude.toStringAsFixed(7)}';
   }
 
   Future<void> _recenter() async {
@@ -247,10 +379,12 @@ class _PassengerLiveTrackScreenState extends State<PassengerLiveTrackScreen> {
                         myLocationButtonEnabled: false,
                         zoomControlsEnabled: false,
                         markers: markers,
+                        polylines: _polylines,
                         onMapCreated: (controller) {
                           _mapController = controller;
                           WidgetsBinding.instance.addPostFrameCallback((_) {
                             _recenter();
+                            unawaited(_refreshLiveRoute());
                           });
                         },
                       ),

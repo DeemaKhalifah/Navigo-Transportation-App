@@ -1,3 +1,5 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
+
 import 'schedule_slot.dart';
 
 class RouteModel {
@@ -80,9 +82,16 @@ class RouteModel {
     }
 
     Map<String, double>? parseLocation(dynamic raw) {
+      if (raw is GeoPoint) {
+        return {'lat': raw.latitude, 'lng': raw.longitude};
+      }
       if (raw is! Map) return null;
-      final lat = (raw['lat'] as num?)?.toDouble();
-      final lng = (raw['lng'] as num?)?.toDouble();
+      final lat =
+          (raw['lat'] as num?)?.toDouble() ??
+          (raw['latitude'] as num?)?.toDouble();
+      final lng =
+          (raw['lng'] as num?)?.toDouble() ??
+          (raw['longitude'] as num?)?.toDouble();
       if (lat == null || lng == null) return null;
       return {'lat': lat, 'lng': lng};
     }
@@ -115,8 +124,12 @@ class RouteModel {
     final points = <Map<String, double>>[];
     for (final item in raw) {
       if (item is! Map) continue;
-      final lat = (item['lat'] as num?)?.toDouble();
-      final lng = (item['lng'] as num?)?.toDouble();
+      final lat =
+          (item['lat'] as num?)?.toDouble() ??
+          (item['latitude'] as num?)?.toDouble();
+      final lng =
+          (item['lng'] as num?)?.toDouble() ??
+          (item['longitude'] as num?)?.toDouble();
       if (lat == null || lng == null) continue;
       points.add({'lat': lat, 'lng': lng});
     }

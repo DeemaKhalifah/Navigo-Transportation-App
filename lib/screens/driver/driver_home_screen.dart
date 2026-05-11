@@ -188,10 +188,10 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
         .listen((data) {
           if (!mounted || _isDisposed || data == null) return;
 
-          final startLat = data['startLat'] as double?;
-          final startLng = data['startLng'] as double?;
-          final endLat = data['endLat'] as double?;
-          final endLng = data['endLng'] as double?;
+          final startLat = _toDouble(data['startLat']);
+          final startLng = _toDouble(data['startLng']);
+          final endLat = _toDouble(data['endLat']);
+          final endLng = _toDouble(data['endLng']);
           final routePolyline = (data['routePolyline'] ?? '').toString();
           if (routePolyline.trim().isNotEmpty &&
               routePolyline != _activeRoutePolyline) {
@@ -202,28 +202,69 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
           }
           final routePath = _decodedTripPath;
 
-          _polylines.clear();
-          if (routePath.isNotEmpty) {
-            _polylines.add(
-              Polyline(
-                polylineId: const PolylineId('trip_path'),
-                points: routePath,
-                width: 5,
-                color: NavigoColors.primaryOrange,
-              ),
-            );
-          } else if (startLat != null &&
-              startLng != null &&
-              endLat != null &&
-              endLng != null) {
-            _polylines.add(
-              Polyline(
-                polylineId: const PolylineId('trip_path'),
-                points: [LatLng(startLat, startLng), LatLng(endLat, endLng)],
-                width: 4,
-                color: NavigoColors.primaryOrange,
-              ),
-            );
+          final start = startLat != null && startLng != null
+              ? LatLng(startLat, startLng)
+              : null;
+          final end = endLat != null && endLng != null
+              ? LatLng(endLat, endLng)
+              : null;
+          final cleanedRoutePath = _dedupeConsecutivePoints(routePath);
+          _debugRouteDraw(
+            source: 'DriverHome',
+            startMarker: start,
+            endMarker: end,
+            routeOrigin: start,
+            routeDestination: end,
+            decodedPoints: cleanedRoutePath,
+          );
+
+          if (mounted && !_isDisposed) {
+            setState(() {
+              _polylines.clear();
+              _markers.removeWhere(
+                (m) =>
+                    m.markerId.value == 'route_start' ||
+                    m.markerId.value == 'route_end',
+              );
+
+              // The active-trip path must be the decoded route only. A manual
+              // [start, end] fallback draws a misleading straight segment.
+              if (cleanedRoutePath.length >= 2) {
+                _polylines.add(
+                  Polyline(
+                    polylineId: const PolylineId('trip_path'),
+                    points: cleanedRoutePath,
+                    width: 5,
+                    color: NavigoColors.primaryOrange,
+                  ),
+                );
+              }
+
+              if (start != null) {
+                _markers.add(
+                  Marker(
+                    markerId: const MarkerId('route_start'),
+                    position: start,
+                    infoWindow: const InfoWindow(title: 'Route start'),
+                    icon: BitmapDescriptor.defaultMarkerWithHue(
+                      BitmapDescriptor.hueGreen,
+                    ),
+                  ),
+                );
+              }
+              if (end != null) {
+                _markers.add(
+                  Marker(
+                    markerId: const MarkerId('route_end'),
+                    position: end,
+                    infoWindow: const InfoWindow(title: 'Route end'),
+                    icon: BitmapDescriptor.defaultMarkerWithHue(
+                      BitmapDescriptor.hueRed,
+                    ),
+                  ),
+                );
+              }
+            });
           }
 
           final driverLoc = data['driverLocation'] as Map<String, double>?;
@@ -426,6 +467,55 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
         ),
       );
     } catch (_) {}
+  }
+
+  double? _toDouble(dynamic value) {
+    if (value is num) return value.toDouble();
+    return double.tryParse(value?.toString() ?? '');
+  }
+
+  List<LatLng> _dedupeConsecutivePoints(List<LatLng> points) {
+    final cleaned = <LatLng>[];
+    for (final point in points) {
+      if (cleaned.isNotEmpty &&
+          cleaned.last.latitude == point.latitude &&
+          cleaned.last.longitude == point.longitude) {
+        continue;
+      }
+      cleaned.add(point);
+    }
+    return cleaned;
+  }
+
+  void _debugRouteDraw({
+    required String source,
+    required LatLng? startMarker,
+    required LatLng? endMarker,
+    required LatLng? routeOrigin,
+    required LatLng? routeDestination,
+    required List<LatLng> decodedPoints,
+  }) {
+    debugPrint('[$source] start marker coordinates=${_fmt(startMarker)}');
+    debugPrint('[$source] end marker coordinates=${_fmt(endMarker)}');
+    debugPrint('[$source] route origin coordinates=${_fmt(routeOrigin)}');
+    debugPrint(
+      '[$source] route destination coordinates=${_fmt(routeDestination)}',
+    );
+    if (decodedPoints.isEmpty) {
+      debugPrint('[$source] decoded polyline has no points');
+      return;
+    }
+    debugPrint(
+      '[$source] first decoded polyline point=${_fmt(decodedPoints.first)}',
+    );
+    debugPrint(
+      '[$source] last decoded polyline point=${_fmt(decodedPoints.last)}',
+    );
+  }
+
+  String _fmt(LatLng? point) {
+    if (point == null) return 'null';
+    return '${point.latitude.toStringAsFixed(7)},${point.longitude.toStringAsFixed(7)}';
   }
 
   Future<void> _endTrip() async {

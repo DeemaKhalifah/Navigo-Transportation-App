@@ -280,7 +280,7 @@ class _DriverSignupScreenState extends State<DriverSignupScreen> {
                                 SizedBox(
                                   width: 110,
                                   child: DropdownButtonFormField<String>(
-                                    value: _phonePrefix,
+                                    initialValue: _phonePrefix,
                                     style: const TextStyle(color: Colors.grey),
                                     items: const [
                                       DropdownMenuItem(
@@ -326,8 +326,8 @@ class _DriverSignupScreenState extends State<DriverSignupScreen> {
                                       FilteringTextInputFormatter.digitsOnly,
                                       LengthLimitingTextInputFormatter(9),
                                     ],
-                                    validator: (_) => AppFormValidators
-                                        .palestinianPhone(
+                                    validator: (_) =>
+                                        AppFormValidators.palestinianPhone(
                                           context,
                                           _fullPhoneNumber,
                                         ),
@@ -385,9 +385,7 @@ class _DriverSignupScreenState extends State<DriverSignupScreen> {
                               hint: context.texts.t('examplePlateNumber'),
                               prefixIcon: Icons.confirmation_number_outlined,
                               keyboard: TextInputType.number,
-                              inputFormatters: [
-                                CarPlateInputFormatter(),
-                              ],
+                              inputFormatters: [CarPlateInputFormatter()],
                               validator: (v) =>
                                   AppFormValidators.carPlate(context, v),
                             ),
@@ -443,7 +441,8 @@ class _DriverSignupScreenState extends State<DriverSignupScreen> {
                                           ),
                                       children: [
                                         TextSpan(
-                                          text: '${context.texts.t('agreeTo')} ',
+                                          text:
+                                              '${context.texts.t('agreeTo')} ',
                                         ),
                                         TextSpan(
                                           text: context.texts.t('terms'),
