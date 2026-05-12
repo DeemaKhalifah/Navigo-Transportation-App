@@ -146,6 +146,60 @@ class AdminPassengerItem {
   });
 }
 
+class AdminRouteItem {
+  final String documentId;
+  final String routeId;
+  final String startPoint;
+  final String endPoint;
+  final double price;
+  final List<String> vehicleTypes;
+  final int scheduleSlotCount;
+  final int driverQueueCount;
+  final DateTime? createdAt;
+  final DateTime? updatedAt;
+
+  AdminRouteItem({
+    required this.documentId,
+    required this.routeId,
+    required this.startPoint,
+    required this.endPoint,
+    required this.price,
+    required this.vehicleTypes,
+    required this.scheduleSlotCount,
+    required this.driverQueueCount,
+    this.createdAt,
+    this.updatedAt,
+  });
+}
+
+class AdminRouteManagerItem {
+  final String managerId;
+  final String userId;
+  final String fullName;
+  final String email;
+  final String phone;
+  final bool isVerified;
+  final bool isOnline;
+  final String routeId;
+  final String routeLabel;
+  final DateTime? createdAt;
+  final DateTime? updatedAt;
+
+  AdminRouteManagerItem({
+    required this.managerId,
+    required this.userId,
+    required this.fullName,
+    required this.email,
+    required this.phone,
+    required this.isVerified,
+    required this.isOnline,
+    required this.routeId,
+    required this.routeLabel,
+    this.createdAt,
+    this.updatedAt,
+  });
+}
+
 class AdminTripItem {
   final String routeId;
   final String routeLabel;

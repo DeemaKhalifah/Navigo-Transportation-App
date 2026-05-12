@@ -91,7 +91,7 @@ class _AdminReportsScreenState extends State<AdminReportsScreen> {
                           return ListView.separated(
                             padding: const EdgeInsets.all(24),
                             itemCount: reports.length,
-                            separatorBuilder: (_, __) =>
+                            separatorBuilder: (_, _) =>
                                 const SizedBox(height: 12),
                             itemBuilder: (context, index) {
                               final report = reports[index];

@@ -309,6 +309,176 @@ class AdminDashboardService {
     });
   }
 
+  Stream<List<AdminRouteItem>> adminRoutesStream() {
+    return _db.collection('route').snapshots().map((routesSnap) {
+      final routes = routesSnap.docs.map((doc) {
+        final data = doc.data();
+        final routeId = _readString(data['routeId']).isEmpty
+            ? doc.id
+            : _readString(data['routeId']);
+        final slots = data['scheduleSlots'];
+        final driverQueue = data['driverQueueIds'];
+
+        return AdminRouteItem(
+          documentId: doc.id,
+          routeId: routeId,
+          startPoint: _readString(
+            data['startPoint'] ?? data['start'] ?? data['from'],
+          ),
+          endPoint: _readString(data['endPoint'] ?? data['end'] ?? data['to']),
+          price: _readDouble(data['price']) ?? 0,
+          vehicleTypes: _readStringList(data['vehicleTypes']),
+          scheduleSlotCount: slots is List ? slots.length : 0,
+          driverQueueCount: driverQueue is List ? driverQueue.length : 0,
+          createdAt: _readDate(data['createdAt']),
+          updatedAt: _readDate(data['updatedAt']),
+        );
+      }).toList()
+        ..sort((a, b) {
+          final byStart = a.startPoint.compareTo(b.startPoint);
+          if (byStart != 0) return byStart;
+          return a.endPoint.compareTo(b.endPoint);
+        });
+
+      return routes;
+    });
+  }
+
+  Future<void> createRoute({
+    required String startPoint,
+    required String endPoint,
+    required double price,
+    required List<String> vehicleTypes,
+  }) async {
+    final routeRef = _db.collection('route').doc();
+    final now = FieldValue.serverTimestamp();
+
+    await routeRef.set({
+      'routeId': routeRef.id,
+      'startPoint': startPoint.trim(),
+      'endPoint': endPoint.trim(),
+      'price': price,
+      'vehicleTypes': vehicleTypes
+          .map((type) => type.trim())
+          .where((type) => type.isNotEmpty)
+          .toList(),
+      'scheduleSlots': <Map<String, dynamic>>[],
+      'driverQueueIds': <String>[],
+      'createdAt': now,
+      'updatedAt': now,
+    });
+  }
+
+  Stream<List<AdminRouteManagerItem>> adminRouteManagersStream() {
+    return _db.collection('route_manager').snapshots().asyncMap((
+      managersSnap,
+    ) async {
+      final usersSnap = await _db.collection('users').get();
+      final routesSnap = await _db.collection('route').get();
+      final usersById = {
+        for (final doc in usersSnap.docs) doc.id: doc.data(),
+      };
+      final routesById = {
+        for (final doc in routesSnap.docs) doc.id: doc.data(),
+      };
+      for (final doc in routesSnap.docs) {
+        final routeId = _readString(doc.data()['routeId']);
+        if (routeId.isNotEmpty) {
+          routesById[routeId] = doc.data();
+        }
+      }
+
+      final managers = managersSnap.docs.map((doc) {
+        final managerData = doc.data();
+        final userId = _readString(
+          managerData['userId'] ?? managerData['uid'] ?? doc.id,
+        );
+        final userData = usersById[userId] ?? const <String, dynamic>{};
+        final firstName = _readString(
+          userData['firstName'] ?? managerData['firstName'],
+        );
+        final lastName = _readString(
+          userData['lastName'] ?? managerData['lastName'],
+        );
+        final fullName = _readString(
+          userData['fullName'] ??
+              userData['name'] ??
+              managerData['fullName'] ??
+              managerData['name'] ??
+              '$firstName $lastName',
+        );
+        final routeId = _readString(
+          managerData['routeId'] ?? userData['routeId'],
+        );
+        final routeData = routesById[routeId] ?? const <String, dynamic>{};
+
+        return AdminRouteManagerItem(
+          managerId: doc.id,
+          userId: userId,
+          fullName: fullName.isEmpty ? 'Unknown route manager' : fullName,
+          email: _readString(userData['email'] ?? managerData['email']),
+          phone: _readString(
+            userData['phone'] ??
+                userData['phoneNumber'] ??
+                managerData['phone'] ??
+                managerData['phoneNumber'],
+          ),
+          isVerified:
+              userData['isVerified'] == true || managerData['isVerified'] == true,
+          isOnline:
+              userData['isOnline'] == true || managerData['isOnline'] == true,
+          routeId: routeId,
+          routeLabel: _routeLabel(routeData, routeId),
+          createdAt: _readDate(managerData['createdAt'] ?? userData['createdAt']),
+          updatedAt: _readDate(managerData['updatedAt'] ?? userData['updatedAt']),
+        );
+      }).toList()
+        ..sort((a, b) => a.fullName.compareTo(b.fullName));
+
+      final existingUserIds = managers
+          .map((manager) => manager.userId)
+          .where((id) => id.isNotEmpty)
+          .toSet();
+
+      for (final userDoc in usersSnap.docs) {
+        final userData = userDoc.data();
+        final role = _readString(userData['role']).toLowerCase();
+
+        if (role != 'route_manager' || existingUserIds.contains(userDoc.id)) {
+          continue;
+        }
+
+        final firstName = _readString(userData['firstName']);
+        final lastName = _readString(userData['lastName']);
+        final fullName = _readString(
+          userData['fullName'] ?? userData['name'] ?? '$firstName $lastName',
+        );
+        final routeId = _readString(userData['routeId']);
+        final routeData = routesById[routeId] ?? const <String, dynamic>{};
+
+        managers.add(
+          AdminRouteManagerItem(
+            managerId: userDoc.id,
+            userId: userDoc.id,
+            fullName: fullName.isEmpty ? 'Unknown route manager' : fullName,
+            email: _readString(userData['email']),
+            phone: _readString(userData['phone'] ?? userData['phoneNumber']),
+            isVerified: userData['isVerified'] == true,
+            isOnline: userData['isOnline'] == true,
+            routeId: routeId,
+            routeLabel: _routeLabel(routeData, routeId),
+            createdAt: _readDate(userData['createdAt']),
+            updatedAt: _readDate(userData['updatedAt']),
+          ),
+        );
+      }
+
+      managers.sort((a, b) => a.fullName.compareTo(b.fullName));
+
+      return managers;
+    });
+  }
+
   Stream<List<AdminTripItem>> adminTripsStream() {
     return _db.collection('route').snapshots().map((routesSnap) {
       final trips = <AdminTripItem>[];
@@ -437,6 +607,15 @@ class AdminDashboardService {
     if (value is String) return double.tryParse(value);
 
     return null;
+  }
+
+  List<String> _readStringList(dynamic value) {
+    if (value is! List) return const [];
+
+    return value
+        .map((item) => _readString(item))
+        .where((item) => item.isNotEmpty)
+        .toList();
   }
 
   double? _readNullableDouble(dynamic value) {

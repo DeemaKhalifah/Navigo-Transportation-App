@@ -6,7 +6,15 @@ import '../theme/app_theme.dart';
 import '../widgets/admin_account_dialog.dart';
 import 'admin_login_screen.dart';
 
-enum _AdminSection { dashboard, drivers, trips, passengers, reports }
+enum _AdminSection {
+  dashboard,
+  drivers,
+  routes,
+  routeManagers,
+  trips,
+  passengers,
+  reports,
+}
 
 class AdminDashboardScreen extends StatefulWidget {
   const AdminDashboardScreen({super.key});
@@ -109,6 +117,14 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     setState(() => _selectedSection = _AdminSection.drivers);
   }
 
+  void _showRoutes() {
+    setState(() => _selectedSection = _AdminSection.routes);
+  }
+
+  void _showRouteManagers() {
+    setState(() => _selectedSection = _AdminSection.routeManagers);
+  }
+
   void _showPassengers() {
     setState(() => _selectedSection = _AdminSection.passengers);
   }
@@ -128,6 +144,8 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
             isLoggingOut: _isLoggingOut,
             onDashboard: _showDashboard,
             onDrivers: _showDrivers,
+            onRoutes: _showRoutes,
+            onRouteManagers: _showRouteManagers,
             onTrips: _showTrips,
             onPassengers: _showPassengers,
             onReports: _showReports,
@@ -137,12 +155,16 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
             child: _selectedSection == _AdminSection.reports
                 ? _ReportsPanel(service: _service)
                 : _selectedSection == _AdminSection.drivers
-                    ? _DriversPanel(service: _service)
-                    : _selectedSection == _AdminSection.trips
-                        ? _TripsPanel(service: _service)
-                    : _selectedSection == _AdminSection.passengers
-                        ? _PassengersPanel(service: _service)
-                        : StreamBuilder<AdminDashboardModel>(
+                ? _DriversPanel(service: _service)
+                : _selectedSection == _AdminSection.routes
+                ? _RoutesPanel(service: _service)
+                : _selectedSection == _AdminSection.routeManagers
+                ? _RouteManagersPanel(service: _service)
+                : _selectedSection == _AdminSection.trips
+                ? _TripsPanel(service: _service)
+                : _selectedSection == _AdminSection.passengers
+                ? _PassengersPanel(service: _service)
+                : StreamBuilder<AdminDashboardModel>(
                     stream: _service.dashboardStream(),
                     builder: (context, snapshot) {
                       if (snapshot.connectionState == ConnectionState.waiting) {
@@ -160,127 +182,133 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                       final data = snapshot.data;
 
                       return Padding(
-                  padding: const EdgeInsets.fromLTRB(8, 16, 24, 16),
-                  child: Container(
-                    decoration: _cardDecoration(
-                      radius: 28,
-                    ).copyWith(color: NavigoColors.surfaceWhite),
-                    child: SingleChildScrollView(
-                      padding: const EdgeInsets.all(34),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const _Header(),
-                          const SizedBox(height: 34),
-                          GridView.count(
-                            crossAxisCount: 4,
-                            shrinkWrap: true,
-                            physics: const NeverScrollableScrollPhysics(),
-                            crossAxisSpacing: 22,
-                            mainAxisSpacing: 22,
-                            childAspectRatio: 1.5,
-                            children: [
-                              _StatCard(
-                                title: 'Total Users',
-                                value: data?.totalUsers.toString() ?? '0',
-                                label: 'All users',
-                                icon: Icons.groups_rounded,
-                                color: NavigoColors.accentBlue,
-                              ),
-                              _StatCard(
-                                title: 'Active Routes',
-                                value: data?.totalRoutes.toString() ?? '0',
-                                label: 'Available routes',
-                                icon: Icons.route_rounded,
-                                color: NavigoColors.accentGreen,
-                              ),
-                              _StatCard(
-                                title: 'Active Trips',
-                                value: data?.activeTrips.toString() ?? '0',
-                                label: 'On going',
-                                icon: Icons.directions_bus_rounded,
-                                color: NavigoColors.primaryOrange,
-                                onTap: _showTrips,
-                              ),
-                              _StatCard(
-                                title: 'Drivers',
-                                value: data?.totalDrivers.toString() ?? '0',
-                                label:
-                                    '${data?.pendingDrivers ?? 0} pending review',
-                                icon: Icons.local_taxi_rounded,
-                                color: Colors.purple,
-                                onTap: _showDrivers,
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 24),
-                          GridView.count(
-                            crossAxisCount: 4,
-                            shrinkWrap: true,
-                            physics: const NeverScrollableScrollPhysics(),
-                            crossAxisSpacing: 22,
-                            mainAxisSpacing: 22,
-                            childAspectRatio: 2.35,
-                            children: [
-                              _ActionCard(
-                                title: 'Drivers Approval',
-                                subtitle: 'Review and approve drivers',
-                                icon: Icons.verified_user_rounded,
-                                color: NavigoColors.accentGreen,
-                                onTap: _showDrivers,
-                              ),
-                              _ActionCard(
-                                title: 'Trips Management',
-                                subtitle: 'Manage all trips',
-                                icon: Icons.directions_bus_rounded,
-                                color: NavigoColors.primaryOrange,
-                                onTap: _showTrips,
-                              ),
-                              const _ActionCard(
-                                title: 'Routes Management',
-                                subtitle: 'Manage all routes',
-                                icon: Icons.route_rounded,
-                                color: NavigoColors.accentBlue,
-                              ),
-                              _ActionCard(
-                                title: 'Reports & Analytics',
-                                subtitle:
-                                    '${data?.reports.length ?? 0} admin reports',
-                                icon: Icons.bar_chart_rounded,
-                                color: Colors.purple,
-                                onTap: _showReports,
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 24),
-                          Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Expanded(
-                                flex: 2,
-                                child: _PieChartCard(
-                                  totalDrivers: data?.totalDrivers ?? 0,
-                                  pendingDrivers: data?.pendingDrivers ?? 0,
-                                  totalUsers: data?.totalUsers ?? 0,
+                        padding: const EdgeInsets.fromLTRB(8, 16, 24, 16),
+                        child: Container(
+                          decoration: _cardDecoration(
+                            radius: 28,
+                          ).copyWith(color: NavigoColors.surfaceWhite),
+                          child: SingleChildScrollView(
+                            padding: const EdgeInsets.all(34),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const _Header(),
+                                const SizedBox(height: 34),
+                                GridView.count(
+                                  crossAxisCount: 4,
+                                  shrinkWrap: true,
+                                  physics: const NeverScrollableScrollPhysics(),
+                                  crossAxisSpacing: 22,
+                                  mainAxisSpacing: 22,
+                                  childAspectRatio: 1.5,
+                                  children: [
+                                    _StatCard(
+                                      title: 'Total Users',
+                                      value: data?.totalUsers.toString() ?? '0',
+                                      label: 'All users',
+                                      icon: Icons.groups_rounded,
+                                      color: NavigoColors.accentBlue,
+                                    ),
+                                    _StatCard(
+                                      title: 'Active Routes',
+                                      value:
+                                          data?.totalRoutes.toString() ?? '0',
+                                      label: 'Available routes',
+                                      icon: Icons.route_rounded,
+                                      color: NavigoColors.accentGreen,
+                                      onTap: _showRoutes,
+                                    ),
+                                    _StatCard(
+                                      title: 'Active Trips',
+                                      value:
+                                          data?.activeTrips.toString() ?? '0',
+                                      label: 'On going',
+                                      icon: Icons.directions_bus_rounded,
+                                      color: NavigoColors.primaryOrange,
+                                      onTap: _showTrips,
+                                    ),
+                                    _StatCard(
+                                      title: 'Drivers',
+                                      value:
+                                          data?.totalDrivers.toString() ?? '0',
+                                      label:
+                                          '${data?.pendingDrivers ?? 0} pending review',
+                                      icon: Icons.local_taxi_rounded,
+                                      color: Colors.purple,
+                                      onTap: _showDrivers,
+                                    ),
+                                  ],
                                 ),
-                              ),
-                              const SizedBox(width: 24),
-                              Expanded(
-                                flex: 4,
-                                child: _PendingApprovalsCard(
-                                  approvals: data?.approvals ?? [],
-                                  busyApprovalIds: _busyApprovalIds,
-                                  onApprove: _approveDriver,
-                                  onReject: _rejectDriver,
+                                const SizedBox(height: 24),
+                                GridView.count(
+                                  crossAxisCount: 4,
+                                  shrinkWrap: true,
+                                  physics: const NeverScrollableScrollPhysics(),
+                                  crossAxisSpacing: 22,
+                                  mainAxisSpacing: 22,
+                                  childAspectRatio: 2.35,
+                                  children: [
+                                    _ActionCard(
+                                      title: 'Drivers Approval',
+                                      subtitle: 'Review and approve drivers',
+                                      icon: Icons.verified_user_rounded,
+                                      color: NavigoColors.accentGreen,
+                                      onTap: _showDrivers,
+                                    ),
+                                    _ActionCard(
+                                      title: 'Trips Management',
+                                      subtitle: 'Manage all trips',
+                                      icon: Icons.directions_bus_rounded,
+                                      color: NavigoColors.primaryOrange,
+                                      onTap: _showTrips,
+                                    ),
+                                    _ActionCard(
+                                      title: 'Routes Management',
+                                      subtitle: 'Manage all routes',
+                                      icon: Icons.route_rounded,
+                                      color: NavigoColors.accentBlue,
+                                      onTap: _showRoutes,
+                                    ),
+                                    _ActionCard(
+                                      title: 'Reports & Analytics',
+                                      subtitle:
+                                          '${data?.reports.length ?? 0} admin reports',
+                                      icon: Icons.bar_chart_rounded,
+                                      color: Colors.purple,
+                                      onTap: _showReports,
+                                    ),
+                                  ],
                                 ),
-                              ),
-                            ],
+                                const SizedBox(height: 24),
+                                Row(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Expanded(
+                                      flex: 2,
+                                      child: _PieChartCard(
+                                        totalDrivers: data?.totalDrivers ?? 0,
+                                        pendingDrivers:
+                                            data?.pendingDrivers ?? 0,
+                                        totalUsers: data?.totalUsers ?? 0,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 24),
+                                    Expanded(
+                                      flex: 4,
+                                      child: _PendingApprovalsCard(
+                                        approvals: data?.approvals ?? [],
+                                        busyApprovalIds: _busyApprovalIds,
+                                        onApprove: _approveDriver,
+                                        onReject: _rejectDriver,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ),
                           ),
-                        ],
-                      ),
-                    ),
-                  ),
-                );
+                        ),
+                      );
                     },
                   ),
           ),
@@ -340,10 +368,16 @@ class _DriversPanelState extends State<_DriversPanel> {
                   final drivers = (snapshot.data ?? []).where((driver) {
                     if (_searchQuery.isEmpty) return true;
 
-                    return driver.fullName.toLowerCase().contains(_searchQuery) ||
+                    return driver.fullName.toLowerCase().contains(
+                          _searchQuery,
+                        ) ||
                         driver.phone.toLowerCase().contains(_searchQuery) ||
-                        driver.vehicleType.toLowerCase().contains(_searchQuery) ||
-                        driver.routeLabel.toLowerCase().contains(_searchQuery) ||
+                        driver.vehicleType.toLowerCase().contains(
+                          _searchQuery,
+                        ) ||
+                        driver.routeLabel.toLowerCase().contains(
+                          _searchQuery,
+                        ) ||
                         driver.plateNumber.toLowerCase().contains(_searchQuery);
                   }).toList();
 
@@ -367,80 +401,82 @@ class _DriversPanelState extends State<_DriversPanel> {
                               minWidth: constraints.maxWidth - 48,
                             ),
                             child: DataTable(
-                        columnSpacing: 36,
-                        headingRowHeight: 58,
-                        dataRowMinHeight: 64,
-                        dataRowMaxHeight: 76,
-                        headingTextStyle: const TextStyle(
-                          color: Colors.black,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 15,
-                        ),
-                        dataTextStyle: const TextStyle(
-                          color: Colors.black,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 14,
-                        ),
-                        headingRowColor: const WidgetStatePropertyAll(
-                          NavigoColors.backgroundAlt,
-                        ),
-                        columns: const [
-                          DataColumn(label: Text('Name')),
-                          DataColumn(label: Text('Phone')),
-                          DataColumn(label: Text('Status')),
-                          DataColumn(label: Text('Approval')),
-                          DataColumn(label: Text('Vehicle')),
-                          DataColumn(label: Text('Route')),
-                          DataColumn(label: Text('Details')),
-                        ],
-                        rows: drivers.map((driver) {
-                          return DataRow(
-                            cells: [
-                              DataCell(
-                                Text(
-                                  driver.fullName,
-                                  style: const TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
+                              columnSpacing: 36,
+                              headingRowHeight: 58,
+                              dataRowMinHeight: 64,
+                              dataRowMaxHeight: 76,
+                              headingTextStyle: const TextStyle(
+                                color: Colors.black,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 15,
                               ),
-                              DataCell(Text(_dash(driver.phone))),
-                              DataCell(
-                                _Chip(
-                                  label: driver.isOnline
-                                      ? 'Online'
-                                      : _formatStatus(driver.status),
-                                  color: driver.isOnline
-                                      ? NavigoColors.accentGreen
-                                      : NavigoColors.textGray,
-                                ),
+                              dataTextStyle: const TextStyle(
+                                color: Colors.black,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 14,
                               ),
-                              DataCell(
-                                _Chip(
-                                  label: driver.isApproved
-                                      ? 'Approved'
-                                      : _formatStatus(driver.approvalStatus),
-                                  color: driver.isApproved
-                                      ? NavigoColors.accentGreen
-                                      : NavigoColors.primaryOrange,
-                                ),
+                              headingRowColor: const WidgetStatePropertyAll(
+                                NavigoColors.backgroundAlt,
                               ),
-                              DataCell(Text(_dash(driver.vehicleType))),
-                              DataCell(Text(_dash(driver.routeLabel))),
-                              DataCell(
-                                TextButton.icon(
-                                  onPressed: () =>
-                                      _showDriverDetails(context, driver),
-                                  icon: const Icon(
-                                    Icons.open_in_new_rounded,
-                                    size: 16,
-                                  ),
-                                  label: const Text('Open'),
-                                ),
-                              ),
-                            ],
-                          );
-                        }).toList(),
+                              columns: const [
+                                DataColumn(label: Text('Name')),
+                                DataColumn(label: Text('Phone')),
+                                DataColumn(label: Text('Status')),
+                                DataColumn(label: Text('Approval')),
+                                DataColumn(label: Text('Vehicle')),
+                                DataColumn(label: Text('Route')),
+                                DataColumn(label: Text('Details')),
+                              ],
+                              rows: drivers.map((driver) {
+                                return DataRow(
+                                  cells: [
+                                    DataCell(
+                                      Text(
+                                        driver.fullName,
+                                        style: const TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                    ),
+                                    DataCell(Text(_dash(driver.phone))),
+                                    DataCell(
+                                      _Chip(
+                                        label: driver.isOnline
+                                            ? 'Online'
+                                            : _formatStatus(driver.status),
+                                        color: driver.isOnline
+                                            ? NavigoColors.accentGreen
+                                            : NavigoColors.textGray,
+                                      ),
+                                    ),
+                                    DataCell(
+                                      _Chip(
+                                        label: driver.isApproved
+                                            ? 'Approved'
+                                            : _formatStatus(
+                                                driver.approvalStatus,
+                                              ),
+                                        color: driver.isApproved
+                                            ? NavigoColors.accentGreen
+                                            : NavigoColors.primaryOrange,
+                                      ),
+                                    ),
+                                    DataCell(Text(_dash(driver.vehicleType))),
+                                    DataCell(Text(_dash(driver.routeLabel))),
+                                    DataCell(
+                                      TextButton.icon(
+                                        onPressed: () =>
+                                            _showDriverDetails(context, driver),
+                                        icon: const Icon(
+                                          Icons.open_in_new_rounded,
+                                          size: 16,
+                                        ),
+                                        label: const Text('Open'),
+                                      ),
+                                    ),
+                                  ],
+                                );
+                              }).toList(),
                             ),
                           ),
                         ),
@@ -542,7 +578,10 @@ class _DriversPanelState extends State<_DriversPanel> {
                       children: [
                         _DetailRow(label: 'Route', value: driver.routeLabel),
                         _DetailRow(label: 'Route ID', value: driver.routeId),
-                        _DetailRow(label: 'Vehicle ID', value: driver.vehicleId),
+                        _DetailRow(
+                          label: 'Vehicle ID',
+                          value: driver.vehicleId,
+                        ),
                         _DetailRow(
                           label: 'Vehicle Type',
                           value: driver.vehicleType,
@@ -568,6 +607,695 @@ class _DriversPanelState extends State<_DriversPanel> {
                         _DetailRow(
                           label: 'Updated At',
                           value: _formatDate(driver.updatedAt),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 24),
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: FilledButton(
+                        onPressed: () => Navigator.pop(context),
+                        style: FilledButton.styleFrom(
+                          backgroundColor: NavigoColors.primaryOrange,
+                          foregroundColor: Colors.white,
+                        ),
+                        child: const Text('Close'),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _RoutesPanel extends StatefulWidget {
+  final AdminDashboardService service;
+
+  const _RoutesPanel({required this.service});
+
+  @override
+  State<_RoutesPanel> createState() => _RoutesPanelState();
+}
+
+class _RoutesPanelState extends State<_RoutesPanel> {
+  String _searchQuery = '';
+
+  Future<void> _showCreateRouteDialog() async {
+    final created = await showDialog<bool>(
+      context: context,
+      builder: (context) => _CreateRouteDialog(service: widget.service),
+    );
+
+    if (!mounted || created != true) return;
+
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('Route created')));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(8, 16, 24, 16),
+      child: Container(
+        decoration: _cardDecoration(
+          radius: 28,
+        ).copyWith(color: NavigoColors.surfaceWhite),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.all(34),
+              child: Row(
+                children: [
+                  const Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Routes',
+                          style: TextStyle(
+                            fontSize: 30,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        SizedBox(height: 6),
+                        Text(
+                          'All routes from the route collection',
+                          style: NavigoTextStyles.bodyMedium,
+                        ),
+                      ],
+                    ),
+                  ),
+                  SizedBox(
+                    width: 320,
+                    child: TextField(
+                      onChanged: (value) {
+                        setState(() => _searchQuery = value.trim().toLowerCase());
+                      },
+                      decoration: NavigoDecorations.kInputDecoration.copyWith(
+                        hintText: 'Search routes...',
+                        prefixIcon: const Icon(Icons.search),
+                        fillColor: Colors.white,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 14),
+                  FilledButton.icon(
+                    onPressed: _showCreateRouteDialog,
+                    icon: const Icon(Icons.add_rounded),
+                    label: const Text('Create Route'),
+                    style: FilledButton.styleFrom(
+                      backgroundColor: NavigoColors.primaryOrange,
+                      foregroundColor: Colors.white,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const Divider(height: 1),
+            Expanded(
+              child: StreamBuilder<List<AdminRouteItem>>(
+                stream: widget.service.adminRoutesStream(),
+                builder: (context, snapshot) {
+                  if (snapshot.connectionState == ConnectionState.waiting) {
+                    return const Center(child: CircularProgressIndicator());
+                  }
+
+                  if (snapshot.hasError) {
+                    return Center(
+                      child: Text('Error loading routes: ${snapshot.error}'),
+                    );
+                  }
+
+                  final routes = (snapshot.data ?? []).where((route) {
+                    if (_searchQuery.isEmpty) return true;
+
+                    return route.routeId.toLowerCase().contains(_searchQuery) ||
+                        route.startPoint.toLowerCase().contains(_searchQuery) ||
+                        route.endPoint.toLowerCase().contains(_searchQuery) ||
+                        route.vehicleTypes
+                            .join(', ')
+                            .toLowerCase()
+                            .contains(_searchQuery);
+                  }).toList();
+
+                  if (routes.isEmpty) {
+                    return const Center(
+                      child: Text(
+                        'No routes found',
+                        style: NavigoTextStyles.bodyMedium,
+                      ),
+                    );
+                  }
+
+                  return LayoutBuilder(
+                    builder: (context, constraints) {
+                      return SingleChildScrollView(
+                        padding: const EdgeInsets.all(24),
+                        child: SingleChildScrollView(
+                          scrollDirection: Axis.horizontal,
+                          child: ConstrainedBox(
+                            constraints: BoxConstraints(
+                              minWidth: constraints.maxWidth - 48,
+                            ),
+                            child: DataTable(
+                              columnSpacing: 36,
+                              headingRowHeight: 58,
+                              dataRowMinHeight: 64,
+                              dataRowMaxHeight: 76,
+                              headingTextStyle: const TextStyle(
+                                color: Colors.black,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 15,
+                              ),
+                              dataTextStyle: const TextStyle(
+                                color: Colors.black,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 14,
+                              ),
+                              headingRowColor: const WidgetStatePropertyAll(
+                                NavigoColors.backgroundAlt,
+                              ),
+                              columns: const [
+                                DataColumn(label: Text('Route ID')),
+                                DataColumn(label: Text('Start')),
+                                DataColumn(label: Text('End')),
+                                DataColumn(label: Text('Price')),
+                                DataColumn(label: Text('Vehicles')),
+                                DataColumn(label: Text('Slots')),
+                                DataColumn(label: Text('Driver Queue')),
+                                DataColumn(label: Text('Updated')),
+                              ],
+                              rows: routes.map((route) {
+                                return DataRow(
+                                  cells: [
+                                    DataCell(Text(_dash(route.routeId))),
+                                    DataCell(Text(_dash(route.startPoint))),
+                                    DataCell(Text(_dash(route.endPoint))),
+                                    DataCell(
+                                      Text(route.price.toStringAsFixed(2)),
+                                    ),
+                                    DataCell(
+                                      Text(
+                                        route.vehicleTypes.isEmpty
+                                            ? '-'
+                                            : route.vehicleTypes.join(', '),
+                                      ),
+                                    ),
+                                    DataCell(
+                                      Text(route.scheduleSlotCount.toString()),
+                                    ),
+                                    DataCell(
+                                      Text(route.driverQueueCount.toString()),
+                                    ),
+                                    DataCell(Text(_formatDate(route.updatedAt))),
+                                  ],
+                                );
+                              }).toList(),
+                            ),
+                          ),
+                        ),
+                      );
+                    },
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _CreateRouteDialog extends StatefulWidget {
+  final AdminDashboardService service;
+
+  const _CreateRouteDialog({required this.service});
+
+  @override
+  State<_CreateRouteDialog> createState() => _CreateRouteDialogState();
+}
+
+class _CreateRouteDialogState extends State<_CreateRouteDialog> {
+  final _formKey = GlobalKey<FormState>();
+  final _startController = TextEditingController();
+  final _endController = TextEditingController();
+  final _priceController = TextEditingController();
+  final _vehicleTypesController = TextEditingController(text: 'bus, microbus');
+  bool _isSaving = false;
+
+  @override
+  void dispose() {
+    _startController.dispose();
+    _endController.dispose();
+    _priceController.dispose();
+    _vehicleTypesController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _saveRoute() async {
+    if (!_formKey.currentState!.validate() || _isSaving) return;
+
+    setState(() => _isSaving = true);
+    try {
+      final vehicleTypes = _vehicleTypesController.text
+          .split(',')
+          .map((type) => type.trim())
+          .where((type) => type.isNotEmpty)
+          .toList();
+
+      await widget.service.createRoute(
+        startPoint: _startController.text,
+        endPoint: _endController.text,
+        price: double.parse(_priceController.text.trim()),
+        vehicleTypes: vehicleTypes,
+      );
+
+      if (!mounted) return;
+      Navigator.pop(context, true);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Could not create route: $e')));
+    } finally {
+      if (mounted) {
+        setState(() => _isSaving = false);
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      insetPadding: const EdgeInsets.symmetric(horizontal: 56, vertical: 40),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 560),
+        child: Padding(
+          padding: const EdgeInsets.all(28),
+          child: Form(
+            key: _formKey,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    const Expanded(
+                      child: Text(
+                        'Create Route',
+                        style: TextStyle(
+                          fontSize: 24,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                    IconButton(
+                      onPressed:
+                          _isSaving ? null : () => Navigator.pop(context, false),
+                      icon: const Icon(Icons.close_rounded),
+                      tooltip: 'Close',
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 22),
+                TextFormField(
+                  controller: _startController,
+                  decoration: NavigoDecorations.kInputDecoration.copyWith(
+                    labelText: 'Start point',
+                    prefixIcon: const Icon(Icons.trip_origin_rounded),
+                    fillColor: Colors.white,
+                  ),
+                  validator: (value) {
+                    if (value == null || value.trim().isEmpty) {
+                      return 'Start point is required';
+                    }
+                    return null;
+                  },
+                ),
+                const SizedBox(height: 14),
+                TextFormField(
+                  controller: _endController,
+                  decoration: NavigoDecorations.kInputDecoration.copyWith(
+                    labelText: 'End point',
+                    prefixIcon: const Icon(Icons.location_on_rounded),
+                    fillColor: Colors.white,
+                  ),
+                  validator: (value) {
+                    if (value == null || value.trim().isEmpty) {
+                      return 'End point is required';
+                    }
+                    return null;
+                  },
+                ),
+                const SizedBox(height: 14),
+                TextFormField(
+                  controller: _priceController,
+                  keyboardType: const TextInputType.numberWithOptions(
+                    decimal: true,
+                  ),
+                  decoration: NavigoDecorations.kInputDecoration.copyWith(
+                    labelText: 'Price',
+                    prefixIcon: const Icon(Icons.payments_rounded),
+                    fillColor: Colors.white,
+                  ),
+                  validator: (value) {
+                    final price = double.tryParse(value?.trim() ?? '');
+                    if (price == null || price < 0) {
+                      return 'Enter a valid price';
+                    }
+                    return null;
+                  },
+                ),
+                const SizedBox(height: 14),
+                TextFormField(
+                  controller: _vehicleTypesController,
+                  decoration: NavigoDecorations.kInputDecoration.copyWith(
+                    labelText: 'Vehicle types',
+                    hintText: 'bus, microbus',
+                    prefixIcon: const Icon(Icons.directions_bus_rounded),
+                    fillColor: Colors.white,
+                  ),
+                  validator: (value) {
+                    final types = (value ?? '')
+                        .split(',')
+                        .map((type) => type.trim())
+                        .where((type) => type.isNotEmpty)
+                        .toList();
+                    if (types.isEmpty) {
+                      return 'Add at least one vehicle type';
+                    }
+                    return null;
+                  },
+                ),
+                const SizedBox(height: 24),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: FilledButton.icon(
+                    onPressed: _isSaving ? null : _saveRoute,
+                    icon: _isSaving
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.add_rounded),
+                    label: Text(_isSaving ? 'Creating...' : 'Create Route'),
+                    style: FilledButton.styleFrom(
+                      backgroundColor: NavigoColors.primaryOrange,
+                      foregroundColor: Colors.white,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _RouteManagersPanel extends StatefulWidget {
+  final AdminDashboardService service;
+
+  const _RouteManagersPanel({required this.service});
+
+  @override
+  State<_RouteManagersPanel> createState() => _RouteManagersPanelState();
+}
+
+class _RouteManagersPanelState extends State<_RouteManagersPanel> {
+  String _searchQuery = '';
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(8, 16, 24, 16),
+      child: Container(
+        decoration: _cardDecoration(
+          radius: 28,
+        ).copyWith(color: NavigoColors.surfaceWhite),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _SectionHeader(
+              title: 'Route Managers',
+              subtitle:
+                  'All route managers with information from users and route_manager collections',
+              searchHint: 'Search route managers...',
+              onSearchChanged: (value) {
+                setState(() => _searchQuery = value.trim().toLowerCase());
+              },
+            ),
+            const Divider(height: 1),
+            Expanded(
+              child: StreamBuilder<List<AdminRouteManagerItem>>(
+                stream: widget.service.adminRouteManagersStream(),
+                builder: (context, snapshot) {
+                  if (snapshot.connectionState == ConnectionState.waiting) {
+                    return const Center(child: CircularProgressIndicator());
+                  }
+
+                  if (snapshot.hasError) {
+                    return Center(
+                      child: Text(
+                        'Error loading route managers: ${snapshot.error}',
+                      ),
+                    );
+                  }
+
+                  final managers = (snapshot.data ?? []).where((manager) {
+                    if (_searchQuery.isEmpty) return true;
+
+                    return manager.fullName
+                            .toLowerCase()
+                            .contains(_searchQuery) ||
+                        manager.email.toLowerCase().contains(_searchQuery) ||
+                        manager.phone.toLowerCase().contains(_searchQuery) ||
+                        manager.routeLabel
+                            .toLowerCase()
+                            .contains(_searchQuery) ||
+                        manager.routeId.toLowerCase().contains(_searchQuery);
+                  }).toList();
+
+                  if (managers.isEmpty) {
+                    return const Center(
+                      child: Text(
+                        'No route managers found',
+                        style: NavigoTextStyles.bodyMedium,
+                      ),
+                    );
+                  }
+
+                  return LayoutBuilder(
+                    builder: (context, constraints) {
+                      return SingleChildScrollView(
+                        padding: const EdgeInsets.all(24),
+                        child: SingleChildScrollView(
+                          scrollDirection: Axis.horizontal,
+                          child: ConstrainedBox(
+                            constraints: BoxConstraints(
+                              minWidth: constraints.maxWidth - 48,
+                            ),
+                            child: DataTable(
+                              columnSpacing: 36,
+                              headingRowHeight: 58,
+                              dataRowMinHeight: 64,
+                              dataRowMaxHeight: 76,
+                              headingTextStyle: const TextStyle(
+                                color: Colors.black,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 15,
+                              ),
+                              dataTextStyle: const TextStyle(
+                                color: Colors.black,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 14,
+                              ),
+                              headingRowColor: const WidgetStatePropertyAll(
+                                NavigoColors.backgroundAlt,
+                              ),
+                              columns: const [
+                                DataColumn(label: Text('Name')),
+                                DataColumn(label: Text('Email')),
+                                DataColumn(label: Text('Phone')),
+                                DataColumn(label: Text('Route')),
+                                DataColumn(label: Text('Verified')),
+                                DataColumn(label: Text('Online')),
+                                DataColumn(label: Text('Details')),
+                              ],
+                              rows: managers.map((manager) {
+                                return DataRow(
+                                  cells: [
+                                    DataCell(
+                                      Text(
+                                        manager.fullName,
+                                        style: const TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                    ),
+                                    DataCell(Text(_dash(manager.email))),
+                                    DataCell(Text(_dash(manager.phone))),
+                                    DataCell(Text(_dash(manager.routeLabel))),
+                                    DataCell(
+                                      _Chip(
+                                        label:
+                                            manager.isVerified ? 'Yes' : 'No',
+                                        color: manager.isVerified
+                                            ? NavigoColors.accentGreen
+                                            : NavigoColors.primaryOrange,
+                                      ),
+                                    ),
+                                    DataCell(
+                                      _Chip(
+                                        label: manager.isOnline
+                                            ? 'Online'
+                                            : 'Offline',
+                                        color: manager.isOnline
+                                            ? NavigoColors.accentGreen
+                                            : NavigoColors.textGray,
+                                      ),
+                                    ),
+                                    DataCell(
+                                      TextButton.icon(
+                                        onPressed: () =>
+                                            _showRouteManagerDetails(
+                                          context,
+                                          manager,
+                                        ),
+                                        icon: const Icon(
+                                          Icons.open_in_new_rounded,
+                                          size: 16,
+                                        ),
+                                        label: const Text('Open'),
+                                      ),
+                                    ),
+                                  ],
+                                );
+                              }).toList(),
+                            ),
+                          ),
+                        ),
+                      );
+                    },
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showRouteManagerDetails(
+    BuildContext context,
+    AdminRouteManagerItem manager,
+  ) {
+    showDialog(
+      context: context,
+      builder: (context) {
+        return Dialog(
+          insetPadding: const EdgeInsets.symmetric(
+            horizontal: 56,
+            vertical: 40,
+          ),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(24),
+          ),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 860),
+            child: Padding(
+              padding: const EdgeInsets.all(28),
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        CircleAvatar(
+                          radius: 24,
+                          backgroundColor:
+                              NavigoColors.primaryOrange.withOpacity(0.12),
+                          child: const Icon(
+                            Icons.manage_accounts_rounded,
+                            color: NavigoColors.primaryOrange,
+                          ),
+                        ),
+                        const SizedBox(width: 14),
+                        Expanded(
+                          child: Text(
+                            manager.fullName,
+                            style: const TextStyle(
+                              fontSize: 24,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                        IconButton(
+                          onPressed: () => Navigator.pop(context),
+                          icon: const Icon(Icons.close_rounded),
+                          tooltip: 'Close',
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 24),
+                    _DetailSection(
+                      title: 'Account Information',
+                      children: [
+                        _DetailRow(
+                          label: 'Manager ID',
+                          value: manager.managerId,
+                        ),
+                        _DetailRow(label: 'User ID', value: manager.userId),
+                        _DetailRow(label: 'Email', value: manager.email),
+                        _DetailRow(label: 'Phone', value: manager.phone),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    _DetailSection(
+                      title: 'Route Assignment',
+                      children: [
+                        _DetailRow(label: 'Route', value: manager.routeLabel),
+                        _DetailRow(label: 'Route ID', value: manager.routeId),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    _DetailSection(
+                      title: 'Status',
+                      children: [
+                        _DetailRow(
+                          label: 'Verified',
+                          value: manager.isVerified ? 'Yes' : 'No',
+                        ),
+                        _DetailRow(
+                          label: 'Online',
+                          value: manager.isOnline ? 'Yes' : 'No',
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    _DetailSection(
+                      title: 'Dates',
+                      children: [
+                        _DetailRow(
+                          label: 'Created At',
+                          value: _formatDate(manager.createdAt),
+                        ),
+                        _DetailRow(
+                          label: 'Updated At',
+                          value: _formatDate(manager.updatedAt),
                         ),
                       ],
                     ),
@@ -628,15 +1356,15 @@ class _TripsPanelState extends State<_TripsPanel> {
             }
 
             final trips = snapshot.data ?? [];
-            final routeNames = <String>{
-              'All Routes',
-              ...trips.map((trip) => trip.routeLabel),
-            }.toList()
-              ..sort((a, b) {
-                if (a == 'All Routes') return -1;
-                if (b == 'All Routes') return 1;
-                return a.compareTo(b);
-              });
+            final routeNames =
+                <String>{
+                  'All Routes',
+                  ...trips.map((trip) => trip.routeLabel),
+                }.toList()..sort((a, b) {
+                  if (a == 'All Routes') return -1;
+                  if (b == 'All Routes') return 1;
+                  return a.compareTo(b);
+                });
 
             if (!routeNames.contains(_selectedRoute)) {
               _selectedRoute = 'All Routes';
@@ -645,8 +1373,8 @@ class _TripsPanelState extends State<_TripsPanel> {
             final visibleTrips = _selectedRoute == 'All Routes'
                 ? trips
                 : trips
-                    .where((trip) => trip.routeLabel == _selectedRoute)
-                    .toList();
+                      .where((trip) => trip.routeLabel == _selectedRoute)
+                      .toList();
 
             return Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -677,13 +1405,13 @@ class _TripsPanelState extends State<_TripsPanel> {
                       SizedBox(
                         width: 320,
                         child: DropdownButtonFormField<String>(
-                          value: _selectedRoute,
-                          decoration:
-                              NavigoDecorations.kInputDecoration.copyWith(
-                            labelText: 'Filter by route',
-                            prefixIcon: const Icon(Icons.route_rounded),
-                            fillColor: Colors.white,
-                          ),
+                          initialValue: _selectedRoute,
+                          decoration: NavigoDecorations.kInputDecoration
+                              .copyWith(
+                                labelText: 'Filter by route',
+                                prefixIcon: const Icon(Icons.route_rounded),
+                                fillColor: Colors.white,
+                              ),
                           items: routeNames
                               .map(
                                 (route) => DropdownMenuItem(
@@ -742,7 +1470,7 @@ class _TripsPanelState extends State<_TripsPanel> {
                       : ListView.separated(
                           padding: const EdgeInsets.all(34),
                           itemCount: visibleTrips.length,
-                          separatorBuilder: (_, __) =>
+                          separatorBuilder: (_, _) =>
                               const SizedBox(height: 16),
                           itemBuilder: (context, index) {
                             return _TripCard(trip: visibleTrips[index]);
@@ -975,16 +1703,18 @@ class _PassengersPanelState extends State<_PassengersPanel> {
 
                   if (snapshot.hasError) {
                     return Center(
-                      child: Text('Error loading passengers: ${snapshot.error}'),
+                      child: Text(
+                        'Error loading passengers: ${snapshot.error}',
+                      ),
                     );
                   }
 
                   final passengers = (snapshot.data ?? []).where((passenger) {
                     if (_searchQuery.isEmpty) return true;
 
-                    return passenger.fullName
-                            .toLowerCase()
-                            .contains(_searchQuery) ||
+                    return passenger.fullName.toLowerCase().contains(
+                          _searchQuery,
+                        ) ||
                         passenger.phone.toLowerCase().contains(_searchQuery) ||
                         passenger.pickupLocationDescription
                             .toLowerCase()
@@ -1011,80 +1741,94 @@ class _PassengersPanelState extends State<_PassengersPanel> {
                               minWidth: constraints.maxWidth - 48,
                             ),
                             child: DataTable(
-                        columnSpacing: 36,
-                        headingRowHeight: 58,
-                        dataRowMinHeight: 64,
-                        dataRowMaxHeight: 76,
-                        headingTextStyle: const TextStyle(
-                          color: Colors.black,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 15,
-                        ),
-                        dataTextStyle: const TextStyle(
-                          color: Colors.black,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 14,
-                        ),
-                        headingRowColor: const WidgetStatePropertyAll(
-                          NavigoColors.backgroundAlt,
-                        ),
-                        columns: const [
-                          DataColumn(label: Text('Name')),
-                          DataColumn(label: Text('Phone')),
-                          DataColumn(label: Text('Verified')),
-                          DataColumn(label: Text('Online')),
-                          DataColumn(label: Text('Pickup')),
-                          DataColumn(label: Text('Last Location')),
-                          DataColumn(label: Text('Details')),
-                        ],
-                        rows: passengers.map((passenger) {
-                          return DataRow(
-                            cells: [
-                              DataCell(
-                                Text(
-                                  passenger.fullName,
-                                  style: const TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
+                              columnSpacing: 36,
+                              headingRowHeight: 58,
+                              dataRowMinHeight: 64,
+                              dataRowMaxHeight: 76,
+                              headingTextStyle: const TextStyle(
+                                color: Colors.black,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 15,
                               ),
-                              DataCell(Text(_dash(passenger.phone))),
-                              DataCell(
-                                _Chip(
-                                  label: passenger.isVerified ? 'Yes' : 'No',
-                                  color: passenger.isVerified
-                                      ? NavigoColors.accentGreen
-                                      : NavigoColors.primaryOrange,
-                                ),
+                              dataTextStyle: const TextStyle(
+                                color: Colors.black,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 14,
                               ),
-                              DataCell(
-                                _Chip(
-                                  label: passenger.isOnline ? 'Online' : 'Offline',
-                                  color: passenger.isOnline
-                                      ? NavigoColors.accentGreen
-                                      : NavigoColors.textGray,
-                                ),
+                              headingRowColor: const WidgetStatePropertyAll(
+                                NavigoColors.backgroundAlt,
                               ),
-                              DataCell(
-                                Text(_dash(passenger.pickupLocationDescription)),
-                              ),
-                              DataCell(
-                                Text(_formatDate(passenger.lastLocationUpdate)),
-                              ),
-                              DataCell(
-                                TextButton.icon(
-                                  onPressed: () =>
-                                      _showPassengerDetails(context, passenger),
-                                  icon: const Icon(
-                                    Icons.open_in_new_rounded,
-                                    size: 16,
-                                  ),
-                                  label: const Text('Open'),
-                                ),
-                              ),
-                            ],
-                          );
-                        }).toList(),
+                              columns: const [
+                                DataColumn(label: Text('Name')),
+                                DataColumn(label: Text('Phone')),
+                                DataColumn(label: Text('Verified')),
+                                DataColumn(label: Text('Online')),
+                                DataColumn(label: Text('Pickup')),
+                                DataColumn(label: Text('Last Location')),
+                                DataColumn(label: Text('Details')),
+                              ],
+                              rows: passengers.map((passenger) {
+                                return DataRow(
+                                  cells: [
+                                    DataCell(
+                                      Text(
+                                        passenger.fullName,
+                                        style: const TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                    ),
+                                    DataCell(Text(_dash(passenger.phone))),
+                                    DataCell(
+                                      _Chip(
+                                        label: passenger.isVerified
+                                            ? 'Yes'
+                                            : 'No',
+                                        color: passenger.isVerified
+                                            ? NavigoColors.accentGreen
+                                            : NavigoColors.primaryOrange,
+                                      ),
+                                    ),
+                                    DataCell(
+                                      _Chip(
+                                        label: passenger.isOnline
+                                            ? 'Online'
+                                            : 'Offline',
+                                        color: passenger.isOnline
+                                            ? NavigoColors.accentGreen
+                                            : NavigoColors.textGray,
+                                      ),
+                                    ),
+                                    DataCell(
+                                      Text(
+                                        _dash(
+                                          passenger.pickupLocationDescription,
+                                        ),
+                                      ),
+                                    ),
+                                    DataCell(
+                                      Text(
+                                        _formatDate(
+                                          passenger.lastLocationUpdate,
+                                        ),
+                                      ),
+                                    ),
+                                    DataCell(
+                                      TextButton.icon(
+                                        onPressed: () => _showPassengerDetails(
+                                          context,
+                                          passenger,
+                                        ),
+                                        icon: const Icon(
+                                          Icons.open_in_new_rounded,
+                                          size: 16,
+                                        ),
+                                        label: const Text('Open'),
+                                      ),
+                                    ),
+                                  ],
+                                );
+                              }).toList(),
                             ),
                           ),
                         ),
@@ -1128,8 +1872,9 @@ class _PassengersPanelState extends State<_PassengersPanel> {
                       children: [
                         CircleAvatar(
                           radius: 24,
-                          backgroundColor:
-                              NavigoColors.accentBlue.withOpacity(0.12),
+                          backgroundColor: NavigoColors.accentBlue.withOpacity(
+                            0.12,
+                          ),
                           child: const Icon(
                             Icons.people_alt_rounded,
                             color: NavigoColors.accentBlue,
@@ -1300,7 +2045,7 @@ class _ReportsPanel extends StatelessWidget {
                   return ListView.separated(
                     padding: const EdgeInsets.all(24),
                     itemCount: reports.length,
-                    separatorBuilder: (_, __) => const SizedBox(height: 12),
+                    separatorBuilder: (_, _) => const SizedBox(height: 12),
                     itemBuilder: (context, index) {
                       final report = reports[index];
 
@@ -1601,6 +2346,8 @@ class _Sidebar extends StatelessWidget {
     required this.isLoggingOut,
     required this.onDashboard,
     required this.onDrivers,
+    required this.onRoutes,
+    required this.onRouteManagers,
     required this.onTrips,
     required this.onPassengers,
     required this.onLogout,
@@ -1611,6 +2358,8 @@ class _Sidebar extends StatelessWidget {
   final bool isLoggingOut;
   final VoidCallback onDashboard;
   final VoidCallback onDrivers;
+  final VoidCallback onRoutes;
+  final VoidCallback onRouteManagers;
   final VoidCallback onTrips;
   final VoidCallback onPassengers;
   final VoidCallback onLogout;
@@ -1660,7 +2409,18 @@ class _Sidebar extends StatelessWidget {
             selected: selectedSection == _AdminSection.drivers,
             onTap: onDrivers,
           ),
-          const _MenuItem(icon: Icons.route_rounded, title: 'Routes'),
+          _MenuItem(
+            icon: Icons.route_rounded,
+            title: 'Routes',
+            selected: selectedSection == _AdminSection.routes,
+            onTap: onRoutes,
+          ),
+          _MenuItem(
+            icon: Icons.manage_accounts_rounded,
+            title: 'Route Managers',
+            selected: selectedSection == _AdminSection.routeManagers,
+            onTap: onRouteManagers,
+          ),
           _MenuItem(
             icon: Icons.directions_bus_rounded,
             title: 'Trips',
