@@ -1,10 +1,12 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_core/firebase_core.dart';
 
 import '../models/admin_dashboard_model.dart';
 
 class AdminDashboardService {
   AdminDashboardService({FirebaseFirestore? firestore})
-      : _db = firestore ?? FirebaseFirestore.instance;
+    : _db = firestore ?? FirebaseFirestore.instance;
 
   final FirebaseFirestore _db;
 
@@ -107,9 +109,7 @@ class AdminDashboardService {
       final usersSnap = await _db.collection('users').get();
       final vehiclesSnap = await _db.collection('vehicles').get();
       final routesSnap = await _db.collection('route').get();
-      final usersById = {
-        for (final doc in usersSnap.docs) doc.id: doc.data(),
-      };
+      final usersById = {for (final doc in usersSnap.docs) doc.id: doc.data()};
       final vehiclesByDriverId = {
         for (final doc in vehiclesSnap.docs)
           _readString(doc.data()['driverId']): doc.data(),
@@ -146,13 +146,15 @@ class AdminDashboardService {
               driverData['name'] ??
               '$firstName $lastName',
         );
-        final isApproved = driverData['isApproved'] == true ||
+        final isApproved =
+            driverData['isApproved'] == true ||
             userData['driverIsApproved'] == true;
         final approvalStatus = _readString(
           driverData['approvalStatus'] ?? userData['driverApprovalStatus'],
         );
         final vehicleId = _readString(driverData['vehicleId']);
-        final vehicleData = vehiclesByDriverId[doc.id] ??
+        final vehicleData =
+            vehiclesByDriverId[doc.id] ??
             vehiclesByDriverId[userId] ??
             vehiclesById[vehicleId] ??
             const <String, dynamic>{};
@@ -180,7 +182,9 @@ class AdminDashboardService {
           isOnline: driverData['isOnline'] == true,
           routeId: routeId,
           routeLabel: _routeLabel(routeData, routeId),
-          vehicleId: vehicleId.isEmpty ? _readString(vehicleData['vehicleId']) : vehicleId,
+          vehicleId: vehicleId.isEmpty
+              ? _readString(vehicleData['vehicleId'])
+              : vehicleId,
           vehicleType: _readString(
             vehicleData['vehicleType'] ??
                 vehicleData['type'] ??
@@ -193,11 +197,14 @@ class AdminDashboardService {
           licenseNumber: _readString(
             vehicleData['licenseNumber'] ?? driverData['licenseNumber'],
           ),
-          createdAt: _readDate(driverData['createdAt'] ?? userData['createdAt']),
-          updatedAt: _readDate(driverData['updatedAt'] ?? userData['updatedAt']),
+          createdAt: _readDate(
+            driverData['createdAt'] ?? userData['createdAt'],
+          ),
+          updatedAt: _readDate(
+            driverData['updatedAt'] ?? userData['updatedAt'],
+          ),
         );
-      }).toList()
-        ..sort((a, b) => a.fullName.compareTo(b.fullName));
+      }).toList()..sort((a, b) => a.fullName.compareTo(b.fullName));
 
       return drivers;
     });
@@ -208,9 +215,7 @@ class AdminDashboardService {
       passengersSnap,
     ) async {
       final usersSnap = await _db.collection('users').get();
-      final usersById = {
-        for (final doc in usersSnap.docs) doc.id: doc.data(),
-      };
+      final usersById = {for (final doc in usersSnap.docs) doc.id: doc.data()};
 
       final passengers = passengersSnap.docs.map((doc) {
         final passengerData = doc.data();
@@ -244,24 +249,32 @@ class AdminDashboardService {
                 passengerData['phoneNumber'],
           ),
           isVerified:
-              userData['isVerified'] == true || passengerData['isVerified'] == true,
+              userData['isVerified'] == true ||
+              passengerData['isVerified'] == true,
           isOnline:
               userData['isOnline'] == true || passengerData['isOnline'] == true,
           pickupLocationDescription: _readString(
             passengerData['pickupLocationDescription'] ??
                 userData['pickupLocationDescription'],
           ),
-          latitude: _readDouble(passengerData['latitude'] ?? userData['latitude']),
-          longitude:
-              _readDouble(passengerData['longitude'] ?? userData['longitude']),
-          lastLocationUpdate: _readDate(
-            passengerData['lastLocationUpdate'] ?? userData['lastLocationUpdate'],
+          latitude: _readDouble(
+            passengerData['latitude'] ?? userData['latitude'],
           ),
-          createdAt: _readDate(passengerData['createdAt'] ?? userData['createdAt']),
-          updatedAt: _readDate(passengerData['updatedAt'] ?? userData['updatedAt']),
+          longitude: _readDouble(
+            passengerData['longitude'] ?? userData['longitude'],
+          ),
+          lastLocationUpdate: _readDate(
+            passengerData['lastLocationUpdate'] ??
+                userData['lastLocationUpdate'],
+          ),
+          createdAt: _readDate(
+            passengerData['createdAt'] ?? userData['createdAt'],
+          ),
+          updatedAt: _readDate(
+            passengerData['updatedAt'] ?? userData['updatedAt'],
+          ),
         );
-      }).toList()
-        ..sort((a, b) => a.fullName.compareTo(b.fullName));
+      }).toList()..sort((a, b) => a.fullName.compareTo(b.fullName));
 
       final existingPassengerIds = passengers
           .map((passenger) => passenger.userId)
@@ -311,34 +324,36 @@ class AdminDashboardService {
 
   Stream<List<AdminRouteItem>> adminRoutesStream() {
     return _db.collection('route').snapshots().map((routesSnap) {
-      final routes = routesSnap.docs.map((doc) {
-        final data = doc.data();
-        final routeId = _readString(data['routeId']).isEmpty
-            ? doc.id
-            : _readString(data['routeId']);
-        final slots = data['scheduleSlots'];
-        final driverQueue = data['driverQueueIds'];
+      final routes =
+          routesSnap.docs.map((doc) {
+            final data = doc.data();
+            final routeId = _readString(data['routeId']).isEmpty
+                ? doc.id
+                : _readString(data['routeId']);
+            final slots = data['scheduleSlots'];
+            final driverQueue = data['driverQueueIds'];
 
-        return AdminRouteItem(
-          documentId: doc.id,
-          routeId: routeId,
-          startPoint: _readString(
-            data['startPoint'] ?? data['start'] ?? data['from'],
-          ),
-          endPoint: _readString(data['endPoint'] ?? data['end'] ?? data['to']),
-          price: _readDouble(data['price']) ?? 0,
-          vehicleTypes: _readStringList(data['vehicleTypes']),
-          scheduleSlotCount: slots is List ? slots.length : 0,
-          driverQueueCount: driverQueue is List ? driverQueue.length : 0,
-          createdAt: _readDate(data['createdAt']),
-          updatedAt: _readDate(data['updatedAt']),
-        );
-      }).toList()
-        ..sort((a, b) {
-          final byStart = a.startPoint.compareTo(b.startPoint);
-          if (byStart != 0) return byStart;
-          return a.endPoint.compareTo(b.endPoint);
-        });
+            return AdminRouteItem(
+              documentId: doc.id,
+              routeId: routeId,
+              startPoint: _readString(
+                data['startPoint'] ?? data['start'] ?? data['from'],
+              ),
+              endPoint: _readString(
+                data['endPoint'] ?? data['end'] ?? data['to'],
+              ),
+              price: _readDouble(data['price']) ?? 0,
+              vehicleTypes: _readStringList(data['vehicleTypes']),
+              scheduleSlotCount: slots is List ? slots.length : 0,
+              driverQueueCount: driverQueue is List ? driverQueue.length : 0,
+              createdAt: _readDate(data['createdAt']),
+              updatedAt: _readDate(data['updatedAt']),
+            );
+          }).toList()..sort((a, b) {
+            final byStart = a.startPoint.compareTo(b.startPoint);
+            if (byStart != 0) return byStart;
+            return a.endPoint.compareTo(b.endPoint);
+          });
 
       return routes;
     });
@@ -347,6 +362,10 @@ class AdminDashboardService {
   Future<void> createRoute({
     required String startPoint,
     required String endPoint,
+    required double startLatitude,
+    required double startLongitude,
+    required double endLatitude,
+    required double endLongitude,
     required double price,
     required List<String> vehicleTypes,
   }) async {
@@ -357,6 +376,8 @@ class AdminDashboardService {
       'routeId': routeRef.id,
       'startPoint': startPoint.trim(),
       'endPoint': endPoint.trim(),
+      'startLocation': {'lat': startLatitude, 'lng': startLongitude},
+      'endLocation': {'lat': endLatitude, 'lng': endLongitude},
       'price': price,
       'vehicleTypes': vehicleTypes
           .map((type) => type.trim())
@@ -369,114 +390,255 @@ class AdminDashboardService {
     });
   }
 
+  Future<void> createRouteManager({
+    required String firstName,
+    required String lastName,
+    required String email,
+    required String phone,
+    required String password,
+    required String routeId,
+  }) async {
+    final normalizedEmail = email.trim().toLowerCase();
+    final cleanFirstName = firstName.trim();
+    final cleanLastName = lastName.trim();
+    final cleanPhone = phone.trim();
+    final cleanRouteId = routeId.trim();
+    final fullName = '$cleanFirstName $cleanLastName'.trim();
+    final appName =
+        'route-manager-create-${DateTime.now().microsecondsSinceEpoch}';
+    final secondaryApp = await Firebase.initializeApp(
+      name: appName,
+      options: Firebase.app().options,
+    );
+    final secondaryAuth = FirebaseAuth.instanceFor(app: secondaryApp);
+    User? createdUser;
+
+    try {
+      await _assertRouteManagerContactAvailable(
+        email: normalizedEmail,
+        phone: cleanPhone,
+      );
+
+      final credential = await secondaryAuth.createUserWithEmailAndPassword(
+        email: normalizedEmail,
+        password: password.trim(),
+      );
+      createdUser = credential.user;
+      final uid = createdUser!.uid;
+      final now = FieldValue.serverTimestamp();
+      final userData = {
+        'userId': uid,
+        'uid': uid,
+        'firstName': cleanFirstName,
+        'lastName': cleanLastName,
+        'fullName': fullName,
+        'name': fullName,
+        'email': normalizedEmail,
+        'phone': cleanPhone,
+        'phoneNumber': cleanPhone,
+        'role': 'route_manager',
+        'routeId': cleanRouteId,
+        'isVerified': true,
+        'isOnline': true,
+        'createdAt': now,
+        'updatedAt': now,
+      };
+      final managerData = {'email': normalizedEmail, 'routeId': cleanRouteId};
+      final batch = _db.batch();
+
+      batch.set(_db.collection('users').doc(uid), userData);
+      batch.set(_db.collection('route_manger').doc(uid), managerData);
+
+      await batch.commit();
+    } catch (_) {
+      if (createdUser != null) {
+        try {
+          await createdUser.delete();
+        } catch (_) {
+          // Best effort cleanup; surface the original creation/write error.
+        }
+      }
+      rethrow;
+    } finally {
+      await secondaryAuth.signOut();
+      await secondaryApp.delete();
+    }
+  }
+
+  Future<void> updateRouteManager({
+    required String managerId,
+    required String userId,
+    required String firstName,
+    required String lastName,
+    required String email,
+    required String phone,
+    required String routeId,
+  }) async {
+    final cleanUserId = userId.trim().isEmpty
+        ? managerId.trim()
+        : userId.trim();
+    if (cleanUserId.isEmpty) {
+      throw StateError('Route manager user ID is missing');
+    }
+
+    final normalizedEmail = email.trim().toLowerCase();
+    final cleanFirstName = firstName.trim();
+    final cleanLastName = lastName.trim();
+    final cleanPhone = phone.trim();
+    final cleanRouteId = routeId.trim();
+    final fullName = '$cleanFirstName $cleanLastName'.trim();
+    final now = FieldValue.serverTimestamp();
+    final batch = _db.batch();
+
+    await _assertRouteManagerContactAvailable(
+      email: normalizedEmail,
+      phone: cleanPhone,
+      excludeUserId: cleanUserId,
+    );
+
+    batch.set(_db.collection('users').doc(cleanUserId), {
+      'userId': cleanUserId,
+      'uid': cleanUserId,
+      'firstName': cleanFirstName,
+      'lastName': cleanLastName,
+      'fullName': fullName,
+      'name': fullName,
+      'email': normalizedEmail,
+      'phone': cleanPhone,
+      'phoneNumber': cleanPhone,
+      'role': 'route_manager',
+      'routeId': cleanRouteId,
+      'updatedAt': now,
+    }, SetOptions(merge: true));
+
+    batch.set(_db.collection('route_manger').doc(cleanUserId), {
+      'email': normalizedEmail,
+      'routeId': cleanRouteId,
+    }, SetOptions(merge: true));
+
+    if (managerId.trim().isNotEmpty && managerId.trim() != cleanUserId) {
+      batch.delete(_db.collection('route_manger').doc(managerId.trim()));
+    }
+
+    await batch.commit();
+  }
+
   Stream<List<AdminRouteManagerItem>> adminRouteManagersStream() {
-    return _db.collection('route_manager').snapshots().asyncMap((
-      managersSnap,
-    ) async {
-      final usersSnap = await _db.collection('users').get();
-      final routesSnap = await _db.collection('route').get();
-      final usersById = {
-        for (final doc in usersSnap.docs) doc.id: doc.data(),
-      };
-      final routesById = {
-        for (final doc in routesSnap.docs) doc.id: doc.data(),
-      };
-      for (final doc in routesSnap.docs) {
-        final routeId = _readString(doc.data()['routeId']);
-        if (routeId.isNotEmpty) {
-          routesById[routeId] = doc.data();
-        }
-      }
+    return _db
+        .collection('users')
+        .where('role', isEqualTo: 'route_manager')
+        .snapshots()
+        .asyncMap((usersSnap) async {
+          final managersSnap = await _db.collection('route_manger').get();
+          final routesSnap = await _db.collection('route').get();
+          final managersById = {
+            for (final doc in managersSnap.docs) doc.id: doc.data(),
+          };
+          final routesById = {
+            for (final doc in routesSnap.docs) doc.id: doc.data(),
+          };
+          for (final doc in routesSnap.docs) {
+            final routeId = _readString(doc.data()['routeId']);
+            if (routeId.isNotEmpty) {
+              routesById[routeId] = doc.data();
+            }
+          }
 
-      final managers = managersSnap.docs.map((doc) {
-        final managerData = doc.data();
-        final userId = _readString(
-          managerData['userId'] ?? managerData['uid'] ?? doc.id,
-        );
-        final userData = usersById[userId] ?? const <String, dynamic>{};
-        final firstName = _readString(
-          userData['firstName'] ?? managerData['firstName'],
-        );
-        final lastName = _readString(
-          userData['lastName'] ?? managerData['lastName'],
-        );
-        final fullName = _readString(
-          userData['fullName'] ??
-              userData['name'] ??
-              managerData['fullName'] ??
-              managerData['name'] ??
-              '$firstName $lastName',
-        );
-        final routeId = _readString(
-          managerData['routeId'] ?? userData['routeId'],
-        );
-        final routeData = routesById[routeId] ?? const <String, dynamic>{};
+          final managers = usersSnap.docs.map((doc) {
+            final userData = doc.data();
+            final managerData =
+                managersById[doc.id] ?? const <String, dynamic>{};
+            final userId = doc.id;
+            final firstName = _readString(
+              userData['firstName'] ?? managerData['firstName'],
+            );
+            final lastName = _readString(
+              userData['lastName'] ?? managerData['lastName'],
+            );
+            final fullName = _readString(
+              userData['fullName'] ??
+                  userData['name'] ??
+                  managerData['fullName'] ??
+                  managerData['name'] ??
+                  '$firstName $lastName',
+            );
+            final routeId = _readString(
+              managerData['routeId'] ?? userData['routeId'],
+            );
+            final routeData = routesById[routeId] ?? const <String, dynamic>{};
 
-        return AdminRouteManagerItem(
-          managerId: doc.id,
-          userId: userId,
-          fullName: fullName.isEmpty ? 'Unknown route manager' : fullName,
-          email: _readString(userData['email'] ?? managerData['email']),
-          phone: _readString(
-            userData['phone'] ??
-                userData['phoneNumber'] ??
-                managerData['phone'] ??
-                managerData['phoneNumber'],
-          ),
-          isVerified:
-              userData['isVerified'] == true || managerData['isVerified'] == true,
-          isOnline:
-              userData['isOnline'] == true || managerData['isOnline'] == true,
-          routeId: routeId,
-          routeLabel: _routeLabel(routeData, routeId),
-          createdAt: _readDate(managerData['createdAt'] ?? userData['createdAt']),
-          updatedAt: _readDate(managerData['updatedAt'] ?? userData['updatedAt']),
-        );
-      }).toList()
-        ..sort((a, b) => a.fullName.compareTo(b.fullName));
+            return AdminRouteManagerItem(
+              managerId: userId,
+              userId: userId,
+              firstName: firstName,
+              lastName: lastName,
+              fullName: fullName.isEmpty ? 'Unknown route manager' : fullName,
+              email: _readString(userData['email'] ?? managerData['email']),
+              phone: _readString(
+                userData['phone'] ??
+                    userData['phoneNumber'] ??
+                    managerData['phone'] ??
+                    managerData['phoneNumber'],
+              ),
+              isVerified:
+                  userData['isVerified'] == true ||
+                  managerData['isVerified'] == true,
+              isOnline:
+                  userData['isOnline'] == true ||
+                  managerData['isOnline'] == true,
+              routeId: routeId,
+              routeLabel: _routeLabel(routeData, routeId),
+              createdAt: _readDate(
+                managerData['createdAt'] ?? userData['createdAt'],
+              ),
+              updatedAt: _readDate(
+                managerData['updatedAt'] ?? userData['updatedAt'],
+              ),
+            );
+          }).toList()..sort((a, b) => a.fullName.compareTo(b.fullName));
 
-      final existingUserIds = managers
-          .map((manager) => manager.userId)
-          .where((id) => id.isNotEmpty)
-          .toSet();
+          return managers;
+        });
+  }
 
-      for (final userDoc in usersSnap.docs) {
-        final userData = userDoc.data();
-        final role = _readString(userData['role']).toLowerCase();
+  Future<void> _assertRouteManagerContactAvailable({
+    required String email,
+    required String phone,
+    String? excludeUserId,
+  }) async {
+    final cleanEmail = email.trim().toLowerCase();
+    final cleanPhone = phone.trim();
+    final excluded = excludeUserId?.trim();
 
-        if (role != 'route_manager' || existingUserIds.contains(userDoc.id)) {
-          continue;
-        }
+    final emailSnap = await _db
+        .collection('users')
+        .where('email', isEqualTo: cleanEmail)
+        .limit(1)
+        .get();
 
-        final firstName = _readString(userData['firstName']);
-        final lastName = _readString(userData['lastName']);
-        final fullName = _readString(
-          userData['fullName'] ?? userData['name'] ?? '$firstName $lastName',
-        );
-        final routeId = _readString(userData['routeId']);
-        final routeData = routesById[routeId] ?? const <String, dynamic>{};
+    if (emailSnap.docs.any((doc) => doc.id != excluded)) {
+      throw StateError('Email is already in the database');
+    }
 
-        managers.add(
-          AdminRouteManagerItem(
-            managerId: userDoc.id,
-            userId: userDoc.id,
-            fullName: fullName.isEmpty ? 'Unknown route manager' : fullName,
-            email: _readString(userData['email']),
-            phone: _readString(userData['phone'] ?? userData['phoneNumber']),
-            isVerified: userData['isVerified'] == true,
-            isOnline: userData['isOnline'] == true,
-            routeId: routeId,
-            routeLabel: _routeLabel(routeData, routeId),
-            createdAt: _readDate(userData['createdAt']),
-            updatedAt: _readDate(userData['updatedAt']),
-          ),
-        );
-      }
+    final phoneSnap = await _db
+        .collection('users')
+        .where('phone', isEqualTo: cleanPhone)
+        .limit(1)
+        .get();
 
-      managers.sort((a, b) => a.fullName.compareTo(b.fullName));
+    if (phoneSnap.docs.any((doc) => doc.id != excluded)) {
+      throw StateError('Phone number is already in the database');
+    }
 
-      return managers;
-    });
+    final phoneNumberSnap = await _db
+        .collection('users')
+        .where('phoneNumber', isEqualTo: cleanPhone)
+        .limit(1)
+        .get();
+
+    if (phoneNumberSnap.docs.any((doc) => doc.id != excluded)) {
+      throw StateError('Phone number is already in the database');
+    }
   }
 
   Stream<List<AdminTripItem>> adminTripsStream() {
@@ -654,44 +816,52 @@ class AdminDashboardService {
     QuerySnapshot<Map<String, dynamic>> snapshot, {
     int? limit,
   }) {
-    final reports = snapshot.docs.where((doc) {
-      final data = doc.data();
-      final status = _readString(data['status']).toLowerCase();
+    final reports =
+        snapshot.docs
+            .where((doc) {
+              final data = doc.data();
+              final status = _readString(data['status']).toLowerCase();
 
-      // Route managers send reports to admin by setting this status.
-      // The sentToAdminAt fallback keeps older sent reports visible too.
-      return status == 'sent_to_admin' || data['sentToAdminAt'] != null;
-    }).map((doc) {
-      final data = doc.data();
-      final reportId = _readString(data['reportId']);
-      final senderName = _readString(data['senderName']);
-      final senderRole = _readString(data['senderRole']);
-      final routeLabel = _readString(data['routeLabel']);
-      final message = _readString(data['message']);
-      final status = _readString(data['status']);
+              // Route managers send reports to admin by setting this status.
+              // The sentToAdminAt fallback keeps older sent reports visible too.
+              return status == 'sent_to_admin' || data['sentToAdminAt'] != null;
+            })
+            .map((doc) {
+              final data = doc.data();
+              final reportId = _readString(data['reportId']);
+              final senderName = _readString(data['senderName']);
+              final senderRole = _readString(data['senderRole']);
+              final routeLabel = _readString(data['routeLabel']);
+              final message = _readString(data['message']);
+              final status = _readString(data['status']);
 
-      return AdminReportItem(
-        id: reportId.isEmpty ? doc.id : reportId,
-        senderName: senderName.isEmpty ? 'Unknown sender' : senderName,
-        senderRole: senderRole.isEmpty ? 'Route manager' : senderRole,
-        routeId: _readString(data['routeId']),
-        routeLabel: routeLabel.isEmpty ? 'No route selected' : routeLabel,
-        message: message.isEmpty ? 'No report message' : message,
-        status: status.isEmpty ? 'sent_to_admin' : status,
-        createdAt: _readDate(data['createdAt']),
-        sentToAdminAt: _readDate(data['sentToAdminAt']),
-      );
-    }).toList()
-      ..sort((a, b) {
-        final aDate = a.sentToAdminAt ??
-            a.createdAt ??
-            DateTime.fromMillisecondsSinceEpoch(0);
-        final bDate = b.sentToAdminAt ??
-            b.createdAt ??
-            DateTime.fromMillisecondsSinceEpoch(0);
+              return AdminReportItem(
+                id: reportId.isEmpty ? doc.id : reportId,
+                senderName: senderName.isEmpty ? 'Unknown sender' : senderName,
+                senderRole: senderRole.isEmpty ? 'Route manager' : senderRole,
+                routeId: _readString(data['routeId']),
+                routeLabel: routeLabel.isEmpty
+                    ? 'No route selected'
+                    : routeLabel,
+                message: message.isEmpty ? 'No report message' : message,
+                status: status.isEmpty ? 'sent_to_admin' : status,
+                createdAt: _readDate(data['createdAt']),
+                sentToAdminAt: _readDate(data['sentToAdminAt']),
+              );
+            })
+            .toList()
+          ..sort((a, b) {
+            final aDate =
+                a.sentToAdminAt ??
+                a.createdAt ??
+                DateTime.fromMillisecondsSinceEpoch(0);
+            final bDate =
+                b.sentToAdminAt ??
+                b.createdAt ??
+                DateTime.fromMillisecondsSinceEpoch(0);
 
-        return bDate.compareTo(aDate);
-      });
+            return bDate.compareTo(aDate);
+          });
 
     if (limit == null) return reports;
 

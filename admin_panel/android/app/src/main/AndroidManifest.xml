@@ -1,8 +1,14 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <uses-permission android:name="android.permission.INTERNET" />
+
     <application
         android:label="admin_panel"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
+        <meta-data
+            android:name="com.google.android.geo.API_KEY"
+            android:value="AIzaSyBJL6teACIpsbYRXHpeynNht5qbL0-BTjw" />
+
         <activity
             android:name=".MainActivity"
             android:exported="true"

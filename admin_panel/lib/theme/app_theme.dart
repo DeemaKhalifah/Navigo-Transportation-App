@@ -100,7 +100,7 @@ class NavigoDecorations {
     border: Border.all(color: NavigoColors.primaryOrange, width: 1.2),
     boxShadow: [
       BoxShadow(
-        color: NavigoColors.shadowColor.withOpacity(0.1),
+        color: NavigoColors.shadowColor.withValues(alpha: 0.1),
         offset: const Offset(0, 2),
         blurRadius: 10,
         spreadRadius: 2,
@@ -114,7 +114,7 @@ class NavigoDecorations {
     border: Border.all(color: NavigoColors.primaryOrange, width: 1.2),
     boxShadow: [
       BoxShadow(
-        color: NavigoColors.shadowColor.withOpacity(0.1),
+        color: NavigoColors.shadowColor.withValues(alpha: 0.1),
         offset: const Offset(0, 2),
         blurRadius: 10,
         spreadRadius: 2,
@@ -140,7 +140,7 @@ class NavigoDecorations {
     color: NavigoColors.surfaceWhite,
     boxShadow: [
       BoxShadow(
-        color: NavigoColors.shadowColor.withOpacity(0.2),
+        color: NavigoColors.shadowColor.withValues(alpha: 0.2),
         blurRadius: 10,
       ),
     ],
@@ -220,7 +220,7 @@ class NavigoDecorations {
     return Container(
       padding: padding,
       decoration: BoxDecoration(
-        color: color.withOpacity(0.12),
+        color: color.withValues(alpha: 0.12),
         borderRadius: BorderRadius.circular(NavigoSizes.chipRadius),
       ),
       child: Text(label, style: NavigoTextStyles.status.copyWith(color: color)),

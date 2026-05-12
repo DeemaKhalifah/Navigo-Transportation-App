@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_map/flutter_map.dart';
+import 'package:latlong2/latlong.dart';
 import '../models/admin_dashboard_model.dart';
 import '../services/admin_auth_service.dart';
 import '../services/admin_dashboard_service.dart';
@@ -194,13 +197,16 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                               children: [
                                 const _Header(),
                                 const SizedBox(height: 34),
-                                GridView.count(
-                                  crossAxisCount: 4,
+                                GridView(
                                   shrinkWrap: true,
                                   physics: const NeverScrollableScrollPhysics(),
-                                  crossAxisSpacing: 22,
-                                  mainAxisSpacing: 22,
-                                  childAspectRatio: 1.5,
+                                  gridDelegate:
+                                      const SliverGridDelegateWithMaxCrossAxisExtent(
+                                        maxCrossAxisExtent: 240,
+                                        mainAxisExtent: 210,
+                                        crossAxisSpacing: 22,
+                                        mainAxisSpacing: 22,
+                                      ),
                                   children: [
                                     _StatCard(
                                       title: 'Total Users',
@@ -240,13 +246,16 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                                   ],
                                 ),
                                 const SizedBox(height: 24),
-                                GridView.count(
-                                  crossAxisCount: 4,
+                                GridView(
                                   shrinkWrap: true,
                                   physics: const NeverScrollableScrollPhysics(),
-                                  crossAxisSpacing: 22,
-                                  mainAxisSpacing: 22,
-                                  childAspectRatio: 2.35,
+                                  gridDelegate:
+                                      const SliverGridDelegateWithMaxCrossAxisExtent(
+                                        maxCrossAxisExtent: 300,
+                                        mainAxisExtent: 138,
+                                        crossAxisSpacing: 22,
+                                        mainAxisSpacing: 22,
+                                      ),
                                   children: [
                                     _ActionCard(
                                       title: 'Drivers Approval',
@@ -280,29 +289,41 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                                   ],
                                 ),
                                 const SizedBox(height: 24),
-                                Row(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Expanded(
-                                      flex: 2,
-                                      child: _PieChartCard(
-                                        totalDrivers: data?.totalDrivers ?? 0,
-                                        pendingDrivers:
-                                            data?.pendingDrivers ?? 0,
-                                        totalUsers: data?.totalUsers ?? 0,
-                                      ),
-                                    ),
-                                    const SizedBox(width: 24),
-                                    Expanded(
-                                      flex: 4,
-                                      child: _PendingApprovalsCard(
-                                        approvals: data?.approvals ?? [],
-                                        busyApprovalIds: _busyApprovalIds,
-                                        onApprove: _approveDriver,
-                                        onReject: _rejectDriver,
-                                      ),
-                                    ),
-                                  ],
+                                LayoutBuilder(
+                                  builder: (context, constraints) {
+                                    final stack = constraints.maxWidth < 860;
+                                    final overview = _PieChartCard(
+                                      totalDrivers: data?.totalDrivers ?? 0,
+                                      pendingDrivers: data?.pendingDrivers ?? 0,
+                                      totalUsers: data?.totalUsers ?? 0,
+                                    );
+                                    final approvals = _PendingApprovalsCard(
+                                      approvals: data?.approvals ?? [],
+                                      busyApprovalIds: _busyApprovalIds,
+                                      onApprove: _approveDriver,
+                                      onReject: _rejectDriver,
+                                    );
+
+                                    if (stack) {
+                                      return Column(
+                                        children: [
+                                          overview,
+                                          const SizedBox(height: 24),
+                                          approvals,
+                                        ],
+                                      );
+                                    }
+
+                                    return Row(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Expanded(flex: 2, child: overview),
+                                        const SizedBox(width: 24),
+                                        Expanded(flex: 4, child: approvals),
+                                      ],
+                                    );
+                                  },
                                 ),
                               ],
                             ),
@@ -696,7 +717,9 @@ class _RoutesPanelState extends State<_RoutesPanel> {
                     width: 320,
                     child: TextField(
                       onChanged: (value) {
-                        setState(() => _searchQuery = value.trim().toLowerCase());
+                        setState(
+                          () => _searchQuery = value.trim().toLowerCase(),
+                        );
                       },
                       decoration: NavigoDecorations.kInputDecoration.copyWith(
                         hintText: 'Search routes...',
@@ -814,7 +837,9 @@ class _RoutesPanelState extends State<_RoutesPanel> {
                                     DataCell(
                                       Text(route.driverQueueCount.toString()),
                                     ),
-                                    DataCell(Text(_formatDate(route.updatedAt))),
+                                    DataCell(
+                                      Text(_formatDate(route.updatedAt)),
+                                    ),
                                   ],
                                 );
                               }).toList(),
@@ -848,7 +873,10 @@ class _CreateRouteDialogState extends State<_CreateRouteDialog> {
   final _startController = TextEditingController();
   final _endController = TextEditingController();
   final _priceController = TextEditingController();
-  final _vehicleTypesController = TextEditingController(text: 'bus, microbus');
+  final Set<String> _selectedVehicleTypes = {'bus 14', 'bus 45', 'microbus'};
+  LatLng? _startLocation;
+  LatLng? _endLocation;
+  bool _isSelectingStartLocation = true;
   bool _isSaving = false;
 
   @override
@@ -856,7 +884,6 @@ class _CreateRouteDialogState extends State<_CreateRouteDialog> {
     _startController.dispose();
     _endController.dispose();
     _priceController.dispose();
-    _vehicleTypesController.dispose();
     super.dispose();
   }
 
@@ -865,15 +892,15 @@ class _CreateRouteDialogState extends State<_CreateRouteDialog> {
 
     setState(() => _isSaving = true);
     try {
-      final vehicleTypes = _vehicleTypesController.text
-          .split(',')
-          .map((type) => type.trim())
-          .where((type) => type.isNotEmpty)
-          .toList();
+      final vehicleTypes = _selectedVehicleTypes.toList();
 
       await widget.service.createRoute(
         startPoint: _startController.text,
         endPoint: _endController.text,
+        startLatitude: _startLocation!.latitude,
+        startLongitude: _startLocation!.longitude,
+        endLatitude: _endLocation!.latitude,
+        endLongitude: _endLocation!.longitude,
         price: double.parse(_priceController.text.trim()),
         vehicleTypes: vehicleTypes,
       );
@@ -892,134 +919,597 @@ class _CreateRouteDialogState extends State<_CreateRouteDialog> {
     }
   }
 
+  void _setVehicleTypeSelected(String type, bool selected) {
+    setState(() {
+      if (selected) {
+        _selectedVehicleTypes.add(type);
+      } else {
+        _selectedVehicleTypes.remove(type);
+      }
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
-    return Dialog(
-      insetPadding: const EdgeInsets.symmetric(horizontal: 56, vertical: 40),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 560),
-        child: Padding(
-          padding: const EdgeInsets.all(28),
-          child: Form(
-            key: _formKey,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    const Expanded(
-                      child: Text(
-                        'Create Route',
-                        style: TextStyle(
-                          fontSize: 24,
-                          fontWeight: FontWeight.bold,
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final horizontalInset = constraints.maxWidth < 720 ? 12.0 : 56.0;
+        final verticalInset = constraints.maxHeight < 720 ? 12.0 : 40.0;
+        final dialogWidth = constraints.maxWidth - (horizontalInset * 2);
+        final dialogHeight = constraints.maxHeight - (verticalInset * 2);
+        final compact = dialogWidth < 680 || dialogHeight < 720;
+
+        return Dialog(
+          insetPadding: EdgeInsets.symmetric(
+            horizontal: horizontalInset,
+            vertical: verticalInset,
+          ),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(24),
+          ),
+          child: ConstrainedBox(
+            constraints: BoxConstraints(maxWidth: 860, maxHeight: dialogHeight),
+            child: Padding(
+              padding: EdgeInsets.all(compact ? 18 : 28),
+              child: Form(
+                key: _formKey,
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          const Expanded(
+                            child: Text(
+                              'Create Route',
+                              style: TextStyle(
+                                fontSize: 24,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                          IconButton(
+                            onPressed: _isSaving
+                                ? null
+                                : () => Navigator.pop(context, false),
+                            icon: const Icon(Icons.close_rounded),
+                            tooltip: 'Close',
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 22),
+                      Row(
+                        children: compact
+                            ? [
+                                Expanded(
+                                  child: Column(
+                                    children: [
+                                      _RouteLocationField(
+                                        controller: _startController,
+                                        labelText: 'Start point',
+                                        icon: Icons.trip_origin_rounded,
+                                        selectedLocation: _startLocation,
+                                        validationMessage:
+                                            'Start point is required',
+                                      ),
+                                      const SizedBox(height: 14),
+                                      _RouteLocationField(
+                                        controller: _endController,
+                                        labelText: 'End point',
+                                        icon: Icons.location_on_rounded,
+                                        selectedLocation: _endLocation,
+                                        validationMessage:
+                                            'End point is required',
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ]
+                            : [
+                                Expanded(
+                                  child: _RouteLocationField(
+                                    controller: _startController,
+                                    labelText: 'Start point',
+                                    icon: Icons.trip_origin_rounded,
+                                    selectedLocation: _startLocation,
+                                    validationMessage:
+                                        'Start point is required',
+                                  ),
+                                ),
+                                const SizedBox(width: 14),
+                                Expanded(
+                                  child: _RouteLocationField(
+                                    controller: _endController,
+                                    labelText: 'End point',
+                                    icon: Icons.location_on_rounded,
+                                    selectedLocation: _endLocation,
+                                    validationMessage: 'End point is required',
+                                  ),
+                                ),
+                              ],
+                      ),
+                      const SizedBox(height: 14),
+                      _RouteMapSelector(
+                        height: compact ? 220 : 330,
+                        startLocation: _startLocation,
+                        endLocation: _endLocation,
+                        isSelectingStart: _isSelectingStartLocation,
+                        compact: compact,
+                        onSelectingChanged: (isSelectingStart) {
+                          setState(
+                            () => _isSelectingStartLocation = isSelectingStart,
+                          );
+                        },
+                        onLocationSelected: (location) {
+                          setState(() {
+                            if (_isSelectingStartLocation) {
+                              _startLocation = location;
+                              _isSelectingStartLocation = false;
+                            } else {
+                              _endLocation = location;
+                            }
+                          });
+                        },
+                      ),
+                      FormField<bool>(
+                        validator: (_) {
+                          if (_startLocation == null && _endLocation == null) {
+                            return 'Pick start and end locations from the map';
+                          }
+                          if (_startLocation == null) {
+                            return 'Pick start location from the map';
+                          }
+                          if (_endLocation == null) {
+                            return 'Pick end location from the map';
+                          }
+                          return null;
+                        },
+                        builder: (field) {
+                          if (!field.hasError) return const SizedBox.shrink();
+                          return Padding(
+                            padding: const EdgeInsets.only(top: 8),
+                            child: Text(
+                              field.errorText!,
+                              style: TextStyle(
+                                color: Theme.of(context).colorScheme.error,
+                                fontSize: 12,
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                      const SizedBox(height: 14),
+                      Row(
+                        children: compact
+                            ? [
+                                Expanded(
+                                  child: Column(
+                                    children: [
+                                      _RoutePriceField(
+                                        controller: _priceController,
+                                      ),
+                                      const SizedBox(height: 14),
+                                      _RouteVehicleTypesField(
+                                        selectedVehicleTypes:
+                                            _selectedVehicleTypes,
+                                        onChanged: _setVehicleTypeSelected,
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ]
+                            : [
+                                Expanded(
+                                  child: _RoutePriceField(
+                                    controller: _priceController,
+                                  ),
+                                ),
+                                const SizedBox(width: 14),
+                                Expanded(
+                                  child: _RouteVehicleTypesField(
+                                    selectedVehicleTypes: _selectedVehicleTypes,
+                                    onChanged: _setVehicleTypeSelected,
+                                  ),
+                                ),
+                              ],
+                      ),
+                      const SizedBox(height: 24),
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: FilledButton.icon(
+                          onPressed: _isSaving ? null : _saveRoute,
+                          icon: _isSaving
+                              ? const SizedBox(
+                                  width: 16,
+                                  height: 16,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                  ),
+                                )
+                              : const Icon(Icons.add_rounded),
+                          label: Text(
+                            _isSaving ? 'Creating...' : 'Create Route',
+                          ),
+                          style: FilledButton.styleFrom(
+                            backgroundColor: NavigoColors.primaryOrange,
+                            foregroundColor: Colors.white,
+                          ),
                         ),
                       ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _RouteLocationField extends StatelessWidget {
+  final TextEditingController controller;
+  final String labelText;
+  final IconData icon;
+  final LatLng? selectedLocation;
+  final String validationMessage;
+
+  const _RouteLocationField({
+    required this.controller,
+    required this.labelText,
+    required this.icon,
+    required this.selectedLocation,
+    required this.validationMessage,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final location = selectedLocation;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        TextFormField(
+          controller: controller,
+          decoration: NavigoDecorations.kInputDecoration.copyWith(
+            labelText: labelText,
+            prefixIcon: Icon(icon),
+            fillColor: Colors.white,
+          ),
+          validator: (value) {
+            if (value == null || value.trim().isEmpty) {
+              return validationMessage;
+            }
+            return null;
+          },
+        ),
+        if (location != null) ...[
+          const SizedBox(height: 6),
+          Text(
+            'Selected: ${location.latitude.toStringAsFixed(6)}, ${location.longitude.toStringAsFixed(6)}',
+            style: NavigoTextStyles.bodySmall,
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+class _RoutePriceField extends StatelessWidget {
+  final TextEditingController controller;
+
+  const _RoutePriceField({required this.controller});
+
+  @override
+  Widget build(BuildContext context) {
+    return TextFormField(
+      controller: controller,
+      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+      decoration: NavigoDecorations.kInputDecoration.copyWith(
+        labelText: 'Price',
+        prefixIcon: const Icon(Icons.payments_rounded),
+        fillColor: Colors.white,
+      ),
+      validator: (value) {
+        final price = double.tryParse(value?.trim() ?? '');
+        if (price == null || price < 0) {
+          return 'Enter a valid price';
+        }
+        return null;
+      },
+    );
+  }
+}
+
+class _RouteVehicleTypesField extends StatelessWidget {
+  static const Map<String, String> _options = {
+    'bus 14': 'Bus 14',
+    'bus 45': 'Bus 45',
+    'microbus': 'Microbus',
+  };
+
+  final Set<String> selectedVehicleTypes;
+  final void Function(String type, bool selected) onChanged;
+
+  const _RouteVehicleTypesField({
+    required this.selectedVehicleTypes,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return FormField<Set<String>>(
+      initialValue: selectedVehicleTypes,
+      validator: (value) {
+        if (selectedVehicleTypes.isEmpty) {
+          return 'Add at least one vehicle type';
+        }
+        return null;
+      },
+      builder: (field) {
+        return InputDecorator(
+          decoration: NavigoDecorations.kInputDecoration.copyWith(
+            labelText: 'Vehicle types',
+            prefixIcon: const Icon(Icons.directions_bus_rounded),
+            fillColor: Colors.white,
+            errorText: field.errorText,
+          ),
+          child: Wrap(
+            spacing: 8,
+            runSpacing: 4,
+            children: _options.entries.map((entry) {
+              return FilterChip(
+                label: Text(entry.value),
+                selected: selectedVehicleTypes.contains(entry.key),
+                onSelected: (selected) {
+                  onChanged(entry.key, selected);
+                  field.didChange(selectedVehicleTypes);
+                },
+                selectedColor: NavigoColors.primaryOrange.withOpacity(0.16),
+                checkmarkColor: NavigoColors.primaryOrange,
+              );
+            }).toList(),
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _RouteMapSelector extends StatefulWidget {
+  final LatLng? startLocation;
+  final LatLng? endLocation;
+  final double height;
+  final bool compact;
+  final bool isSelectingStart;
+  final ValueChanged<bool> onSelectingChanged;
+  final ValueChanged<LatLng> onLocationSelected;
+
+  const _RouteMapSelector({
+    required this.startLocation,
+    required this.endLocation,
+    required this.height,
+    required this.compact,
+    required this.isSelectingStart,
+    required this.onSelectingChanged,
+    required this.onLocationSelected,
+  });
+
+  @override
+  State<_RouteMapSelector> createState() => _RouteMapSelectorState();
+}
+
+class _RouteMapSelectorState extends State<_RouteMapSelector> {
+  static const LatLng _defaultCenter = LatLng(31.9522, 35.2332);
+  final MapController _mapController = MapController();
+
+  void _zoomBy(double delta) {
+    final camera = _mapController.camera;
+    _mapController.move(camera.center, camera.zoom + delta);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final start = widget.startLocation;
+    final end = widget.endLocation;
+    final markers = <Marker>[
+      if (start != null)
+        Marker(
+          point: start,
+          width: 52,
+          height: 52,
+          child: const Icon(
+            Icons.trip_origin_rounded,
+            color: NavigoColors.accentGreen,
+            size: 38,
+          ),
+        ),
+      if (end != null)
+        Marker(
+          point: end,
+          width: 52,
+          height: 52,
+          child: const Icon(
+            Icons.location_pin,
+            color: NavigoColors.primaryOrange,
+            size: 44,
+          ),
+        ),
+    ];
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Wrap(
+          spacing: 12,
+          runSpacing: 8,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: [
+            const Text('Route locations', style: NavigoTextStyles.titleSmall),
+            SegmentedButton<bool>(
+              segments: const [
+                ButtonSegment(
+                  value: true,
+                  icon: Icon(Icons.trip_origin_rounded),
+                  label: Text('Start'),
+                ),
+                ButtonSegment(
+                  value: false,
+                  icon: Icon(Icons.location_on_rounded),
+                  label: Text('End'),
+                ),
+              ],
+              selected: {widget.isSelectingStart},
+              onSelectionChanged: (selection) {
+                widget.onSelectingChanged(selection.first);
+              },
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        Text(
+          widget.isSelectingStart
+              ? 'Click the map to set the start location.'
+              : 'Click the map to set the end location.',
+          style: NavigoTextStyles.bodySmall,
+        ),
+        const SizedBox(height: 10),
+        SizedBox(
+          height: widget.height,
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(18),
+            child: Stack(
+              children: [
+                FlutterMap(
+                  mapController: _mapController,
+                  options: MapOptions(
+                    initialCenter: start ?? end ?? _defaultCenter,
+                    initialZoom: 11,
+                    minZoom: 4,
+                    maxZoom: 18,
+                    onTap: (_, location) {
+                      widget.onLocationSelected(location);
+                    },
+                  ),
+                  children: [
+                    TileLayer(
+                      urlTemplate:
+                          'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                      userAgentPackageName: 'com.example.admin_panel',
                     ),
-                    IconButton(
-                      onPressed:
-                          _isSaving ? null : () => Navigator.pop(context, false),
-                      icon: const Icon(Icons.close_rounded),
-                      tooltip: 'Close',
+                    MarkerLayer(markers: markers),
+                    RichAttributionWidget(
+                      attributions: [
+                        TextSourceAttribution('OpenStreetMap contributors'),
+                      ],
                     ),
                   ],
                 ),
-                const SizedBox(height: 22),
-                TextFormField(
-                  controller: _startController,
-                  decoration: NavigoDecorations.kInputDecoration.copyWith(
-                    labelText: 'Start point',
-                    prefixIcon: const Icon(Icons.trip_origin_rounded),
-                    fillColor: Colors.white,
-                  ),
-                  validator: (value) {
-                    if (value == null || value.trim().isEmpty) {
-                      return 'Start point is required';
-                    }
-                    return null;
-                  },
-                ),
-                const SizedBox(height: 14),
-                TextFormField(
-                  controller: _endController,
-                  decoration: NavigoDecorations.kInputDecoration.copyWith(
-                    labelText: 'End point',
-                    prefixIcon: const Icon(Icons.location_on_rounded),
-                    fillColor: Colors.white,
-                  ),
-                  validator: (value) {
-                    if (value == null || value.trim().isEmpty) {
-                      return 'End point is required';
-                    }
-                    return null;
-                  },
-                ),
-                const SizedBox(height: 14),
-                TextFormField(
-                  controller: _priceController,
-                  keyboardType: const TextInputType.numberWithOptions(
-                    decimal: true,
-                  ),
-                  decoration: NavigoDecorations.kInputDecoration.copyWith(
-                    labelText: 'Price',
-                    prefixIcon: const Icon(Icons.payments_rounded),
-                    fillColor: Colors.white,
-                  ),
-                  validator: (value) {
-                    final price = double.tryParse(value?.trim() ?? '');
-                    if (price == null || price < 0) {
-                      return 'Enter a valid price';
-                    }
-                    return null;
-                  },
-                ),
-                const SizedBox(height: 14),
-                TextFormField(
-                  controller: _vehicleTypesController,
-                  decoration: NavigoDecorations.kInputDecoration.copyWith(
-                    labelText: 'Vehicle types',
-                    hintText: 'bus, microbus',
-                    prefixIcon: const Icon(Icons.directions_bus_rounded),
-                    fillColor: Colors.white,
-                  ),
-                  validator: (value) {
-                    final types = (value ?? '')
-                        .split(',')
-                        .map((type) => type.trim())
-                        .where((type) => type.isNotEmpty)
-                        .toList();
-                    if (types.isEmpty) {
-                      return 'Add at least one vehicle type';
-                    }
-                    return null;
-                  },
-                ),
-                const SizedBox(height: 24),
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: FilledButton.icon(
-                    onPressed: _isSaving ? null : _saveRoute,
-                    icon: _isSaving
-                        ? const SizedBox(
-                            width: 16,
-                            height: 16,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : const Icon(Icons.add_rounded),
-                    label: Text(_isSaving ? 'Creating...' : 'Create Route'),
-                    style: FilledButton.styleFrom(
-                      backgroundColor: NavigoColors.primaryOrange,
-                      foregroundColor: Colors.white,
-                    ),
+                Positioned(
+                  top: 12,
+                  right: 12,
+                  child: Column(
+                    children: [
+                      _MapZoomButton(
+                        icon: Icons.add_rounded,
+                        tooltip: 'Zoom in',
+                        onPressed: () => _zoomBy(1),
+                      ),
+                      const SizedBox(height: 8),
+                      _MapZoomButton(
+                        icon: Icons.remove_rounded,
+                        tooltip: 'Zoom out',
+                        onPressed: () => _zoomBy(-1),
+                      ),
+                    ],
                   ),
                 ),
               ],
             ),
           ),
         ),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 12,
+          runSpacing: 6,
+          children: [
+            SizedBox(
+              width: widget.compact ? double.infinity : 390,
+              child: _MapCoordinateLabel(
+                label: 'Start',
+                location: start,
+                color: NavigoColors.accentGreen,
+              ),
+            ),
+            SizedBox(
+              width: widget.compact ? double.infinity : 390,
+              child: _MapCoordinateLabel(
+                label: 'End',
+                location: end,
+                color: NavigoColors.primaryOrange,
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+class _MapZoomButton extends StatelessWidget {
+  final IconData icon;
+  final String tooltip;
+  final VoidCallback onPressed;
+
+  const _MapZoomButton({
+    required this.icon,
+    required this.tooltip,
+    required this.onPressed,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(8),
+      elevation: 2,
+      child: IconButton(
+        onPressed: onPressed,
+        icon: Icon(icon),
+        tooltip: tooltip,
+        color: NavigoColors.textDark,
       ),
+    );
+  }
+}
+
+class _MapCoordinateLabel extends StatelessWidget {
+  final String label;
+  final LatLng? location;
+  final Color color;
+
+  const _MapCoordinateLabel({
+    required this.label,
+    required this.location,
+    required this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final value = location == null
+        ? 'Not selected'
+        : '${location!.latitude.toStringAsFixed(6)}, ${location!.longitude.toStringAsFixed(6)}';
+
+    return Row(
+      children: [
+        Icon(Icons.circle, size: 10, color: color),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text('$label: $value', style: NavigoTextStyles.bodySmall),
+        ),
+      ],
     );
   }
 }
@@ -1036,6 +1526,35 @@ class _RouteManagersPanel extends StatefulWidget {
 class _RouteManagersPanelState extends State<_RouteManagersPanel> {
   String _searchQuery = '';
 
+  Future<void> _showCreateRouteManagerDialog() async {
+    final created = await showDialog<bool>(
+      context: context,
+      builder: (context) => _CreateRouteManagerDialog(service: widget.service),
+    );
+
+    if (!mounted || created != true) return;
+
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('Route manager created')));
+  }
+
+  Future<void> _showEditRouteManagerDialog(
+    AdminRouteManagerItem manager,
+  ) async {
+    final updated = await showDialog<bool>(
+      context: context,
+      builder: (context) =>
+          _EditRouteManagerDialog(service: widget.service, manager: manager),
+    );
+
+    if (!mounted || updated != true) return;
+
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('Route manager updated')));
+  }
+
   @override
   Widget build(BuildContext context) {
     return Padding(
@@ -1050,11 +1569,20 @@ class _RouteManagersPanelState extends State<_RouteManagersPanel> {
             _SectionHeader(
               title: 'Route Managers',
               subtitle:
-                  'All route managers with information from users and route_manager collections',
+                  'All route managers with information from users and route_manger collections',
               searchHint: 'Search route managers...',
               onSearchChanged: (value) {
                 setState(() => _searchQuery = value.trim().toLowerCase());
               },
+              trailing: FilledButton.icon(
+                onPressed: _showCreateRouteManagerDialog,
+                icon: const Icon(Icons.person_add_alt_1_rounded),
+                label: const Text('Create Route Manager'),
+                style: FilledButton.styleFrom(
+                  backgroundColor: NavigoColors.primaryOrange,
+                  foregroundColor: Colors.white,
+                ),
+              ),
             ),
             const Divider(height: 1),
             Expanded(
@@ -1076,14 +1604,14 @@ class _RouteManagersPanelState extends State<_RouteManagersPanel> {
                   final managers = (snapshot.data ?? []).where((manager) {
                     if (_searchQuery.isEmpty) return true;
 
-                    return manager.fullName
-                            .toLowerCase()
-                            .contains(_searchQuery) ||
+                    return manager.fullName.toLowerCase().contains(
+                          _searchQuery,
+                        ) ||
                         manager.email.toLowerCase().contains(_searchQuery) ||
                         manager.phone.toLowerCase().contains(_searchQuery) ||
-                        manager.routeLabel
-                            .toLowerCase()
-                            .contains(_searchQuery) ||
+                        manager.routeLabel.toLowerCase().contains(
+                          _searchQuery,
+                        ) ||
                         manager.routeId.toLowerCase().contains(_searchQuery);
                   }).toList();
 
@@ -1131,7 +1659,7 @@ class _RouteManagersPanelState extends State<_RouteManagersPanel> {
                                 DataColumn(label: Text('Route')),
                                 DataColumn(label: Text('Verified')),
                                 DataColumn(label: Text('Online')),
-                                DataColumn(label: Text('Details')),
+                                DataColumn(label: Text('Actions')),
                               ],
                               rows: managers.map((manager) {
                                 return DataRow(
@@ -1149,8 +1677,9 @@ class _RouteManagersPanelState extends State<_RouteManagersPanel> {
                                     DataCell(Text(_dash(manager.routeLabel))),
                                     DataCell(
                                       _Chip(
-                                        label:
-                                            manager.isVerified ? 'Yes' : 'No',
+                                        label: manager.isVerified
+                                            ? 'Yes'
+                                            : 'No',
                                         color: manager.isVerified
                                             ? NavigoColors.accentGreen
                                             : NavigoColors.primaryOrange,
@@ -1167,17 +1696,33 @@ class _RouteManagersPanelState extends State<_RouteManagersPanel> {
                                       ),
                                     ),
                                     DataCell(
-                                      TextButton.icon(
-                                        onPressed: () =>
-                                            _showRouteManagerDetails(
-                                          context,
-                                          manager,
-                                        ),
-                                        icon: const Icon(
-                                          Icons.open_in_new_rounded,
-                                          size: 16,
-                                        ),
-                                        label: const Text('Open'),
+                                      Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          IconButton(
+                                            onPressed: () =>
+                                                _showEditRouteManagerDialog(
+                                                  manager,
+                                                ),
+                                            icon: const Icon(
+                                              Icons.edit_rounded,
+                                              size: 20,
+                                            ),
+                                            tooltip: 'Edit',
+                                          ),
+                                          TextButton.icon(
+                                            onPressed: () =>
+                                                _showRouteManagerDetails(
+                                                  context,
+                                                  manager,
+                                                ),
+                                            icon: const Icon(
+                                              Icons.open_in_new_rounded,
+                                              size: 16,
+                                            ),
+                                            label: const Text('Open'),
+                                          ),
+                                        ],
                                       ),
                                     ),
                                   ],
@@ -1226,8 +1771,8 @@ class _RouteManagersPanelState extends State<_RouteManagersPanel> {
                       children: [
                         CircleAvatar(
                           radius: 24,
-                          backgroundColor:
-                              NavigoColors.primaryOrange.withOpacity(0.12),
+                          backgroundColor: NavigoColors.primaryOrange
+                              .withOpacity(0.12),
                           child: const Icon(
                             Icons.manage_accounts_rounded,
                             color: NavigoColors.primaryOrange,
@@ -2372,132 +2917,136 @@ class _Sidebar extends StatelessWidget {
       margin: const EdgeInsets.all(16),
       padding: const EdgeInsets.all(18),
       decoration: _cardDecoration(radius: 22),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Row(
-            children: [
-              CircleAvatar(
-                radius: 24,
-                backgroundColor: NavigoColors.primaryOrange,
-                child: Icon(Icons.directions_bus, color: Colors.white),
-              ),
-              SizedBox(width: 12),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('Navigo Admin', style: NavigoTextStyles.titleSmall),
-                  Text(
-                    'System Control Panel',
-                    style: NavigoTextStyles.bodySmall,
-                  ),
-                ],
-              ),
-            ],
-          ),
-          const SizedBox(height: 35),
-
-          _MenuItem(
-            icon: Icons.dashboard_rounded,
-            title: 'Dashboard',
-            selected: selectedSection == _AdminSection.dashboard,
-            onTap: onDashboard,
-          ),
-          _MenuItem(
-            icon: Icons.person_rounded,
-            title: 'Drivers',
-            selected: selectedSection == _AdminSection.drivers,
-            onTap: onDrivers,
-          ),
-          _MenuItem(
-            icon: Icons.route_rounded,
-            title: 'Routes',
-            selected: selectedSection == _AdminSection.routes,
-            onTap: onRoutes,
-          ),
-          _MenuItem(
-            icon: Icons.manage_accounts_rounded,
-            title: 'Route Managers',
-            selected: selectedSection == _AdminSection.routeManagers,
-            onTap: onRouteManagers,
-          ),
-          _MenuItem(
-            icon: Icons.directions_bus_rounded,
-            title: 'Trips',
-            selected: selectedSection == _AdminSection.trips,
-            onTap: onTrips,
-          ),
-          _MenuItem(
-            icon: Icons.people_alt_rounded,
-            title: 'Passengers',
-            selected: selectedSection == _AdminSection.passengers,
-            onTap: onPassengers,
-          ),
-          _MenuItem(
-            icon: Icons.bar_chart_rounded,
-            title: 'Reports',
-            selected: selectedSection == _AdminSection.reports,
-            onTap: onReports,
-          ),
-
-          const Spacer(),
-
-          _MenuItem(
-            icon: Icons.logout_rounded,
-            title: isLoggingOut ? 'Logging out...' : 'Logout',
-            onTap: isLoggingOut ? null : onLogout,
-            trailing: isLoggingOut
-                ? const SizedBox(
-                    width: 18,
-                    height: 18,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : null,
-          ),
-
-          const SizedBox(height: 16),
-
-          Material(
-            color: Colors.transparent,
-            child: InkWell(
-              borderRadius: BorderRadius.circular(18),
-              onTap: () => showAdminAccountDialog(context),
-              child: Container(
-                padding: const EdgeInsets.all(14),
-                decoration: BoxDecoration(
-                  color: NavigoColors.backgroundAlt,
-                  borderRadius: BorderRadius.circular(18),
-                  border: Border.all(color: NavigoColors.borderLight),
+      child: SingleChildScrollView(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Row(
+              children: [
+                CircleAvatar(
+                  radius: 24,
+                  backgroundColor: NavigoColors.primaryOrange,
+                  child: Icon(Icons.directions_bus, color: Colors.white),
                 ),
-                child: const Row(
-                  children: [
-                    CircleAvatar(
-                      backgroundColor: NavigoColors.primaryOrange,
-                      child: Text('A', style: TextStyle(color: Colors.white)),
-                    ),
-                    SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Admin',
-                            style: TextStyle(fontWeight: FontWeight.bold),
-                          ),
-                          Text(
-                            'Change password',
-                            style: NavigoTextStyles.bodySmall,
-                          ),
-                        ],
+                SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Navigo Admin', style: NavigoTextStyles.titleSmall),
+                      Text(
+                        'System Control Panel',
+                        style: NavigoTextStyles.bodySmall,
                       ),
-                    ),
-                    Icon(Icons.edit_rounded, size: 18),
-                  ],
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 28),
+
+            _MenuItem(
+              icon: Icons.dashboard_rounded,
+              title: 'Dashboard',
+              selected: selectedSection == _AdminSection.dashboard,
+              onTap: onDashboard,
+            ),
+            _MenuItem(
+              icon: Icons.person_rounded,
+              title: 'Drivers',
+              selected: selectedSection == _AdminSection.drivers,
+              onTap: onDrivers,
+            ),
+            _MenuItem(
+              icon: Icons.route_rounded,
+              title: 'Routes',
+              selected: selectedSection == _AdminSection.routes,
+              onTap: onRoutes,
+            ),
+            _MenuItem(
+              icon: Icons.manage_accounts_rounded,
+              title: 'Route Managers',
+              selected: selectedSection == _AdminSection.routeManagers,
+              onTap: onRouteManagers,
+            ),
+            _MenuItem(
+              icon: Icons.directions_bus_rounded,
+              title: 'Trips',
+              selected: selectedSection == _AdminSection.trips,
+              onTap: onTrips,
+            ),
+            _MenuItem(
+              icon: Icons.people_alt_rounded,
+              title: 'Passengers',
+              selected: selectedSection == _AdminSection.passengers,
+              onTap: onPassengers,
+            ),
+            _MenuItem(
+              icon: Icons.bar_chart_rounded,
+              title: 'Reports',
+              selected: selectedSection == _AdminSection.reports,
+              onTap: onReports,
+            ),
+
+            const SizedBox(height: 18),
+
+            _MenuItem(
+              icon: Icons.logout_rounded,
+              title: isLoggingOut ? 'Logging out...' : 'Logout',
+              onTap: isLoggingOut ? null : onLogout,
+              trailing: isLoggingOut
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : null,
+            ),
+
+            const SizedBox(height: 16),
+
+            Material(
+              color: Colors.transparent,
+              child: InkWell(
+                borderRadius: BorderRadius.circular(18),
+                onTap: () => showAdminAccountDialog(context),
+                child: Container(
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: NavigoColors.backgroundAlt,
+                    borderRadius: BorderRadius.circular(18),
+                    border: Border.all(color: NavigoColors.borderLight),
+                  ),
+                  child: const Row(
+                    children: [
+                      CircleAvatar(
+                        backgroundColor: NavigoColors.primaryOrange,
+                        child: Text('A', style: TextStyle(color: Colors.white)),
+                      ),
+                      SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Admin',
+                              style: TextStyle(fontWeight: FontWeight.bold),
+                            ),
+                            Text(
+                              'Change password',
+                              style: NavigoTextStyles.bodySmall,
+                            ),
+                          ],
+                        ),
+                      ),
+                      Icon(Icons.edit_rounded, size: 18),
+                    ],
+                  ),
                 ),
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -2549,6 +3098,760 @@ class _MenuItem extends StatelessWidget {
   }
 }
 
+class _CreateRouteManagerDialog extends StatefulWidget {
+  final AdminDashboardService service;
+
+  const _CreateRouteManagerDialog({required this.service});
+
+  @override
+  State<_CreateRouteManagerDialog> createState() =>
+      _CreateRouteManagerDialogState();
+}
+
+class _CreateRouteManagerDialogState extends State<_CreateRouteManagerDialog> {
+  final _formKey = GlobalKey<FormState>();
+  final _firstNameController = TextEditingController();
+  final _lastNameController = TextEditingController();
+  final _emailController = TextEditingController();
+  final _phoneController = TextEditingController();
+  final _passwordController = TextEditingController();
+  final _confirmPasswordController = TextEditingController();
+  String _selectedPhonePrefix = '+970';
+  String? _selectedRouteId;
+  String? _emailError;
+  String? _phoneError;
+  bool _isSaving = false;
+
+  @override
+  void dispose() {
+    _firstNameController.dispose();
+    _lastNameController.dispose();
+    _emailController.dispose();
+    _phoneController.dispose();
+    _passwordController.dispose();
+    _confirmPasswordController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _saveRouteManager() async {
+    if (!_formKey.currentState!.validate() || _isSaving) return;
+
+    setState(() {
+      _emailError = null;
+      _phoneError = null;
+      _isSaving = true;
+    });
+    try {
+      await widget.service.createRouteManager(
+        firstName: _firstNameController.text,
+        lastName: _lastNameController.text,
+        email: _emailController.text,
+        phone: '$_selectedPhonePrefix${_phoneController.text.trim()}',
+        password: _passwordController.text,
+        routeId: _selectedRouteId!,
+      );
+
+      if (!mounted) return;
+      Navigator.pop(context, true);
+    } catch (e) {
+      if (!mounted) return;
+      if (_showContactFieldError(e)) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(_friendlyError(e))));
+    } finally {
+      if (mounted) {
+        setState(() => _isSaving = false);
+      }
+    }
+  }
+
+  bool _showContactFieldError(Object error) {
+    final message = _friendlyError(error);
+    if (message.toLowerCase().contains('phone number')) {
+      setState(() => _phoneError = message);
+      _formKey.currentState?.validate();
+      return true;
+    }
+    if (message.toLowerCase().contains('email') ||
+        message.contains('email-already-in-use')) {
+      setState(() => _emailError = 'Email is already in the database');
+      _formKey.currentState?.validate();
+      return true;
+    }
+    return false;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      insetPadding: const EdgeInsets.symmetric(horizontal: 56, vertical: 40),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 640),
+        child: Padding(
+          padding: const EdgeInsets.all(28),
+          child: Form(
+            key: _formKey,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      const Expanded(
+                        child: Text(
+                          'Create Route Manager',
+                          style: TextStyle(
+                            fontSize: 24,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                      IconButton(
+                        onPressed: _isSaving
+                            ? null
+                            : () => Navigator.pop(context, false),
+                        icon: const Icon(Icons.close_rounded),
+                        tooltip: 'Close',
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 22),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextFormField(
+                          controller: _firstNameController,
+                          decoration: NavigoDecorations.kInputDecoration
+                              .copyWith(
+                                labelText: 'First name',
+                                prefixIcon: const Icon(Icons.person_rounded),
+                                fillColor: Colors.white,
+                              ),
+                          validator: (value) =>
+                              _validateName(value, 'First name'),
+                        ),
+                      ),
+                      const SizedBox(width: 14),
+                      Expanded(
+                        child: TextFormField(
+                          controller: _lastNameController,
+                          decoration: NavigoDecorations.kInputDecoration
+                              .copyWith(
+                                labelText: 'Last name',
+                                prefixIcon: const Icon(Icons.badge_outlined),
+                                fillColor: Colors.white,
+                              ),
+                          validator: (value) =>
+                              _validateName(value, 'Last name'),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 14),
+                  TextFormField(
+                    controller: _emailController,
+                    keyboardType: TextInputType.emailAddress,
+                    onChanged: (_) {
+                      if (_emailError != null) {
+                        setState(() => _emailError = null);
+                      }
+                    },
+                    decoration: NavigoDecorations.kInputDecoration.copyWith(
+                      labelText: 'Email',
+                      prefixIcon: const Icon(Icons.email_rounded),
+                      fillColor: Colors.white,
+                    ),
+                    validator: (value) => _emailError ?? _validateEmail(value),
+                  ),
+                  const SizedBox(height: 14),
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      SizedBox(
+                        width: 150,
+                        child: DropdownButtonFormField<String>(
+                          initialValue: _selectedPhonePrefix,
+                          decoration: NavigoDecorations.kInputDecoration
+                              .copyWith(
+                                labelText: 'Code',
+                                prefixIcon: const Icon(Icons.phone_rounded),
+                                fillColor: Colors.white,
+                              ),
+                          items: const [
+                            DropdownMenuItem(
+                              value: '+970',
+                              child: Text('+970'),
+                            ),
+                            DropdownMenuItem(
+                              value: '+972',
+                              child: Text('+972'),
+                            ),
+                          ],
+                          onChanged: _isSaving
+                              ? null
+                              : (value) {
+                                  if (value == null) return;
+                                  setState(() => _selectedPhonePrefix = value);
+                                },
+                        ),
+                      ),
+                      const SizedBox(width: 14),
+                      Expanded(
+                        child: TextFormField(
+                          controller: _phoneController,
+                          keyboardType: TextInputType.phone,
+                          onChanged: (_) {
+                            if (_phoneError != null) {
+                              setState(() => _phoneError = null);
+                            }
+                          },
+                          inputFormatters: [
+                            FilteringTextInputFormatter.digitsOnly,
+                            LengthLimitingTextInputFormatter(9),
+                          ],
+                          decoration: NavigoDecorations.kInputDecoration
+                              .copyWith(
+                                labelText: 'Phone number',
+                                hintText: '9 digits',
+                                fillColor: Colors.white,
+                              ),
+                          validator: (value) =>
+                              _phoneError ?? _validatePhoneDigits(value),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  const Text(
+                    'Phone must start with +970 or +972 and contain exactly 9 digits after it.',
+                    style: NavigoTextStyles.bodySmall,
+                  ),
+                  const SizedBox(height: 14),
+                  const Text(
+                    'Password rules: at least 8 characters, with uppercase, lowercase, number, and special character.',
+                    style: NavigoTextStyles.bodySmall,
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextFormField(
+                          controller: _passwordController,
+                          obscureText: true,
+                          decoration: NavigoDecorations.kInputDecoration
+                              .copyWith(
+                                labelText: 'Password',
+                                prefixIcon: const Icon(Icons.lock_rounded),
+                                fillColor: Colors.white,
+                              ),
+                          validator: _validatePassword,
+                        ),
+                      ),
+                      const SizedBox(width: 14),
+                      Expanded(
+                        child: TextFormField(
+                          controller: _confirmPasswordController,
+                          obscureText: true,
+                          decoration: NavigoDecorations.kInputDecoration
+                              .copyWith(
+                                labelText: 'Confirm password',
+                                prefixIcon: const Icon(
+                                  Icons.lock_outline_rounded,
+                                ),
+                                fillColor: Colors.white,
+                              ),
+                          validator: (value) {
+                            if (value != _passwordController.text) {
+                              return 'Passwords do not match';
+                            }
+                            return null;
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 14),
+                  StreamBuilder<List<AdminRouteItem>>(
+                    stream: widget.service.adminRoutesStream(),
+                    builder: (context, snapshot) {
+                      final routes = snapshot.data ?? const <AdminRouteItem>[];
+                      final isLoading =
+                          snapshot.connectionState == ConnectionState.waiting;
+
+                      return DropdownButtonFormField<String>(
+                        initialValue: _selectedRouteId,
+                        items: routes
+                            .map(
+                              (route) => DropdownMenuItem(
+                                value: route.routeId,
+                                child: Text(
+                                  _dash(
+                                    '${route.startPoint} to ${route.endPoint}',
+                                  ),
+                                ),
+                              ),
+                            )
+                            .toList(),
+                        onChanged: _isSaving || routes.isEmpty
+                            ? null
+                            : (value) {
+                                setState(() => _selectedRouteId = value);
+                              },
+                        decoration: NavigoDecorations.kInputDecoration.copyWith(
+                          labelText: isLoading ? 'Loading routes...' : 'Route',
+                          prefixIcon: const Icon(Icons.route_rounded),
+                          fillColor: Colors.white,
+                        ),
+                        validator: (value) {
+                          if (value == null || value.trim().isEmpty) {
+                            return 'Select a route';
+                          }
+                          return null;
+                        },
+                      );
+                    },
+                  ),
+                  const SizedBox(height: 24),
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: FilledButton.icon(
+                      onPressed: _isSaving ? null : _saveRouteManager,
+                      icon: _isSaving
+                          ? const SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(Icons.person_add_alt_1_rounded),
+                      label: Text(
+                        _isSaving ? 'Creating...' : 'Create Route Manager',
+                      ),
+                      style: FilledButton.styleFrom(
+                        backgroundColor: NavigoColors.primaryOrange,
+                        foregroundColor: Colors.white,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _EditRouteManagerDialog extends StatefulWidget {
+  final AdminDashboardService service;
+  final AdminRouteManagerItem manager;
+
+  const _EditRouteManagerDialog({required this.service, required this.manager});
+
+  @override
+  State<_EditRouteManagerDialog> createState() =>
+      _EditRouteManagerDialogState();
+}
+
+class _EditRouteManagerDialogState extends State<_EditRouteManagerDialog> {
+  final _formKey = GlobalKey<FormState>();
+  late final TextEditingController _firstNameController;
+  late final TextEditingController _lastNameController;
+  late final TextEditingController _emailController;
+  late final TextEditingController _phoneController;
+  late String _selectedPhonePrefix;
+  String? _selectedRouteId;
+  String? _emailError;
+  String? _phoneError;
+  bool _isSaving = false;
+
+  @override
+  void initState() {
+    super.initState();
+    final fallbackParts = widget.manager.fullName.trim().split(' ');
+    final fallbackFirstName = fallbackParts.isEmpty ? '' : fallbackParts.first;
+    final fallbackLastName = fallbackParts.length <= 1
+        ? ''
+        : fallbackParts.sublist(1).join(' ');
+
+    _firstNameController = TextEditingController(
+      text: widget.manager.firstName.isEmpty
+          ? fallbackFirstName
+          : widget.manager.firstName,
+    );
+    _lastNameController = TextEditingController(
+      text: widget.manager.lastName.isEmpty
+          ? fallbackLastName
+          : widget.manager.lastName,
+    );
+    _emailController = TextEditingController(text: widget.manager.email);
+    final phoneParts = _splitPhoneNumber(widget.manager.phone);
+    _selectedPhonePrefix = phoneParts.prefix;
+    _phoneController = TextEditingController(text: phoneParts.digits);
+    _selectedRouteId = widget.manager.routeId.isEmpty
+        ? null
+        : widget.manager.routeId;
+  }
+
+  @override
+  void dispose() {
+    _firstNameController.dispose();
+    _lastNameController.dispose();
+    _emailController.dispose();
+    _phoneController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _saveRouteManager() async {
+    if (!_formKey.currentState!.validate() || _isSaving) return;
+
+    setState(() {
+      _emailError = null;
+      _phoneError = null;
+      _isSaving = true;
+    });
+    try {
+      await widget.service.updateRouteManager(
+        managerId: widget.manager.managerId,
+        userId: widget.manager.userId,
+        firstName: _firstNameController.text,
+        lastName: _lastNameController.text,
+        email: _emailController.text,
+        phone: '$_selectedPhonePrefix${_phoneController.text.trim()}',
+        routeId: _selectedRouteId!,
+      );
+
+      if (!mounted) return;
+      Navigator.pop(context, true);
+    } catch (e) {
+      if (!mounted) return;
+      if (_showContactFieldError(e)) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(_friendlyError(e))));
+    } finally {
+      if (mounted) {
+        setState(() => _isSaving = false);
+      }
+    }
+  }
+
+  bool _showContactFieldError(Object error) {
+    final message = _friendlyError(error);
+    if (message.toLowerCase().contains('phone number')) {
+      setState(() => _phoneError = message);
+      _formKey.currentState?.validate();
+      return true;
+    }
+    if (message.toLowerCase().contains('email')) {
+      setState(() => _emailError = 'Email is already in the database');
+      _formKey.currentState?.validate();
+      return true;
+    }
+    return false;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      insetPadding: const EdgeInsets.symmetric(horizontal: 56, vertical: 40),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 640),
+        child: Padding(
+          padding: const EdgeInsets.all(28),
+          child: Form(
+            key: _formKey,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      const Expanded(
+                        child: Text(
+                          'Edit Route Manager',
+                          style: TextStyle(
+                            fontSize: 24,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                      IconButton(
+                        onPressed: _isSaving
+                            ? null
+                            : () => Navigator.pop(context, false),
+                        icon: const Icon(Icons.close_rounded),
+                        tooltip: 'Close',
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 22),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextFormField(
+                          controller: _firstNameController,
+                          decoration: NavigoDecorations.kInputDecoration
+                              .copyWith(
+                                labelText: 'First name',
+                                prefixIcon: const Icon(Icons.person_rounded),
+                                fillColor: Colors.white,
+                              ),
+                          validator: (value) =>
+                              _validateName(value, 'First name'),
+                        ),
+                      ),
+                      const SizedBox(width: 14),
+                      Expanded(
+                        child: TextFormField(
+                          controller: _lastNameController,
+                          decoration: NavigoDecorations.kInputDecoration
+                              .copyWith(
+                                labelText: 'Last name',
+                                prefixIcon: const Icon(Icons.badge_outlined),
+                                fillColor: Colors.white,
+                              ),
+                          validator: (value) =>
+                              _validateName(value, 'Last name'),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 14),
+                  TextFormField(
+                    controller: _emailController,
+                    keyboardType: TextInputType.emailAddress,
+                    onChanged: (_) {
+                      if (_emailError != null) {
+                        setState(() => _emailError = null);
+                      }
+                    },
+                    decoration: NavigoDecorations.kInputDecoration.copyWith(
+                      labelText: 'Email',
+                      prefixIcon: const Icon(Icons.email_rounded),
+                      fillColor: Colors.white,
+                    ),
+                    validator: (value) => _emailError ?? _validateEmail(value),
+                  ),
+                  const SizedBox(height: 14),
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      SizedBox(
+                        width: 150,
+                        child: DropdownButtonFormField<String>(
+                          initialValue: _selectedPhonePrefix,
+                          decoration: NavigoDecorations.kInputDecoration
+                              .copyWith(
+                                labelText: 'Code',
+                                prefixIcon: const Icon(Icons.phone_rounded),
+                                fillColor: Colors.white,
+                              ),
+                          items: const [
+                            DropdownMenuItem(
+                              value: '+970',
+                              child: Text('+970'),
+                            ),
+                            DropdownMenuItem(
+                              value: '+972',
+                              child: Text('+972'),
+                            ),
+                          ],
+                          onChanged: _isSaving
+                              ? null
+                              : (value) {
+                                  if (value == null) return;
+                                  setState(() => _selectedPhonePrefix = value);
+                                },
+                        ),
+                      ),
+                      const SizedBox(width: 14),
+                      Expanded(
+                        child: TextFormField(
+                          controller: _phoneController,
+                          keyboardType: TextInputType.phone,
+                          onChanged: (_) {
+                            if (_phoneError != null) {
+                              setState(() => _phoneError = null);
+                            }
+                          },
+                          inputFormatters: [
+                            FilteringTextInputFormatter.digitsOnly,
+                            LengthLimitingTextInputFormatter(9),
+                          ],
+                          decoration: NavigoDecorations.kInputDecoration
+                              .copyWith(
+                                labelText: 'Phone number',
+                                hintText: '9 digits',
+                                fillColor: Colors.white,
+                              ),
+                          validator: (value) =>
+                              _phoneError ?? _validatePhoneDigits(value),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  const Text(
+                    'Phone must start with +970 or +972 and contain exactly 9 digits after it.',
+                    style: NavigoTextStyles.bodySmall,
+                  ),
+                  const SizedBox(height: 14),
+                  StreamBuilder<List<AdminRouteItem>>(
+                    stream: widget.service.adminRoutesStream(),
+                    builder: (context, snapshot) {
+                      final routes = snapshot.data ?? const <AdminRouteItem>[];
+                      final isLoading =
+                          snapshot.connectionState == ConnectionState.waiting;
+                      final dropdownRouteId =
+                          routes.any(
+                            (route) => route.routeId == _selectedRouteId,
+                          )
+                          ? _selectedRouteId
+                          : null;
+
+                      return DropdownButtonFormField<String>(
+                        initialValue: dropdownRouteId,
+                        items: routes
+                            .map(
+                              (route) => DropdownMenuItem(
+                                value: route.routeId,
+                                child: Text(
+                                  _dash(
+                                    '${route.startPoint} to ${route.endPoint}',
+                                  ),
+                                ),
+                              ),
+                            )
+                            .toList(),
+                        onChanged: _isSaving || routes.isEmpty
+                            ? null
+                            : (value) {
+                                setState(() => _selectedRouteId = value);
+                              },
+                        decoration: NavigoDecorations.kInputDecoration.copyWith(
+                          labelText: isLoading ? 'Loading routes...' : 'Route',
+                          prefixIcon: const Icon(Icons.route_rounded),
+                          fillColor: Colors.white,
+                        ),
+                        validator: (value) {
+                          if (_selectedRouteId == null ||
+                              _selectedRouteId!.trim().isEmpty) {
+                            return 'Select a route';
+                          }
+                          return null;
+                        },
+                      );
+                    },
+                  ),
+                  const SizedBox(height: 24),
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: FilledButton.icon(
+                      onPressed: _isSaving ? null : _saveRouteManager,
+                      icon: _isSaving
+                          ? const SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(Icons.save_rounded),
+                      label: Text(_isSaving ? 'Saving...' : 'Save Changes'),
+                      style: FilledButton.styleFrom(
+                        backgroundColor: NavigoColors.primaryOrange,
+                        foregroundColor: Colors.white,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _PhoneParts {
+  final String prefix;
+  final String digits;
+
+  const _PhoneParts({required this.prefix, required this.digits});
+}
+
+_PhoneParts _splitPhoneNumber(String phone) {
+  final cleanPhone = phone.trim().replaceAll(RegExp(r'\s+'), '');
+  if (cleanPhone.startsWith('+972')) {
+    return _PhoneParts(prefix: '+972', digits: cleanPhone.substring(4));
+  }
+  if (cleanPhone.startsWith('+970')) {
+    return _PhoneParts(prefix: '+970', digits: cleanPhone.substring(4));
+  }
+
+  final digitsOnly = cleanPhone.replaceAll(RegExp(r'\D'), '');
+  return _PhoneParts(
+    prefix: '+970',
+    digits: digitsOnly.length > 9 ? digitsOnly.substring(0, 9) : digitsOnly,
+  );
+}
+
+String? _validateName(String? value, String label) {
+  final name = value?.trim() ?? '';
+  if (name.isEmpty) return '$label is required';
+  if (!RegExp(r"^[A-Za-z\u0600-\u06FF\s'-]+$").hasMatch(name)) {
+    return '$label can contain letters only';
+  }
+  return null;
+}
+
+String? _validateEmail(String? value) {
+  final email = value?.trim() ?? '';
+  if (email.isEmpty) return 'Email is required';
+  if (!RegExp(r'^[^\s@]+@[^\s@]+\.[^\s@]+$').hasMatch(email)) {
+    return 'Enter a valid email';
+  }
+  return null;
+}
+
+String? _validatePhoneDigits(String? value) {
+  final digits = value?.trim() ?? '';
+  if (digits.isEmpty) return 'Phone number is required';
+  if (!RegExp(r'^\d{9}$').hasMatch(digits)) {
+    return 'Enter exactly 9 numbers';
+  }
+  return null;
+}
+
+String? _validatePassword(String? value) {
+  final password = value ?? '';
+  if (password.length < 8) return 'Use at least 8 characters';
+  if (!RegExp(r'[A-Z]').hasMatch(password)) {
+    return 'Add an uppercase letter';
+  }
+  if (!RegExp(r'[a-z]').hasMatch(password)) {
+    return 'Add a lowercase letter';
+  }
+  if (!RegExp(r'\d').hasMatch(password)) return 'Add a number';
+  if (!RegExp(r'[^A-Za-z0-9]').hasMatch(password)) {
+    return 'Add a special character';
+  }
+  return null;
+}
+
+String _friendlyError(Object error) {
+  final message = error.toString();
+  return message
+      .replaceFirst('Bad state: ', '')
+      .replaceFirst('Exception: ', '')
+      .trim();
+}
+
 class _Header extends StatelessWidget {
   const _Header();
 
@@ -2582,12 +3885,14 @@ class _SectionHeader extends StatelessWidget {
   final String subtitle;
   final String searchHint;
   final ValueChanged<String> onSearchChanged;
+  final Widget? trailing;
 
   const _SectionHeader({
     required this.title,
     required this.subtitle,
     required this.searchHint,
     required this.onSearchChanged,
+    this.trailing,
   });
 
   @override
@@ -2613,7 +3918,7 @@ class _SectionHeader extends StatelessWidget {
             ),
           ),
           SizedBox(
-            width: 380,
+            width: trailing == null ? 380 : 320,
             child: TextField(
               onChanged: onSearchChanged,
               decoration: NavigoDecorations.kInputDecoration.copyWith(
@@ -2623,6 +3928,7 @@ class _SectionHeader extends StatelessWidget {
               ),
             ),
           ),
+          if (trailing != null) ...[const SizedBox(width: 14), trailing!],
         ],
       ),
     );

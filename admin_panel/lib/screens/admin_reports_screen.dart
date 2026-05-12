@@ -140,7 +140,7 @@ class _AdminReportsScreenState extends State<AdminReportsScreen> {
                       children: [
                         CircleAvatar(
                           radius: 24,
-                          backgroundColor: Colors.purple.withOpacity(0.12),
+                          backgroundColor: Colors.purple.withValues(alpha: 0.12),
                           child: const Icon(
                             Icons.description_rounded,
                             color: Colors.purple,

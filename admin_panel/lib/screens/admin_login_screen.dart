@@ -84,10 +84,11 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
         context,
       ).showSnackBar(SnackBar(content: Text(e.message ?? 'Login Failed')));
     } finally {
-      if (!mounted) return;
-      setState(() {
-        isLoading = false;
-      });
+      if (mounted) {
+        setState(() {
+          isLoading = false;
+        });
+      }
     }
   }
 
