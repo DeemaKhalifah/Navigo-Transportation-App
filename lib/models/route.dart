@@ -60,6 +60,7 @@ class RouteModel {
       if (distanceMeters != null) "distanceMeters": distanceMeters,
       if (distanceKm != null) "distanceKm": distanceKm,
       if (distanceText != null) "distanceText": distanceText,
+      if (routePolyline != null) "polyline": routePolyline,
       if (routePolyline != null) "routePolyline": routePolyline,
       if (routeModule != null) "routeModule": routeModule,
     };
@@ -111,7 +112,7 @@ class RouteModel {
       distanceMeters: (map['distanceMeters'] as num?)?.toInt(),
       distanceKm: (map['distanceKm'] as num?)?.toDouble(),
       distanceText: map['distanceText'] as String?,
-      routePolyline: map['routePolyline'] as String?,
+      routePolyline: (map['polyline'] ?? map['routePolyline']) as String?,
       routePath: _parseRoutePath(map['routePath'] ?? map['path']),
       routeModule: map['routeModule'] is Map
           ? Map<String, dynamic>.from(map['routeModule'] as Map)

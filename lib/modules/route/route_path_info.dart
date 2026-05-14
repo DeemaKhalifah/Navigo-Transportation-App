@@ -56,6 +56,7 @@ class RoutePathInfo {
         'lat': endLocation.latitude,
         'lng': endLocation.longitude,
       },
+      'polyline': encodedPolyline,
       'routePolyline': encodedPolyline,
       'etaMinutes': etaMinutes,
       'etaText': etaText,

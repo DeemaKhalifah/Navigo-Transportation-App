@@ -3,6 +3,190 @@ const admin = require('firebase-admin');
 
 admin.initializeApp();
 const db = admin.firestore();
+const FALLBACK_GOOGLE_MAPS_API_KEY = 'AIzaSyBJL6teACIpsbYRXHpeynNht5qbL0-BTjw';
+
+function googleMapsApiKey() {
+  return (
+    process.env.GOOGLE_MAPS_API_KEY ||
+    (functions.config().google && functions.config().google.maps_api_key) ||
+    FALLBACK_GOOGLE_MAPS_API_KEY
+  );
+}
+
+function setCors(res) {
+  res.set('Access-Control-Allow-Origin', '*');
+  res.set('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  res.set('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+}
+
+function numberFromBody(body, key) {
+  const value = Number(body && body[key]);
+  return Number.isFinite(value) ? value : null;
+}
+
+function parseDurationSeconds(raw) {
+  if (typeof raw === 'number') return raw;
+  if (typeof raw === 'string') {
+    const clean = raw.endsWith('s') ? raw.slice(0, -1) : raw;
+    const parsed = Number(clean);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+}
+
+function estimateMeters(startLat, startLng, endLat, endLng) {
+  const earthRadius = 6371000;
+  const toRadians = (degrees) => degrees * Math.PI / 180;
+  const dLat = toRadians(endLat - startLat);
+  const dLng = toRadians(endLng - startLng);
+  const lat1 = toRadians(startLat);
+  const lat2 = toRadians(endLat);
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(lat1) * Math.cos(lat2) *
+      Math.sin(dLng / 2) * Math.sin(dLng / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return Math.round(earthRadius * c);
+}
+
+function formatEta(minutes) {
+  if (minutes < 60) return `${minutes} min`;
+  const hours = Math.floor(minutes / 60);
+  const rest = minutes % 60;
+  return rest === 0 ? `${hours}h` : `${hours}h ${rest}m`;
+}
+
+function formatDistance(meters) {
+  if (meters < 1000) return `${meters} m`;
+  return `${(meters / 1000).toFixed(1)} km`;
+}
+
+exports.fetchRoutePolyline = functions.https.onRequest(async (req, res) => {
+  setCors(res);
+  if (req.method === 'OPTIONS') {
+    res.status(204).send('');
+    return;
+  }
+  if (req.method !== 'POST') {
+    res.status(405).json({ success: false, error: 'Method not allowed' });
+    return;
+  }
+
+  const startLatitude = numberFromBody(req.body, 'startLatitude');
+  const startLongitude = numberFromBody(req.body, 'startLongitude');
+  const endLatitude = numberFromBody(req.body, 'endLatitude');
+  const endLongitude = numberFromBody(req.body, 'endLongitude');
+  if (
+    startLatitude == null ||
+    startLongitude == null ||
+    endLatitude == null ||
+    endLongitude == null
+  ) {
+    res.status(400).json({
+      success: false,
+      error: 'Missing start/end coordinates',
+    });
+    return;
+  }
+
+  const key = googleMapsApiKey();
+  const url = new URL('https://maps.googleapis.com/maps/api/directions/json');
+  url.searchParams.set('origin', `${startLatitude},${startLongitude}`);
+  url.searchParams.set('destination', `${endLatitude},${endLongitude}`);
+  url.searchParams.set('mode', 'driving');
+  url.searchParams.set('departure_time', 'now');
+  url.searchParams.set('key', key);
+
+  console.log('[fetchRoutePolyline] startLocation', {
+    lat: startLatitude,
+    lng: startLongitude,
+  });
+  console.log('[fetchRoutePolyline] endLocation', {
+    lat: endLatitude,
+    lng: endLongitude,
+  });
+  console.log('[fetchRoutePolyline] API request URL', url.toString());
+
+  try {
+    const response = await fetch(url);
+    const raw = await response.text();
+    let data;
+    try {
+      data = JSON.parse(raw);
+    } catch (e) {
+      console.error('[fetchRoutePolyline] invalid JSON response', raw);
+      res.status(502).json({
+        success: false,
+        error: 'Could not generate route polyline',
+        details: 'Invalid Google Directions response',
+      });
+      return;
+    }
+
+    if (!response.ok || data.status !== 'OK') {
+      console.error('[fetchRoutePolyline] Google Directions response', data);
+      res.status(502).json({
+        success: false,
+        error: 'Could not generate route polyline',
+        details: data.error_message || data.status || `HTTP ${response.status}`,
+        googleResponse: data,
+      });
+      return;
+    }
+
+    const route = Array.isArray(data.routes) ? data.routes[0] : null;
+    const encoded =
+      route &&
+      route.overview_polyline &&
+      typeof route.overview_polyline.points === 'string'
+        ? route.overview_polyline.points.trim()
+        : '';
+    console.log('[fetchRoutePolyline] raw API response polyline field', encoded);
+
+    if (!encoded) {
+      res.status(502).json({
+        success: false,
+        error: 'Could not generate route polyline',
+        details: 'Missing routes[0].overview_polyline.points',
+        googleResponse: data,
+      });
+      return;
+    }
+
+    const leg = route.legs && route.legs[0] ? route.legs[0] : {};
+    const distanceMeters =
+      leg.distance && typeof leg.distance.value === 'number'
+        ? leg.distance.value
+        : estimateMeters(startLatitude, startLongitude, endLatitude, endLongitude);
+    const seconds =
+      (leg.duration_in_traffic && leg.duration_in_traffic.value) ||
+      (leg.duration && leg.duration.value) ||
+      parseDurationSeconds(route.duration) ||
+      Math.max(60, Math.round(distanceMeters / 1000 / 35 * 3600));
+    const etaMinutes = Math.max(1, Math.ceil(seconds / 60));
+
+    res.json({
+      success: true,
+      data: {
+        polyline: encoded,
+        distanceMeters,
+        distanceText: leg.distance && leg.distance.text
+          ? leg.distance.text
+          : formatDistance(distanceMeters),
+        etaMinutes,
+        etaText: formatEta(etaMinutes),
+        provider: 'google_directions_function',
+      },
+    });
+  } catch (error) {
+    console.error('[fetchRoutePolyline] error', error);
+    res.status(500).json({
+      success: false,
+      error: 'Could not generate route polyline',
+      details: error.message || String(error),
+    });
+  }
+});
 
 /**
  * Best-effort extraction of FCM tokens from a document, without assuming a

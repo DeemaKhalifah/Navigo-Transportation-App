@@ -141,26 +141,23 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> {
     final endLatLng = endLocation;
 
     try {
-      // IMPORTANT: If coordinates are available, draw using them (do not rely on
-      // start/end point text for routing).
-      if (startLatLng != null && endLatLng != null) {
+      if (routeId != null && routeId.trim().isNotEmpty) {
+        routeInfo = await _routePathService.getOrFetchRoutePathForRoute(
+          routeId: routeId,
+          startPoint: startPoint,
+          endPoint: endPoint,
+        );
+      } else if (startLatLng != null && endLatLng != null) {
         routeInfo = await _routePathService.fetchRoutePathByCoordinates(
           start: startLatLng,
           end: endLatLng,
           requirePolyline: true,
         );
       } else {
-        // Backward-compatible fallback: use the existing routeId cache + text.
-        routeInfo = routeId == null || routeId.trim().isEmpty
-            ? await _routePathService.fetchRoutePath(
-                startPoint: startPoint,
-                endPoint: endPoint,
-              )
-            : await _routePathService.getOrFetchRoutePathForRoute(
-                routeId: routeId,
-                startPoint: startPoint,
-                endPoint: endPoint,
-              );
+        routeInfo = await _routePathService.fetchRoutePath(
+          startPoint: startPoint,
+          endPoint: endPoint,
+        );
       }
     } catch (e) {
       debugPrint('Route path API error: $e');

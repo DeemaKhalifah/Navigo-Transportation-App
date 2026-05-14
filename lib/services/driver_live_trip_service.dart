@@ -402,7 +402,9 @@ class DriverLiveTripService {
           final startLng = _readLongitude(routeData, 'start');
           final endLat = _readLatitude(routeData, 'end');
           final endLng = _readLongitude(routeData, 'end');
-          final routePolyline = (routeData['routePolyline'] ?? '').toString();
+          final routePolyline =
+              (routeData['polyline'] ?? routeData['routePolyline'] ?? '')
+                  .toString();
 
           return {
             'resolvedRouteId': resolvedRouteId,
@@ -415,6 +417,7 @@ class DriverLiveTripService {
             'startLng': startLng,
             'endLat': endLat,
             'endLng': endLng,
+            'polyline': routePolyline,
             'routePolyline': routePolyline,
             'etaMinutes': routeData['etaMinutes'],
             'etaText': routeData['etaText'],

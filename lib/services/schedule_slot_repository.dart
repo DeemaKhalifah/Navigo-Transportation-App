@@ -109,7 +109,7 @@ class ScheduleSlotRepository {
     final distanceMeters = routeData['distanceMeters'];
     final distanceKm = routeData['distanceKm'];
     final distanceText = routeData['distanceText'];
-    final routePolyline = routeData['routePolyline'];
+    final routePolyline = routeData['polyline'] ?? routeData['routePolyline'];
     final routeModule = routeData['routeModule'];
 
     if (etaMinutes != null) slot['etaMinutes'] = etaMinutes;
@@ -117,7 +117,10 @@ class ScheduleSlotRepository {
     if (distanceMeters != null) slot['distanceMeters'] = distanceMeters;
     if (distanceKm != null) slot['distanceKm'] = distanceKm;
     if (distanceText != null) slot['distanceText'] = distanceText;
-    if (routePolyline != null) slot['routePolyline'] = routePolyline;
+    if (routePolyline != null) {
+      slot['polyline'] = routePolyline;
+      slot['routePolyline'] = routePolyline;
+    }
     if (routeModule != null) slot['routeModule'] = routeModule;
 
     final departure = _parseDate(slot['departureAt']);

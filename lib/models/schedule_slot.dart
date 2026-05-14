@@ -101,6 +101,7 @@ class ScheduleSlot {
       m['distanceText'] = distanceText;
     }
     if (routePolyline != null && routePolyline!.trim().isNotEmpty) {
+      m['polyline'] = routePolyline;
       m['routePolyline'] = routePolyline;
     }
     if (routeModule != null && routeModule!.isNotEmpty) {
@@ -141,7 +142,7 @@ class ScheduleSlot {
       distanceMeters: (map['distanceMeters'] as num?)?.toInt(),
       distanceKm: (map['distanceKm'] as num?)?.toDouble(),
       distanceText: map['distanceText'] as String?,
-      routePolyline: map['routePolyline'] as String?,
+      routePolyline: (map['polyline'] ?? map['routePolyline']) as String?,
       routePath: _parseRoutePath(map['routePath']),
       routeModule: map['routeModule'] is Map
           ? Map<String, dynamic>.from(map['routeModule'] as Map)

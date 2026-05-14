@@ -1,14 +1,20 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:flutter/foundation.dart';
 
 import '../models/admin_dashboard_model.dart';
+import 'admin_route_path_service.dart';
 
 class AdminDashboardService {
-  AdminDashboardService({FirebaseFirestore? firestore})
-    : _db = firestore ?? FirebaseFirestore.instance;
+  AdminDashboardService({
+    FirebaseFirestore? firestore,
+    AdminRoutePathService? routePathService,
+  }) : _db = firestore ?? FirebaseFirestore.instance,
+       _routePathService = routePathService ?? AdminRoutePathService();
 
   final FirebaseFirestore _db;
+  final AdminRoutePathService _routePathService;
 
   Stream<AdminDashboardModel> dashboardStream() {
     return _db.collection('drivers').snapshots().asyncMap((driversSnap) async {
@@ -369,8 +375,21 @@ class AdminDashboardService {
     required double price,
     required List<String> vehicleTypes,
   }) async {
+    final routePath = await _routePathService.fetchRoutePathByCoordinates(
+      startLatitude: startLatitude,
+      startLongitude: startLongitude,
+      endLatitude: endLatitude,
+      endLongitude: endLongitude,
+    );
+    if (routePath.encodedPolyline.trim().isEmpty) {
+      throw Exception('Could not generate route polyline');
+    }
+
     final routeRef = _db.collection('route').doc();
     final now = FieldValue.serverTimestamp();
+    debugPrint(
+      '[AdminRouteCreate] Firestore saved polyline value length=${routePath.encodedPolyline.length}',
+    );
 
     await routeRef.set({
       'routeId': routeRef.id,
@@ -378,6 +397,14 @@ class AdminDashboardService {
       'endPoint': endPoint.trim(),
       'startLocation': {'lat': startLatitude, 'lng': startLongitude},
       'endLocation': {'lat': endLatitude, 'lng': endLongitude},
+      'polyline': routePath.encodedPolyline,
+      'routePolyline': routePath.encodedPolyline,
+      'distanceMeters': routePath.distanceMeters,
+      'distanceText': routePath.distanceText,
+      'etaMinutes': routePath.etaMinutes,
+      'etaText': routePath.etaText,
+      'polylineProvider': routePath.provider,
+      'routePathProvider': routePath.provider,
       'price': price,
       'vehicleTypes': vehicleTypes
           .map((type) => type.trim())

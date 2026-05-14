@@ -351,7 +351,7 @@ class _SidebarItem extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 10),
       decoration: BoxDecoration(
         color: selected
-            ? NavigoColors.primaryOrange.withOpacity(0.12)
+            ? NavigoColors.primaryOrange.withValues(alpha: 0.12)
             : Colors.transparent,
         borderRadius: BorderRadius.circular(14),
       ),
@@ -399,7 +399,7 @@ class _ReportTile extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               CircleAvatar(
-                backgroundColor: Colors.purple.withOpacity(0.12),
+                backgroundColor: Colors.purple.withValues(alpha: 0.12),
                 child: const Icon(
                   Icons.description_rounded,
                   color: Colors.purple,
@@ -544,7 +544,7 @@ class _StatusChip extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
       decoration: BoxDecoration(
-        color: Colors.purple.withOpacity(0.12),
+        color: Colors.purple.withValues(alpha: 0.12),
         borderRadius: BorderRadius.circular(30),
       ),
       child: Text(
@@ -585,7 +585,7 @@ BoxDecoration _cardDecoration({double radius = 18}) {
     border: Border.all(color: NavigoColors.borderLight),
     boxShadow: [
       BoxShadow(
-        color: Colors.black.withOpacity(0.04),
+        color: Colors.black.withValues(alpha: 0.04),
         blurRadius: 18,
         offset: const Offset(0, 8),
       ),

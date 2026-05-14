@@ -192,7 +192,8 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
           final startLng = _toDouble(data['startLng']);
           final endLat = _toDouble(data['endLat']);
           final endLng = _toDouble(data['endLng']);
-          final routePolyline = (data['routePolyline'] ?? '').toString();
+          final routePolyline =
+              (data['polyline'] ?? data['routePolyline'] ?? '').toString();
           if (routePolyline.trim().isNotEmpty &&
               routePolyline != _activeRoutePolyline) {
             _activeRoutePolyline = routePolyline;
