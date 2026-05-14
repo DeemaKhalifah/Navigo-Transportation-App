@@ -1,6 +1,7 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
+import '../localization/localization_x.dart';
 import '../theme/app_theme.dart';
 
 Future<void> showAdminAccountDialog(BuildContext context) {
@@ -45,26 +46,24 @@ class _AdminAccountDialogState extends State<_AdminAccountDialog> {
     setState(() => _errorMessage = null);
 
     if (user == null || email.isEmpty) {
-      setState(() => _errorMessage = 'No logged in admin account found.');
+      setState(() => _errorMessage = context.texts.t('noLoggedInAdmin'));
       return;
     }
 
     if (currentPassword.isEmpty ||
         newPassword.isEmpty ||
         confirmPassword.isEmpty) {
-      setState(() => _errorMessage = 'Please fill all password fields.');
+      setState(() => _errorMessage = context.texts.t('fillAllPasswordFields'));
       return;
     }
 
     if (newPassword.length < 6) {
-      setState(
-        () => _errorMessage = 'New password must be at least 6 characters.',
-      );
+      setState(() => _errorMessage = context.texts.t('passwordMinLength'));
       return;
     }
 
     if (newPassword != confirmPassword) {
-      setState(() => _errorMessage = 'New passwords do not match.');
+      setState(() => _errorMessage = context.texts.t('passwordsDoNotMatch'));
       return;
     }
 
@@ -84,7 +83,7 @@ class _AdminAccountDialogState extends State<_AdminAccountDialog> {
       final messenger = ScaffoldMessenger.of(context);
       Navigator.pop(context);
       messenger.showSnackBar(
-        const SnackBar(content: Text('Password changed successfully')),
+        SnackBar(content: Text(context.texts.t('passwordChangedSuccessfully'))),
       );
     } on FirebaseAuthException catch (e) {
       setState(() {
@@ -103,13 +102,13 @@ class _AdminAccountDialogState extends State<_AdminAccountDialog> {
 
   String _firebaseMessage(FirebaseAuthException e) {
     if (e.code == 'wrong-password' || e.code == 'invalid-credential') {
-      return 'Current password is incorrect.';
+      return context.texts.t('currentPasswordIncorrect');
     }
     if (e.code == 'weak-password') {
-      return 'New password is too weak.';
+      return context.texts.t('newPasswordWeak');
     }
     if (e.code == 'requires-recent-login') {
-      return 'Please log in again before changing the password.';
+      return context.texts.t('loginAgainChangePassword');
     }
 
     return e.message ?? e.code;
@@ -118,6 +117,7 @@ class _AdminAccountDialogState extends State<_AdminAccountDialog> {
   @override
   Widget build(BuildContext context) {
     final email = FirebaseAuth.instance.currentUser?.email ?? 'No email';
+    final texts = context.texts;
 
     return Dialog(
       insetPadding: const EdgeInsets.symmetric(horizontal: 48, vertical: 40),
@@ -135,12 +135,15 @@ class _AdminAccountDialogState extends State<_AdminAccountDialog> {
                   const CircleAvatar(
                     radius: 24,
                     backgroundColor: NavigoColors.primaryOrange,
-                    child: Icon(Icons.admin_panel_settings, color: Colors.white),
+                    child: Icon(
+                      Icons.admin_panel_settings,
+                      color: Colors.white,
+                    ),
                   ),
                   const SizedBox(width: 14),
-                  const Expanded(
+                  Expanded(
                     child: Text(
-                      'Admin Account',
+                      texts.t('adminAccount'),
                       style: TextStyle(
                         fontSize: 24,
                         fontWeight: FontWeight.bold,
@@ -150,7 +153,7 @@ class _AdminAccountDialogState extends State<_AdminAccountDialog> {
                   IconButton(
                     onPressed: _isLoading ? null : () => Navigator.pop(context),
                     icon: const Icon(Icons.close_rounded),
-                    tooltip: 'Close',
+                    tooltip: texts.t('close'),
                   ),
                 ],
               ),
@@ -159,7 +162,7 @@ class _AdminAccountDialogState extends State<_AdminAccountDialog> {
                 readOnly: true,
                 initialValue: email,
                 decoration: NavigoDecorations.kInputDecoration.copyWith(
-                  labelText: 'Email',
+                  labelText: texts.t('email'),
                   prefixIcon: const Icon(Icons.email_rounded),
                   fillColor: NavigoColors.backgroundAlt,
                 ),
@@ -169,7 +172,7 @@ class _AdminAccountDialogState extends State<_AdminAccountDialog> {
                 controller: _currentPasswordController,
                 obscureText: true,
                 decoration: NavigoDecorations.kInputDecoration.copyWith(
-                  labelText: 'Current password',
+                  labelText: texts.t('currentPassword'),
                   prefixIcon: const Icon(Icons.lock_outline_rounded),
                   fillColor: Colors.white,
                 ),
@@ -179,7 +182,7 @@ class _AdminAccountDialogState extends State<_AdminAccountDialog> {
                 controller: _newPasswordController,
                 obscureText: true,
                 decoration: NavigoDecorations.kInputDecoration.copyWith(
-                  labelText: 'New password',
+                  labelText: texts.t('newPassword'),
                   prefixIcon: const Icon(Icons.lock_reset_rounded),
                   fillColor: Colors.white,
                 ),
@@ -189,7 +192,7 @@ class _AdminAccountDialogState extends State<_AdminAccountDialog> {
                 controller: _confirmPasswordController,
                 obscureText: true,
                 decoration: NavigoDecorations.kInputDecoration.copyWith(
-                  labelText: 'Confirm new password',
+                  labelText: texts.t('confirmNewPassword'),
                   prefixIcon: const Icon(Icons.verified_user_rounded),
                   fillColor: Colors.white,
                 ),
@@ -210,7 +213,7 @@ class _AdminAccountDialogState extends State<_AdminAccountDialog> {
                 children: [
                   TextButton(
                     onPressed: _isLoading ? null : () => Navigator.pop(context),
-                    child: const Text('Cancel'),
+                    child: Text(texts.t('cancel')),
                   ),
                   const SizedBox(width: 10),
                   FilledButton(
@@ -228,7 +231,7 @@ class _AdminAccountDialogState extends State<_AdminAccountDialog> {
                               color: Colors.white,
                             ),
                           )
-                        : const Text('Change Password'),
+                        : Text(texts.t('changePasswordButton')),
                   ),
                 ],
               ),

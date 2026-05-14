@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../localization/localization_x.dart';
 import '../theme/app_theme.dart';
+import '../widgets/language_toggle.dart';
 import 'admin_dashboard_screen.dart';
 
 class AdminLoginScreen extends StatefulWidget {
@@ -80,9 +82,9 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
       );
     } on FirebaseAuthException catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(e.message ?? 'Login Failed')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.message ?? context.texts.t('loginFailed'))),
+      );
     } finally {
       if (mounted) {
         setState(() {
@@ -94,111 +96,129 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final texts = context.texts;
+
     return Scaffold(
       backgroundColor: NavigoColors.backgroundLight,
-      body: Center(
-        child: Container(
-          width: 420,
-          padding: const EdgeInsets.all(32),
-          decoration: NavigoDecorations.kCardDecoration.copyWith(
-            color: NavigoColors.surfaceWhite,
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Icon(
-                Icons.admin_panel_settings_rounded,
-                size: 70,
-                color: NavigoColors.primaryOrange,
-              ),
-
-              const SizedBox(height: 20),
-
-              const Text(
-                'Admin Login',
-                style: TextStyle(
-                  fontSize: 28,
-                  fontWeight: FontWeight.bold,
-                  color: NavigoColors.textDark,
-                ),
-              ),
-
-              const SizedBox(height: 10),
-
-              const Text(
-                'Sign in to continue',
-                style: NavigoTextStyles.bodySmall,
-              ),
-
-              const SizedBox(height: 35),
-
-              TextField(
-                controller: emailController,
-                style: NavigoTextStyles.fieldText,
-                decoration: NavigoDecorations.kInputDecoration.copyWith(
-                  hintText: 'Email',
-                  prefixIcon: const Icon(Icons.email_outlined),
-                ),
-              ),
-
-              const SizedBox(height: 20),
-
-              TextField(
-                controller: passwordController,
-                obscureText: obscurePassword,
-                style: NavigoTextStyles.fieldText,
-                decoration: NavigoDecorations.kInputDecoration.copyWith(
-                  hintText: 'Password',
-                  prefixIcon: const Icon(Icons.lock_outline),
-                  suffixIcon: IconButton(
-                    icon: Icon(
-                      obscurePassword ? Icons.visibility_off : Icons.visibility,
+      body: SafeArea(
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            return SingleChildScrollView(
+              padding: const EdgeInsets.all(16),
+              child: ConstrainedBox(
+                constraints: BoxConstraints(minHeight: constraints.maxHeight),
+                child: Center(
+                  child: Container(
+                    width: 420,
+                    padding: const EdgeInsets.all(32),
+                    decoration: NavigoDecorations.kCardDecoration.copyWith(
+                      color: NavigoColors.surfaceWhite,
                     ),
-                    onPressed: () {
-                      setState(() {
-                        obscurePassword = !obscurePassword;
-                      });
-                    },
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Align(
+                          alignment: AlignmentDirectional.centerEnd,
+                          child: LanguageToggle(),
+                        ),
+                        const SizedBox(height: 18),
+                        const Icon(
+                          Icons.admin_panel_settings_rounded,
+                          size: 70,
+                          color: NavigoColors.primaryOrange,
+                        ),
+                        const SizedBox(height: 20),
+                        Text(
+                          texts.t('adminLogin'),
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(
+                            fontSize: 28,
+                            fontWeight: FontWeight.bold,
+                            color: NavigoColors.textDark,
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+                        Text(
+                          texts.t('signInToContinue'),
+                          textAlign: TextAlign.center,
+                          style: NavigoTextStyles.bodySmall,
+                        ),
+                        const SizedBox(height: 35),
+                        TextField(
+                          controller: emailController,
+                          style: NavigoTextStyles.fieldText,
+                          decoration: NavigoDecorations.kInputDecoration
+                              .copyWith(
+                                hintText: texts.t('email'),
+                                prefixIcon: const Icon(Icons.email_outlined),
+                              ),
+                        ),
+                        const SizedBox(height: 20),
+                        TextField(
+                          controller: passwordController,
+                          obscureText: obscurePassword,
+                          style: NavigoTextStyles.fieldText,
+                          decoration: NavigoDecorations.kInputDecoration
+                              .copyWith(
+                                hintText: texts.t('password'),
+                                prefixIcon: const Icon(Icons.lock_outline),
+                                suffixIcon: IconButton(
+                                  icon: Icon(
+                                    obscurePassword
+                                        ? Icons.visibility_off
+                                        : Icons.visibility,
+                                  ),
+                                  onPressed: () {
+                                    setState(() {
+                                      obscurePassword = !obscurePassword;
+                                    });
+                                  },
+                                ),
+                              ),
+                        ),
+                        const SizedBox(height: 16),
+                        CheckboxListTile(
+                          value: rememberMe,
+                          onChanged: isLoading
+                              ? null
+                              : (value) {
+                                  setState(() {
+                                    rememberMe = value ?? false;
+                                  });
+                                },
+                          dense: true,
+                          contentPadding: EdgeInsets.zero,
+                          controlAffinity: ListTileControlAffinity.leading,
+                          activeColor: NavigoColors.primaryOrange,
+                          title: Text(
+                            texts.t('rememberMe'),
+                            style: NavigoTextStyles.bodyMedium,
+                          ),
+                        ),
+                        const SizedBox(height: 18),
+                        SizedBox(
+                          width: double.infinity,
+                          height: 55,
+                          child: ElevatedButton(
+                            onPressed: isLoading ? null : loginAdmin,
+                            style: NavigoDecorations.kPrimaryButtonStyle,
+                            child: isLoading
+                                ? const CircularProgressIndicator(
+                                    color: Colors.white,
+                                  )
+                                : Text(
+                                    texts.t('login'),
+                                    style: NavigoTextStyles.button,
+                                  ),
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ),
-
-              const SizedBox(height: 16),
-
-              CheckboxListTile(
-                value: rememberMe,
-                onChanged: isLoading
-                    ? null
-                    : (value) {
-                        setState(() {
-                          rememberMe = value ?? false;
-                        });
-                      },
-                dense: true,
-                contentPadding: EdgeInsets.zero,
-                controlAffinity: ListTileControlAffinity.leading,
-                activeColor: NavigoColors.primaryOrange,
-                title: const Text(
-                  'Remember me',
-                  style: NavigoTextStyles.bodyMedium,
-                ),
-              ),
-
-              const SizedBox(height: 18),
-
-              SizedBox(
-                width: double.infinity,
-                height: 55,
-                child: ElevatedButton(
-                  onPressed: isLoading ? null : loginAdmin,
-                  style: NavigoDecorations.kPrimaryButtonStyle,
-                  child: isLoading
-                      ? const CircularProgressIndicator(color: Colors.white)
-                      : const Text('Login', style: NavigoTextStyles.button),
-                ),
-              ),
-            ],
-          ),
+            );
+          },
         ),
       ),
     );

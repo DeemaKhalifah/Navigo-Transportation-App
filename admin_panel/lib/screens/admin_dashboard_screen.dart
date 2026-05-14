@@ -3,10 +3,12 @@ import 'package:flutter/services.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import '../models/admin_dashboard_model.dart';
+import '../localization/localization_x.dart';
 import '../services/admin_auth_service.dart';
 import '../services/admin_dashboard_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/admin_account_dialog.dart';
+import '../widgets/language_toggle.dart';
 import 'admin_login_screen.dart';
 
 enum _AdminSection {
@@ -44,9 +46,9 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
 
       if (!mounted) return;
 
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Logged out successfully')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(context.texts.t('loggedOutSuccessfully'))),
+      );
 
       Navigator.pushReplacement(
         context,
@@ -69,7 +71,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   Future<void> _approveDriver(AdminApprovalItem item) async {
     await _runApprovalAction(
       item: item,
-      successMessage: '${item.name} approved',
+      successMessage: '${item.name} ${context.texts.t('approved')}',
       action: () => _service.approveDriver(item),
     );
   }
@@ -77,7 +79,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   Future<void> _rejectDriver(AdminApprovalItem item) async {
     await _runApprovalAction(
       item: item,
-      successMessage: '${item.name} rejected',
+      successMessage: '${item.name} ${context.texts.t('rejected')}',
       action: () => _service.rejectDriver(item),
     );
   }
@@ -98,9 +100,11 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
       ).showSnackBar(SnackBar(content: Text(successMessage)));
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Could not update driver: $e')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('${context.texts.t('couldNotUpdateDriver')}: $e'),
+        ),
+      );
     } finally {
       if (mounted) {
         setState(() => _busyApprovalIds.remove(item.id));
@@ -138,6 +142,8 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final texts = context.texts;
+
     return Scaffold(
       backgroundColor: NavigoColors.backgroundLight,
       body: Row(
@@ -177,7 +183,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                       if (snapshot.hasError) {
                         return Center(
                           child: Text(
-                            'Error loading dashboard: ${snapshot.error}',
+                            '${texts.t('errorLoadingDashboard')}: ${snapshot.error}',
                           ),
                         );
                       }
@@ -209,36 +215,36 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                                       ),
                                   children: [
                                     _StatCard(
-                                      title: 'Total Users',
+                                      title: texts.t('totalUsers'),
                                       value: data?.totalUsers.toString() ?? '0',
-                                      label: 'All users',
+                                      label: texts.t('allUsers'),
                                       icon: Icons.groups_rounded,
                                       color: NavigoColors.accentBlue,
                                     ),
                                     _StatCard(
-                                      title: 'Active Routes',
+                                      title: texts.t('activeRoutes'),
                                       value:
                                           data?.totalRoutes.toString() ?? '0',
-                                      label: 'Available routes',
+                                      label: texts.t('availableRoutes'),
                                       icon: Icons.route_rounded,
                                       color: NavigoColors.accentGreen,
                                       onTap: _showRoutes,
                                     ),
                                     _StatCard(
-                                      title: 'Active Trips',
+                                      title: texts.t('activeTrips'),
                                       value:
                                           data?.activeTrips.toString() ?? '0',
-                                      label: 'On going',
+                                      label: texts.t('onGoing'),
                                       icon: Icons.directions_bus_rounded,
                                       color: NavigoColors.primaryOrange,
                                       onTap: _showTrips,
                                     ),
                                     _StatCard(
-                                      title: 'Drivers',
+                                      title: texts.t('drivers'),
                                       value:
                                           data?.totalDrivers.toString() ?? '0',
                                       label:
-                                          '${data?.pendingDrivers ?? 0} pending review',
+                                          '${data?.pendingDrivers ?? 0} ${texts.t('pendingReview')}',
                                       icon: Icons.local_taxi_rounded,
                                       color: Colors.purple,
                                       onTap: _showDrivers,
@@ -258,30 +264,32 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                                       ),
                                   children: [
                                     _ActionCard(
-                                      title: 'Drivers Approval',
-                                      subtitle: 'Review and approve drivers',
+                                      title: texts.t('driversApproval'),
+                                      subtitle: texts.t(
+                                        'reviewAndApproveDrivers',
+                                      ),
                                       icon: Icons.verified_user_rounded,
                                       color: NavigoColors.accentGreen,
                                       onTap: _showDrivers,
                                     ),
                                     _ActionCard(
-                                      title: 'Trips Management',
-                                      subtitle: 'Manage all trips',
+                                      title: texts.t('tripsManagement'),
+                                      subtitle: texts.t('manageAllTrips'),
                                       icon: Icons.directions_bus_rounded,
                                       color: NavigoColors.primaryOrange,
                                       onTap: _showTrips,
                                     ),
                                     _ActionCard(
-                                      title: 'Routes Management',
-                                      subtitle: 'Manage all routes',
+                                      title: texts.t('routesManagement'),
+                                      subtitle: texts.t('manageAllRoutes'),
                                       icon: Icons.route_rounded,
                                       color: NavigoColors.accentBlue,
                                       onTap: _showRoutes,
                                     ),
                                     _ActionCard(
-                                      title: 'Reports & Analytics',
+                                      title: texts.t('reportsAnalytics'),
                                       subtitle:
-                                          '${data?.reports.length ?? 0} admin reports',
+                                          '${data?.reports.length ?? 0} ${texts.t('adminReports')}',
                                       icon: Icons.bar_chart_rounded,
                                       color: Colors.purple,
                                       onTap: _showReports,
@@ -353,6 +361,8 @@ class _DriversPanelState extends State<_DriversPanel> {
 
   @override
   Widget build(BuildContext context) {
+    final texts = context.texts;
+
     return Padding(
       padding: const EdgeInsets.fromLTRB(8, 16, 24, 16),
       child: Container(
@@ -363,10 +373,9 @@ class _DriversPanelState extends State<_DriversPanel> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             _SectionHeader(
-              title: 'Drivers',
-              subtitle:
-                  'All drivers with information from users and drivers collections',
-              searchHint: 'Search drivers...',
+              title: texts.t('drivers'),
+              subtitle: texts.t('driversSubtitle'),
+              searchHint: texts.t('searchDrivers'),
               onSearchChanged: (value) {
                 setState(() => _searchQuery = value.trim().toLowerCase());
               },
@@ -382,7 +391,9 @@ class _DriversPanelState extends State<_DriversPanel> {
 
                   if (snapshot.hasError) {
                     return Center(
-                      child: Text('Error loading drivers: ${snapshot.error}'),
+                      child: Text(
+                        '${texts.t('errorLoadingDrivers')}: ${snapshot.error}',
+                      ),
                     );
                   }
 
@@ -403,9 +414,9 @@ class _DriversPanelState extends State<_DriversPanel> {
                   }).toList();
 
                   if (drivers.isEmpty) {
-                    return const Center(
+                    return Center(
                       child: Text(
-                        'No drivers found',
+                        texts.t('noDriversFound'),
                         style: NavigoTextStyles.bodyMedium,
                       ),
                     );
@@ -439,14 +450,14 @@ class _DriversPanelState extends State<_DriversPanel> {
                               headingRowColor: const WidgetStatePropertyAll(
                                 NavigoColors.backgroundAlt,
                               ),
-                              columns: const [
-                                DataColumn(label: Text('Name')),
-                                DataColumn(label: Text('Phone')),
-                                DataColumn(label: Text('Status')),
-                                DataColumn(label: Text('Approval')),
-                                DataColumn(label: Text('Vehicle')),
-                                DataColumn(label: Text('Route')),
-                                DataColumn(label: Text('Details')),
+                              columns: [
+                                DataColumn(label: Text(texts.t('name'))),
+                                DataColumn(label: Text(texts.t('phone'))),
+                                DataColumn(label: Text(texts.t('status'))),
+                                DataColumn(label: Text(texts.t('approval'))),
+                                DataColumn(label: Text(texts.t('vehicle'))),
+                                DataColumn(label: Text(texts.t('route'))),
+                                DataColumn(label: Text(texts.t('details'))),
                               ],
                               rows: drivers.map((driver) {
                                 return DataRow(
@@ -463,7 +474,7 @@ class _DriversPanelState extends State<_DriversPanel> {
                                     DataCell(
                                       _Chip(
                                         label: driver.isOnline
-                                            ? 'Online'
+                                            ? texts.t('online')
                                             : _formatStatus(driver.status),
                                         color: driver.isOnline
                                             ? NavigoColors.accentGreen
@@ -473,7 +484,7 @@ class _DriversPanelState extends State<_DriversPanel> {
                                     DataCell(
                                       _Chip(
                                         label: driver.isApproved
-                                            ? 'Approved'
+                                            ? texts.t('approved')
                                             : _formatStatus(
                                                 driver.approvalStatus,
                                               ),
@@ -482,8 +493,23 @@ class _DriversPanelState extends State<_DriversPanel> {
                                             : NavigoColors.primaryOrange,
                                       ),
                                     ),
-                                    DataCell(Text(_dash(driver.vehicleType))),
-                                    DataCell(Text(_dash(driver.routeLabel))),
+                                    DataCell(
+                                      Text(
+                                        _localizedVehicleType(
+                                          context,
+                                          driver.vehicleType,
+                                        ),
+                                      ),
+                                    ),
+                                    DataCell(
+                                      Text(
+                                        _localizedRouteName(
+                                          context,
+                                          label: driver.routeLabel,
+                                          fallback: driver.routeId,
+                                        ),
+                                      ),
+                                    ),
                                     DataCell(
                                       TextButton.icon(
                                         onPressed: () =>
@@ -492,7 +518,7 @@ class _DriversPanelState extends State<_DriversPanel> {
                                           Icons.open_in_new_rounded,
                                           size: 16,
                                         ),
-                                        label: const Text('Open'),
+                                        label: Text(texts.t('open')),
                                       ),
                                     ),
                                   ],
@@ -514,6 +540,8 @@ class _DriversPanelState extends State<_DriversPanel> {
   }
 
   void _showDriverDetails(BuildContext context, AdminDriverItem driver) {
+    final texts = context.texts;
+
     showDialog(
       context: context,
       builder: (context) {
@@ -538,7 +566,9 @@ class _DriversPanelState extends State<_DriversPanel> {
                       children: [
                         CircleAvatar(
                           radius: 24,
-                          backgroundColor: Colors.purple.withOpacity(0.12),
+                          backgroundColor: Colors.purple.withValues(
+                            alpha: 0.12,
+                          ),
                           child: const Icon(
                             Icons.local_taxi_rounded,
                             color: Colors.purple,
@@ -557,76 +587,105 @@ class _DriversPanelState extends State<_DriversPanel> {
                         IconButton(
                           onPressed: () => Navigator.pop(context),
                           icon: const Icon(Icons.close_rounded),
-                          tooltip: 'Close',
+                          tooltip: texts.t('close'),
                         ),
                       ],
                     ),
                     const SizedBox(height: 24),
                     _DetailSection(
-                      title: 'Account Information',
+                      title: texts.t('accountInformation'),
                       children: [
-                        _DetailRow(label: 'Driver ID', value: driver.driverId),
-                        _DetailRow(label: 'User ID', value: driver.userId),
-                        _DetailRow(label: 'Email', value: driver.email),
-                        _DetailRow(label: 'Phone', value: driver.phone),
+                        _DetailRow(
+                          label: texts.t('driverId'),
+                          value: driver.driverId,
+                        ),
+                        _DetailRow(
+                          label: texts.t('userId'),
+                          value: driver.userId,
+                        ),
+                        _DetailRow(
+                          label: texts.t('email'),
+                          value: driver.email,
+                        ),
+                        _DetailRow(
+                          label: texts.t('phone'),
+                          value: driver.phone,
+                        ),
                       ],
                     ),
                     const SizedBox(height: 16),
                     _DetailSection(
-                      title: 'Driver Status',
+                      title: texts.t('driverStatus'),
                       children: [
                         _DetailRow(
-                          label: 'Online',
-                          value: driver.isOnline ? 'Yes' : 'No',
+                          label: texts.t('online'),
+                          value: driver.isOnline
+                              ? texts.t('yes')
+                              : texts.t('no'),
                         ),
                         _DetailRow(
-                          label: 'Status',
+                          label: texts.t('status'),
                           value: _formatStatus(driver.status),
                         ),
                         _DetailRow(
-                          label: 'Approved',
-                          value: driver.isApproved ? 'Yes' : 'No',
+                          label: texts.t('approved'),
+                          value: driver.isApproved
+                              ? texts.t('yes')
+                              : texts.t('no'),
                         ),
                         _DetailRow(
-                          label: 'Approval Status',
+                          label: texts.t('approvalStatus'),
                           value: _formatStatus(driver.approvalStatus),
                         ),
                       ],
                     ),
                     const SizedBox(height: 16),
                     _DetailSection(
-                      title: 'Route And Vehicle',
+                      title: texts.t('routeAndVehicle'),
                       children: [
-                        _DetailRow(label: 'Route', value: driver.routeLabel),
-                        _DetailRow(label: 'Route ID', value: driver.routeId),
                         _DetailRow(
-                          label: 'Vehicle ID',
+                          label: texts.t('route'),
+                          value: _localizedRouteName(
+                            context,
+                            label: driver.routeLabel,
+                            fallback: driver.routeId,
+                          ),
+                        ),
+                        _DetailRow(
+                          label: texts.t('routeId'),
+                          value: driver.routeId,
+                        ),
+                        _DetailRow(
+                          label: texts.t('vehicleId'),
                           value: driver.vehicleId,
                         ),
                         _DetailRow(
-                          label: 'Vehicle Type',
-                          value: driver.vehicleType,
+                          label: texts.t('vehicleType'),
+                          value: _localizedVehicleType(
+                            context,
+                            driver.vehicleType,
+                          ),
                         ),
                         _DetailRow(
-                          label: 'Plate Number',
+                          label: texts.t('plateNumber'),
                           value: driver.plateNumber,
                         ),
                         _DetailRow(
-                          label: 'License Number',
+                          label: texts.t('licenseNumber'),
                           value: driver.licenseNumber,
                         ),
                       ],
                     ),
                     const SizedBox(height: 16),
                     _DetailSection(
-                      title: 'Dates',
+                      title: texts.t('dates'),
                       children: [
                         _DetailRow(
-                          label: 'Created At',
+                          label: texts.t('createdAt'),
                           value: _formatDate(driver.createdAt),
                         ),
                         _DetailRow(
-                          label: 'Updated At',
+                          label: texts.t('updatedAt'),
                           value: _formatDate(driver.updatedAt),
                         ),
                       ],
@@ -640,7 +699,7 @@ class _DriversPanelState extends State<_DriversPanel> {
                           backgroundColor: NavigoColors.primaryOrange,
                           foregroundColor: Colors.white,
                         ),
-                        child: const Text('Close'),
+                        child: Text(texts.t('close')),
                       ),
                     ),
                   ],
@@ -676,11 +735,13 @@ class _RoutesPanelState extends State<_RoutesPanel> {
 
     ScaffoldMessenger.of(
       context,
-    ).showSnackBar(const SnackBar(content: Text('Route created')));
+    ).showSnackBar(SnackBar(content: Text(context.texts.t('routeCreated'))));
   }
 
   @override
   Widget build(BuildContext context) {
+    final texts = context.texts;
+
     return Padding(
       padding: const EdgeInsets.fromLTRB(8, 16, 24, 16),
       child: Container(
@@ -694,20 +755,20 @@ class _RoutesPanelState extends State<_RoutesPanel> {
               padding: const EdgeInsets.all(34),
               child: Row(
                 children: [
-                  const Expanded(
+                  Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          'Routes',
-                          style: TextStyle(
+                          texts.t('routes'),
+                          style: const TextStyle(
                             fontSize: 30,
                             fontWeight: FontWeight.bold,
                           ),
                         ),
-                        SizedBox(height: 6),
+                        const SizedBox(height: 6),
                         Text(
-                          'All routes from the route collection',
+                          texts.t('routesSubtitle'),
                           style: NavigoTextStyles.bodyMedium,
                         ),
                       ],
@@ -722,7 +783,7 @@ class _RoutesPanelState extends State<_RoutesPanel> {
                         );
                       },
                       decoration: NavigoDecorations.kInputDecoration.copyWith(
-                        hintText: 'Search routes...',
+                        hintText: texts.t('searchRoutes'),
                         prefixIcon: const Icon(Icons.search),
                         fillColor: Colors.white,
                       ),
@@ -732,7 +793,7 @@ class _RoutesPanelState extends State<_RoutesPanel> {
                   FilledButton.icon(
                     onPressed: _showCreateRouteDialog,
                     icon: const Icon(Icons.add_rounded),
-                    label: const Text('Create Route'),
+                    label: Text(texts.t('createRoute')),
                     style: FilledButton.styleFrom(
                       backgroundColor: NavigoColors.primaryOrange,
                       foregroundColor: Colors.white,
@@ -752,7 +813,9 @@ class _RoutesPanelState extends State<_RoutesPanel> {
 
                   if (snapshot.hasError) {
                     return Center(
-                      child: Text('Error loading routes: ${snapshot.error}'),
+                      child: Text(
+                        '${texts.t('errorLoadingRoutes')}: ${snapshot.error}',
+                      ),
                     );
                   }
 
@@ -769,9 +832,9 @@ class _RoutesPanelState extends State<_RoutesPanel> {
                   }).toList();
 
                   if (routes.isEmpty) {
-                    return const Center(
+                    return Center(
                       child: Text(
-                        'No routes found',
+                        texts.t('noRoutesFound'),
                         style: NavigoTextStyles.bodyMedium,
                       ),
                     );
@@ -805,22 +868,36 @@ class _RoutesPanelState extends State<_RoutesPanel> {
                               headingRowColor: const WidgetStatePropertyAll(
                                 NavigoColors.backgroundAlt,
                               ),
-                              columns: const [
-                                DataColumn(label: Text('Route ID')),
-                                DataColumn(label: Text('Start')),
-                                DataColumn(label: Text('End')),
-                                DataColumn(label: Text('Price')),
-                                DataColumn(label: Text('Vehicles')),
-                                DataColumn(label: Text('Slots')),
-                                DataColumn(label: Text('Driver Queue')),
-                                DataColumn(label: Text('Updated')),
+                              columns: [
+                                DataColumn(label: Text(texts.t('routeId'))),
+                                DataColumn(label: Text(texts.t('start'))),
+                                DataColumn(label: Text(texts.t('end'))),
+                                DataColumn(label: Text(texts.t('price'))),
+                                DataColumn(label: Text(texts.t('vehicles'))),
+                                DataColumn(label: Text(texts.t('slots'))),
+                                DataColumn(label: Text(texts.t('driverQueue'))),
+                                DataColumn(label: Text(texts.t('updated'))),
                               ],
                               rows: routes.map((route) {
                                 return DataRow(
                                   cells: [
                                     DataCell(Text(_dash(route.routeId))),
-                                    DataCell(Text(_dash(route.startPoint))),
-                                    DataCell(Text(_dash(route.endPoint))),
+                                    DataCell(
+                                      Text(
+                                        _localizedPlaceName(
+                                          context,
+                                          route.startPoint,
+                                        ),
+                                      ),
+                                    ),
+                                    DataCell(
+                                      Text(
+                                        _localizedPlaceName(
+                                          context,
+                                          route.endPoint,
+                                        ),
+                                      ),
+                                    ),
                                     DataCell(
                                       Text(route.price.toStringAsFixed(2)),
                                     ),
@@ -828,7 +905,15 @@ class _RoutesPanelState extends State<_RoutesPanel> {
                                       Text(
                                         route.vehicleTypes.isEmpty
                                             ? '-'
-                                            : route.vehicleTypes.join(', '),
+                                            : route.vehicleTypes
+                                                  .map(
+                                                    (type) =>
+                                                        _localizedVehicleType(
+                                                          context,
+                                                          type,
+                                                        ),
+                                                  )
+                                                  .join(', '),
                                       ),
                                     ),
                                     DataCell(
@@ -909,9 +994,11 @@ class _CreateRouteDialogState extends State<_CreateRouteDialog> {
       Navigator.pop(context, true);
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Could not create route: $e')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('${context.texts.t('couldNotCreateRoute')}: $e'),
+        ),
+      );
     } finally {
       if (mounted) {
         setState(() => _isSaving = false);
@@ -931,6 +1018,8 @@ class _CreateRouteDialogState extends State<_CreateRouteDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final texts = context.texts;
+
     return LayoutBuilder(
       builder: (context, constraints) {
         final horizontalInset = constraints.maxWidth < 720 ? 12.0 : 56.0;
@@ -960,10 +1049,10 @@ class _CreateRouteDialogState extends State<_CreateRouteDialog> {
                     children: [
                       Row(
                         children: [
-                          const Expanded(
+                          Expanded(
                             child: Text(
-                              'Create Route',
-                              style: TextStyle(
+                              texts.t('createRoute'),
+                              style: const TextStyle(
                                 fontSize: 24,
                                 fontWeight: FontWeight.bold,
                               ),
@@ -974,7 +1063,7 @@ class _CreateRouteDialogState extends State<_CreateRouteDialog> {
                                 ? null
                                 : () => Navigator.pop(context, false),
                             icon: const Icon(Icons.close_rounded),
-                            tooltip: 'Close',
+                            tooltip: texts.t('close'),
                           ),
                         ],
                       ),
@@ -987,20 +1076,22 @@ class _CreateRouteDialogState extends State<_CreateRouteDialog> {
                                     children: [
                                       _RouteLocationField(
                                         controller: _startController,
-                                        labelText: 'Start point',
+                                        labelText: texts.t('startPoint'),
                                         icon: Icons.trip_origin_rounded,
                                         selectedLocation: _startLocation,
-                                        validationMessage:
-                                            'Start point is required',
+                                        validationMessage: texts.t(
+                                          'startPointRequired',
+                                        ),
                                       ),
                                       const SizedBox(height: 14),
                                       _RouteLocationField(
                                         controller: _endController,
-                                        labelText: 'End point',
+                                        labelText: texts.t('endPoint'),
                                         icon: Icons.location_on_rounded,
                                         selectedLocation: _endLocation,
-                                        validationMessage:
-                                            'End point is required',
+                                        validationMessage: texts.t(
+                                          'endPointRequired',
+                                        ),
                                       ),
                                     ],
                                   ),
@@ -1010,21 +1101,24 @@ class _CreateRouteDialogState extends State<_CreateRouteDialog> {
                                 Expanded(
                                   child: _RouteLocationField(
                                     controller: _startController,
-                                    labelText: 'Start point',
+                                    labelText: texts.t('startPoint'),
                                     icon: Icons.trip_origin_rounded,
                                     selectedLocation: _startLocation,
-                                    validationMessage:
-                                        'Start point is required',
+                                    validationMessage: texts.t(
+                                      'startPointRequired',
+                                    ),
                                   ),
                                 ),
                                 const SizedBox(width: 14),
                                 Expanded(
                                   child: _RouteLocationField(
                                     controller: _endController,
-                                    labelText: 'End point',
+                                    labelText: texts.t('endPoint'),
                                     icon: Icons.location_on_rounded,
                                     selectedLocation: _endLocation,
-                                    validationMessage: 'End point is required',
+                                    validationMessage: texts.t(
+                                      'endPointRequired',
+                                    ),
                                   ),
                                 ),
                               ],
@@ -1055,13 +1149,13 @@ class _CreateRouteDialogState extends State<_CreateRouteDialog> {
                       FormField<bool>(
                         validator: (_) {
                           if (_startLocation == null && _endLocation == null) {
-                            return 'Pick start and end locations from the map';
+                            return texts.t('pickStartEndLocations');
                           }
                           if (_startLocation == null) {
-                            return 'Pick start location from the map';
+                            return texts.t('pickStartLocation');
                           }
                           if (_endLocation == null) {
-                            return 'Pick end location from the map';
+                            return texts.t('pickEndLocation');
                           }
                           return null;
                         },
@@ -1129,7 +1223,9 @@ class _CreateRouteDialogState extends State<_CreateRouteDialog> {
                                 )
                               : const Icon(Icons.add_rounded),
                           label: Text(
-                            _isSaving ? 'Creating...' : 'Create Route',
+                            _isSaving
+                                ? texts.t('creating')
+                                : texts.t('createRoute'),
                           ),
                           style: FilledButton.styleFrom(
                             backgroundColor: NavigoColors.primaryOrange,
@@ -1188,7 +1284,7 @@ class _RouteLocationField extends StatelessWidget {
         if (location != null) ...[
           const SizedBox(height: 6),
           Text(
-            'Selected: ${location.latitude.toStringAsFixed(6)}, ${location.longitude.toStringAsFixed(6)}',
+            '${context.texts.t('selected')}: ${location.latitude.toStringAsFixed(6)}, ${location.longitude.toStringAsFixed(6)}',
             style: NavigoTextStyles.bodySmall,
           ),
         ],
@@ -1204,18 +1300,20 @@ class _RoutePriceField extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final texts = context.texts;
+
     return TextFormField(
       controller: controller,
       keyboardType: const TextInputType.numberWithOptions(decimal: true),
       decoration: NavigoDecorations.kInputDecoration.copyWith(
-        labelText: 'Price',
+        labelText: texts.t('price'),
         prefixIcon: const Icon(Icons.payments_rounded),
         fillColor: Colors.white,
       ),
       validator: (value) {
         final price = double.tryParse(value?.trim() ?? '');
         if (price == null || price < 0) {
-          return 'Enter a valid price';
+          return texts.t('enterValidPrice');
         }
         return null;
       },
@@ -1240,18 +1338,20 @@ class _RouteVehicleTypesField extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final texts = context.texts;
+
     return FormField<Set<String>>(
       initialValue: selectedVehicleTypes,
       validator: (value) {
         if (selectedVehicleTypes.isEmpty) {
-          return 'Add at least one vehicle type';
+          return texts.t('addVehicleType');
         }
         return null;
       },
       builder: (field) {
         return InputDecorator(
           decoration: NavigoDecorations.kInputDecoration.copyWith(
-            labelText: 'Vehicle types',
+            labelText: texts.t('vehicleTypes'),
             prefixIcon: const Icon(Icons.directions_bus_rounded),
             fillColor: Colors.white,
             errorText: field.errorText,
@@ -1267,7 +1367,9 @@ class _RouteVehicleTypesField extends StatelessWidget {
                   onChanged(entry.key, selected);
                   field.didChange(selectedVehicleTypes);
                 },
-                selectedColor: NavigoColors.primaryOrange.withOpacity(0.16),
+                selectedColor: NavigoColors.primaryOrange.withValues(
+                  alpha: 0.16,
+                ),
                 checkmarkColor: NavigoColors.primaryOrange,
               );
             }).toList(),
@@ -1312,6 +1414,7 @@ class _RouteMapSelectorState extends State<_RouteMapSelector> {
 
   @override
   Widget build(BuildContext context) {
+    final texts = context.texts;
     final start = widget.startLocation;
     final end = widget.endLocation;
     final markers = <Marker>[
@@ -1347,18 +1450,18 @@ class _RouteMapSelectorState extends State<_RouteMapSelector> {
           runSpacing: 8,
           crossAxisAlignment: WrapCrossAlignment.center,
           children: [
-            const Text('Route locations', style: NavigoTextStyles.titleSmall),
+            Text(texts.t('routeLocations'), style: NavigoTextStyles.titleSmall),
             SegmentedButton<bool>(
-              segments: const [
+              segments: [
                 ButtonSegment(
                   value: true,
-                  icon: Icon(Icons.trip_origin_rounded),
-                  label: Text('Start'),
+                  icon: const Icon(Icons.trip_origin_rounded),
+                  label: Text(texts.t('start')),
                 ),
                 ButtonSegment(
                   value: false,
-                  icon: Icon(Icons.location_on_rounded),
-                  label: Text('End'),
+                  icon: const Icon(Icons.location_on_rounded),
+                  label: Text(texts.t('end')),
                 ),
               ],
               selected: {widget.isSelectingStart},
@@ -1371,8 +1474,8 @@ class _RouteMapSelectorState extends State<_RouteMapSelector> {
         const SizedBox(height: 8),
         Text(
           widget.isSelectingStart
-              ? 'Click the map to set the start location.'
-              : 'Click the map to set the end location.',
+              ? texts.t('setStartOnMap')
+              : texts.t('setEndOnMap'),
           style: NavigoTextStyles.bodySmall,
         ),
         const SizedBox(height: 10),
@@ -1414,13 +1517,13 @@ class _RouteMapSelectorState extends State<_RouteMapSelector> {
                     children: [
                       _MapZoomButton(
                         icon: Icons.add_rounded,
-                        tooltip: 'Zoom in',
+                        tooltip: texts.t('zoomIn'),
                         onPressed: () => _zoomBy(1),
                       ),
                       const SizedBox(height: 8),
                       _MapZoomButton(
                         icon: Icons.remove_rounded,
-                        tooltip: 'Zoom out',
+                        tooltip: texts.t('zoomOut'),
                         onPressed: () => _zoomBy(-1),
                       ),
                     ],
@@ -1438,7 +1541,7 @@ class _RouteMapSelectorState extends State<_RouteMapSelector> {
             SizedBox(
               width: widget.compact ? double.infinity : 390,
               child: _MapCoordinateLabel(
-                label: 'Start',
+                label: texts.t('start'),
                 location: start,
                 color: NavigoColors.accentGreen,
               ),
@@ -1446,7 +1549,7 @@ class _RouteMapSelectorState extends State<_RouteMapSelector> {
             SizedBox(
               width: widget.compact ? double.infinity : 390,
               child: _MapCoordinateLabel(
-                label: 'End',
+                label: texts.t('end'),
                 location: end,
                 color: NavigoColors.primaryOrange,
               ),
@@ -1534,9 +1637,9 @@ class _RouteManagersPanelState extends State<_RouteManagersPanel> {
 
     if (!mounted || created != true) return;
 
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(const SnackBar(content: Text('Route manager created')));
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(context.texts.t('routeManagerCreated'))),
+    );
   }
 
   Future<void> _showEditRouteManagerDialog(
@@ -1550,13 +1653,15 @@ class _RouteManagersPanelState extends State<_RouteManagersPanel> {
 
     if (!mounted || updated != true) return;
 
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(const SnackBar(content: Text('Route manager updated')));
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(context.texts.t('routeManagerUpdated'))),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
+    final texts = context.texts;
+
     return Padding(
       padding: const EdgeInsets.fromLTRB(8, 16, 24, 16),
       child: Container(
@@ -1567,17 +1672,16 @@ class _RouteManagersPanelState extends State<_RouteManagersPanel> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             _SectionHeader(
-              title: 'Route Managers',
-              subtitle:
-                  'All route managers with information from users and route_manger collections',
-              searchHint: 'Search route managers...',
+              title: texts.t('routeManagers'),
+              subtitle: texts.t('routeManagersSubtitle'),
+              searchHint: texts.t('searchRouteManagers'),
               onSearchChanged: (value) {
                 setState(() => _searchQuery = value.trim().toLowerCase());
               },
               trailing: FilledButton.icon(
                 onPressed: _showCreateRouteManagerDialog,
                 icon: const Icon(Icons.person_add_alt_1_rounded),
-                label: const Text('Create Route Manager'),
+                label: Text(texts.t('createRouteManager')),
                 style: FilledButton.styleFrom(
                   backgroundColor: NavigoColors.primaryOrange,
                   foregroundColor: Colors.white,
@@ -1596,7 +1700,7 @@ class _RouteManagersPanelState extends State<_RouteManagersPanel> {
                   if (snapshot.hasError) {
                     return Center(
                       child: Text(
-                        'Error loading route managers: ${snapshot.error}',
+                        '${texts.t('errorLoadingRouteManagers')}: ${snapshot.error}',
                       ),
                     );
                   }
@@ -1616,9 +1720,9 @@ class _RouteManagersPanelState extends State<_RouteManagersPanel> {
                   }).toList();
 
                   if (managers.isEmpty) {
-                    return const Center(
+                    return Center(
                       child: Text(
-                        'No route managers found',
+                        texts.t('noRouteManagersFound'),
                         style: NavigoTextStyles.bodyMedium,
                       ),
                     );
@@ -1652,14 +1756,14 @@ class _RouteManagersPanelState extends State<_RouteManagersPanel> {
                               headingRowColor: const WidgetStatePropertyAll(
                                 NavigoColors.backgroundAlt,
                               ),
-                              columns: const [
-                                DataColumn(label: Text('Name')),
-                                DataColumn(label: Text('Email')),
-                                DataColumn(label: Text('Phone')),
-                                DataColumn(label: Text('Route')),
-                                DataColumn(label: Text('Verified')),
-                                DataColumn(label: Text('Online')),
-                                DataColumn(label: Text('Actions')),
+                              columns: [
+                                DataColumn(label: Text(texts.t('name'))),
+                                DataColumn(label: Text(texts.t('email'))),
+                                DataColumn(label: Text(texts.t('phone'))),
+                                DataColumn(label: Text(texts.t('route'))),
+                                DataColumn(label: Text(texts.t('verified'))),
+                                DataColumn(label: Text(texts.t('online'))),
+                                DataColumn(label: Text(texts.t('actions'))),
                               ],
                               rows: managers.map((manager) {
                                 return DataRow(
@@ -1674,12 +1778,20 @@ class _RouteManagersPanelState extends State<_RouteManagersPanel> {
                                     ),
                                     DataCell(Text(_dash(manager.email))),
                                     DataCell(Text(_dash(manager.phone))),
-                                    DataCell(Text(_dash(manager.routeLabel))),
+                                    DataCell(
+                                      Text(
+                                        _localizedRouteName(
+                                          context,
+                                          label: manager.routeLabel,
+                                          fallback: manager.routeId,
+                                        ),
+                                      ),
+                                    ),
                                     DataCell(
                                       _Chip(
                                         label: manager.isVerified
-                                            ? 'Yes'
-                                            : 'No',
+                                            ? texts.t('yes')
+                                            : texts.t('no'),
                                         color: manager.isVerified
                                             ? NavigoColors.accentGreen
                                             : NavigoColors.primaryOrange,
@@ -1688,8 +1800,8 @@ class _RouteManagersPanelState extends State<_RouteManagersPanel> {
                                     DataCell(
                                       _Chip(
                                         label: manager.isOnline
-                                            ? 'Online'
-                                            : 'Offline',
+                                            ? texts.t('online')
+                                            : texts.t('offline'),
                                         color: manager.isOnline
                                             ? NavigoColors.accentGreen
                                             : NavigoColors.textGray,
@@ -1708,7 +1820,7 @@ class _RouteManagersPanelState extends State<_RouteManagersPanel> {
                                               Icons.edit_rounded,
                                               size: 20,
                                             ),
-                                            tooltip: 'Edit',
+                                            tooltip: texts.t('edit'),
                                           ),
                                           TextButton.icon(
                                             onPressed: () =>
@@ -1720,7 +1832,7 @@ class _RouteManagersPanelState extends State<_RouteManagersPanel> {
                                               Icons.open_in_new_rounded,
                                               size: 16,
                                             ),
-                                            label: const Text('Open'),
+                                            label: Text(texts.t('open')),
                                           ),
                                         ],
                                       ),
@@ -1747,6 +1859,8 @@ class _RouteManagersPanelState extends State<_RouteManagersPanel> {
     BuildContext context,
     AdminRouteManagerItem manager,
   ) {
+    final texts = context.texts;
+
     showDialog(
       context: context,
       builder: (context) {
@@ -1772,7 +1886,7 @@ class _RouteManagersPanelState extends State<_RouteManagersPanel> {
                         CircleAvatar(
                           radius: 24,
                           backgroundColor: NavigoColors.primaryOrange
-                              .withOpacity(0.12),
+                              .withValues(alpha: 0.12),
                           child: const Icon(
                             Icons.manage_accounts_rounded,
                             color: NavigoColors.primaryOrange,
@@ -1791,55 +1905,78 @@ class _RouteManagersPanelState extends State<_RouteManagersPanel> {
                         IconButton(
                           onPressed: () => Navigator.pop(context),
                           icon: const Icon(Icons.close_rounded),
-                          tooltip: 'Close',
+                          tooltip: texts.t('close'),
                         ),
                       ],
                     ),
                     const SizedBox(height: 24),
                     _DetailSection(
-                      title: 'Account Information',
+                      title: texts.t('accountInformation'),
                       children: [
                         _DetailRow(
-                          label: 'Manager ID',
+                          label: texts.t('managerId'),
                           value: manager.managerId,
                         ),
-                        _DetailRow(label: 'User ID', value: manager.userId),
-                        _DetailRow(label: 'Email', value: manager.email),
-                        _DetailRow(label: 'Phone', value: manager.phone),
-                      ],
-                    ),
-                    const SizedBox(height: 16),
-                    _DetailSection(
-                      title: 'Route Assignment',
-                      children: [
-                        _DetailRow(label: 'Route', value: manager.routeLabel),
-                        _DetailRow(label: 'Route ID', value: manager.routeId),
-                      ],
-                    ),
-                    const SizedBox(height: 16),
-                    _DetailSection(
-                      title: 'Status',
-                      children: [
                         _DetailRow(
-                          label: 'Verified',
-                          value: manager.isVerified ? 'Yes' : 'No',
+                          label: texts.t('userId'),
+                          value: manager.userId,
                         ),
                         _DetailRow(
-                          label: 'Online',
-                          value: manager.isOnline ? 'Yes' : 'No',
+                          label: texts.t('email'),
+                          value: manager.email,
+                        ),
+                        _DetailRow(
+                          label: texts.t('phone'),
+                          value: manager.phone,
                         ),
                       ],
                     ),
                     const SizedBox(height: 16),
                     _DetailSection(
-                      title: 'Dates',
+                      title: texts.t('routeAssignment'),
                       children: [
                         _DetailRow(
-                          label: 'Created At',
+                          label: texts.t('route'),
+                          value: _localizedRouteName(
+                            context,
+                            label: manager.routeLabel,
+                            fallback: manager.routeId,
+                          ),
+                        ),
+                        _DetailRow(
+                          label: texts.t('routeId'),
+                          value: manager.routeId,
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    _DetailSection(
+                      title: texts.t('status'),
+                      children: [
+                        _DetailRow(
+                          label: texts.t('verified'),
+                          value: manager.isVerified
+                              ? texts.t('yes')
+                              : texts.t('no'),
+                        ),
+                        _DetailRow(
+                          label: texts.t('online'),
+                          value: manager.isOnline
+                              ? texts.t('yes')
+                              : texts.t('no'),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    _DetailSection(
+                      title: texts.t('dates'),
+                      children: [
+                        _DetailRow(
+                          label: texts.t('createdAt'),
                           value: _formatDate(manager.createdAt),
                         ),
                         _DetailRow(
-                          label: 'Updated At',
+                          label: texts.t('updatedAt'),
                           value: _formatDate(manager.updatedAt),
                         ),
                       ],
@@ -1853,7 +1990,7 @@ class _RouteManagersPanelState extends State<_RouteManagersPanel> {
                           backgroundColor: NavigoColors.primaryOrange,
                           foregroundColor: Colors.white,
                         ),
-                        child: const Text('Close'),
+                        child: Text(texts.t('close')),
                       ),
                     ),
                   ],
@@ -1881,6 +2018,9 @@ class _TripsPanelState extends State<_TripsPanel> {
 
   @override
   Widget build(BuildContext context) {
+    final texts = context.texts;
+    final allRoutesLabel = texts.t('allRoutes');
+
     return Padding(
       padding: const EdgeInsets.fromLTRB(8, 16, 24, 16),
       child: Container(
@@ -1896,7 +2036,9 @@ class _TripsPanelState extends State<_TripsPanel> {
 
             if (snapshot.hasError) {
               return Center(
-                child: Text('Error loading trips: ${snapshot.error}'),
+                child: Text(
+                  '${texts.t('errorLoadingTrips')}: ${snapshot.error}',
+                ),
               );
             }
 
@@ -1928,20 +2070,20 @@ class _TripsPanelState extends State<_TripsPanel> {
                   padding: const EdgeInsets.all(34),
                   child: Row(
                     children: [
-                      const Expanded(
+                      Expanded(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              'Trips',
-                              style: TextStyle(
+                              texts.t('trips'),
+                              style: const TextStyle(
                                 fontSize: 30,
                                 fontWeight: FontWeight.bold,
                               ),
                             ),
-                            SizedBox(height: 6),
+                            const SizedBox(height: 6),
                             Text(
-                              'Schedule slots from each route document',
+                              texts.t('tripsSubtitle'),
                               style: NavigoTextStyles.bodyMedium,
                             ),
                           ],
@@ -1953,7 +2095,7 @@ class _TripsPanelState extends State<_TripsPanel> {
                           initialValue: _selectedRoute,
                           decoration: NavigoDecorations.kInputDecoration
                               .copyWith(
-                                labelText: 'Filter by route',
+                                labelText: texts.t('filterByRoute'),
                                 prefixIcon: const Icon(Icons.route_rounded),
                                 fillColor: Colors.white,
                               ),
@@ -1962,7 +2104,12 @@ class _TripsPanelState extends State<_TripsPanel> {
                                 (route) => DropdownMenuItem(
                                   value: route,
                                   child: Text(
-                                    route,
+                                    route == 'All Routes'
+                                        ? allRoutesLabel
+                                        : _localizedRouteName(
+                                            context,
+                                            label: route,
+                                          ),
                                     overflow: TextOverflow.ellipsis,
                                   ),
                                 ),
@@ -1986,19 +2133,19 @@ class _TripsPanelState extends State<_TripsPanel> {
                     children: [
                       _SummaryPill(
                         icon: Icons.directions_bus_rounded,
-                        label: '${visibleTrips.length} trips',
+                        label: '${visibleTrips.length} ${texts.t('trips')}',
                         color: NavigoColors.primaryOrange,
                       ),
                       _SummaryPill(
                         icon: Icons.route_rounded,
                         label:
-                            '${routeNames.where((route) => route != 'All Routes').length} routes',
+                            '${routeNames.where((route) => route != 'All Routes').length} ${texts.t('routes')}',
                         color: NavigoColors.accentBlue,
                       ),
                       _SummaryPill(
                         icon: Icons.people_alt_rounded,
                         label:
-                            '${visibleTrips.fold<int>(0, (sum, trip) => sum + trip.passengerCount)} passengers',
+                            '${visibleTrips.fold<int>(0, (sum, trip) => sum + trip.passengerCount)} ${texts.t('passengers')}',
                         color: NavigoColors.accentGreen,
                       ),
                     ],
@@ -2006,9 +2153,9 @@ class _TripsPanelState extends State<_TripsPanel> {
                 ),
                 Expanded(
                   child: visibleTrips.isEmpty
-                      ? const Center(
+                      ? Center(
                           child: Text(
-                            'No trips found for this route',
+                            texts.t('noTripsFoundForRoute'),
                             style: NavigoTextStyles.bodyMedium,
                           ),
                         )
@@ -2038,6 +2185,7 @@ class _TripCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final texts = context.texts;
     final seatsLeft = trip.capacity - trip.passengerCount;
 
     return Container(
@@ -2059,7 +2207,7 @@ class _TripCard extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      trip.routeLabel,
+                      _localizedRouteName(context, label: trip.routeLabel),
                       style: const TextStyle(
                         color: Colors.black,
                         fontWeight: FontWeight.bold,
@@ -2075,7 +2223,7 @@ class _TripCard extends StatelessWidget {
                 ),
               ),
               _Chip(
-                label: _formatStatus(trip.status),
+                label: _localizedTripStatus(context, trip.status),
                 color: _tripStatusColor(trip.status),
               ),
             ],
@@ -2087,33 +2235,33 @@ class _TripCard extends StatelessWidget {
             children: [
               _TripInfo(
                 icon: Icons.schedule_rounded,
-                label: 'Departure',
+                label: texts.t('departure'),
                 value: _formatDate(trip.departureAt),
               ),
               _TripInfo(
                 icon: Icons.flag_rounded,
-                label: 'Arrival',
+                label: texts.t('arrival'),
                 value: _formatDate(trip.arrivalAt),
               ),
               _TripInfo(
                 icon: Icons.airport_shuttle_rounded,
-                label: 'Vehicle',
-                value: _formatStatus(trip.vehicleType),
+                label: texts.t('vehicle'),
+                value: _localizedVehicleType(context, trip.vehicleType),
               ),
               _TripInfo(
                 icon: Icons.person_rounded,
-                label: 'Driver',
+                label: texts.t('driver'),
                 value: _dash(trip.driverId),
               ),
               _TripInfo(
                 icon: Icons.event_seat_rounded,
-                label: 'Seats',
+                label: texts.t('seats'),
                 value:
-                    '${trip.passengerCount}/${trip.capacity} booked, ${seatsLeft < 0 ? 0 : seatsLeft} left',
+                    '${trip.passengerCount}/${trip.capacity} ${texts.t('booked')}, ${seatsLeft < 0 ? 0 : seatsLeft} ${texts.t('left')}',
               ),
               _TripInfo(
                 icon: Icons.payments_rounded,
-                label: 'Price',
+                label: texts.t('price'),
                 value: trip.price == null
                     ? '-'
                     : '${trip.price!.toStringAsFixed(2)} NIS',
@@ -2184,7 +2332,7 @@ class _SummaryPill extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.12),
+        color: color.withValues(alpha: 0.12),
         borderRadius: BorderRadius.circular(30),
       ),
       child: Row(
@@ -2219,6 +2367,8 @@ class _PassengersPanelState extends State<_PassengersPanel> {
 
   @override
   Widget build(BuildContext context) {
+    final texts = context.texts;
+
     return Padding(
       padding: const EdgeInsets.fromLTRB(8, 16, 24, 16),
       child: Container(
@@ -2229,10 +2379,9 @@ class _PassengersPanelState extends State<_PassengersPanel> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             _SectionHeader(
-              title: 'Passengers',
-              subtitle:
-                  'All passengers with information from users and passengers collections',
-              searchHint: 'Search passengers...',
+              title: texts.t('passengers'),
+              subtitle: texts.t('passengersSubtitle'),
+              searchHint: texts.t('searchPassengers'),
               onSearchChanged: (value) {
                 setState(() => _searchQuery = value.trim().toLowerCase());
               },
@@ -2249,7 +2398,7 @@ class _PassengersPanelState extends State<_PassengersPanel> {
                   if (snapshot.hasError) {
                     return Center(
                       child: Text(
-                        'Error loading passengers: ${snapshot.error}',
+                        '${texts.t('errorLoadingPassengers')}: ${snapshot.error}',
                       ),
                     );
                   }
@@ -2267,9 +2416,9 @@ class _PassengersPanelState extends State<_PassengersPanel> {
                   }).toList();
 
                   if (passengers.isEmpty) {
-                    return const Center(
+                    return Center(
                       child: Text(
-                        'No passengers found',
+                        texts.t('noPassengersFound'),
                         style: NavigoTextStyles.bodyMedium,
                       ),
                     );
@@ -2303,14 +2452,16 @@ class _PassengersPanelState extends State<_PassengersPanel> {
                               headingRowColor: const WidgetStatePropertyAll(
                                 NavigoColors.backgroundAlt,
                               ),
-                              columns: const [
-                                DataColumn(label: Text('Name')),
-                                DataColumn(label: Text('Phone')),
-                                DataColumn(label: Text('Verified')),
-                                DataColumn(label: Text('Online')),
-                                DataColumn(label: Text('Pickup')),
-                                DataColumn(label: Text('Last Location')),
-                                DataColumn(label: Text('Details')),
+                              columns: [
+                                DataColumn(label: Text(texts.t('name'))),
+                                DataColumn(label: Text(texts.t('phone'))),
+                                DataColumn(label: Text(texts.t('verified'))),
+                                DataColumn(label: Text(texts.t('online'))),
+                                DataColumn(label: Text(texts.t('pickup'))),
+                                DataColumn(
+                                  label: Text(texts.t('lastLocation')),
+                                ),
+                                DataColumn(label: Text(texts.t('details'))),
                               ],
                               rows: passengers.map((passenger) {
                                 return DataRow(
@@ -2327,8 +2478,8 @@ class _PassengersPanelState extends State<_PassengersPanel> {
                                     DataCell(
                                       _Chip(
                                         label: passenger.isVerified
-                                            ? 'Yes'
-                                            : 'No',
+                                            ? texts.t('yes')
+                                            : texts.t('no'),
                                         color: passenger.isVerified
                                             ? NavigoColors.accentGreen
                                             : NavigoColors.primaryOrange,
@@ -2337,8 +2488,8 @@ class _PassengersPanelState extends State<_PassengersPanel> {
                                     DataCell(
                                       _Chip(
                                         label: passenger.isOnline
-                                            ? 'Online'
-                                            : 'Offline',
+                                            ? texts.t('online')
+                                            : texts.t('offline'),
                                         color: passenger.isOnline
                                             ? NavigoColors.accentGreen
                                             : NavigoColors.textGray,
@@ -2368,7 +2519,7 @@ class _PassengersPanelState extends State<_PassengersPanel> {
                                           Icons.open_in_new_rounded,
                                           size: 16,
                                         ),
-                                        label: const Text('Open'),
+                                        label: Text(texts.t('open')),
                                       ),
                                     ),
                                   ],
@@ -2393,6 +2544,8 @@ class _PassengersPanelState extends State<_PassengersPanel> {
     BuildContext context,
     AdminPassengerItem passenger,
   ) {
+    final texts = context.texts;
+
     showDialog(
       context: context,
       builder: (context) {
@@ -2417,8 +2570,8 @@ class _PassengersPanelState extends State<_PassengersPanel> {
                       children: [
                         CircleAvatar(
                           radius: 24,
-                          backgroundColor: NavigoColors.accentBlue.withOpacity(
-                            0.12,
+                          backgroundColor: NavigoColors.accentBlue.withValues(
+                            alpha: 0.12,
                           ),
                           child: const Icon(
                             Icons.people_alt_rounded,
@@ -2438,69 +2591,82 @@ class _PassengersPanelState extends State<_PassengersPanel> {
                         IconButton(
                           onPressed: () => Navigator.pop(context),
                           icon: const Icon(Icons.close_rounded),
-                          tooltip: 'Close',
+                          tooltip: texts.t('close'),
                         ),
                       ],
                     ),
                     const SizedBox(height: 24),
                     _DetailSection(
-                      title: 'Account Information',
+                      title: texts.t('accountInformation'),
                       children: [
                         _DetailRow(
-                          label: 'Passenger ID',
+                          label: texts.t('passengerId'),
                           value: passenger.passengerId,
                         ),
-                        _DetailRow(label: 'User ID', value: passenger.userId),
-                        _DetailRow(label: 'Email', value: passenger.email),
-                        _DetailRow(label: 'Phone', value: passenger.phone),
-                      ],
-                    ),
-                    const SizedBox(height: 16),
-                    _DetailSection(
-                      title: 'Status',
-                      children: [
                         _DetailRow(
-                          label: 'Verified',
-                          value: passenger.isVerified ? 'Yes' : 'No',
+                          label: texts.t('userId'),
+                          value: passenger.userId,
                         ),
                         _DetailRow(
-                          label: 'Online',
-                          value: passenger.isOnline ? 'Yes' : 'No',
+                          label: texts.t('email'),
+                          value: passenger.email,
+                        ),
+                        _DetailRow(
+                          label: texts.t('phone'),
+                          value: passenger.phone,
                         ),
                       ],
                     ),
                     const SizedBox(height: 16),
                     _DetailSection(
-                      title: 'Location',
+                      title: texts.t('status'),
                       children: [
                         _DetailRow(
-                          label: 'Pickup',
+                          label: texts.t('verified'),
+                          value: passenger.isVerified
+                              ? texts.t('yes')
+                              : texts.t('no'),
+                        ),
+                        _DetailRow(
+                          label: texts.t('online'),
+                          value: passenger.isOnline
+                              ? texts.t('yes')
+                              : texts.t('no'),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    _DetailSection(
+                      title: texts.t('location'),
+                      children: [
+                        _DetailRow(
+                          label: texts.t('pickup'),
                           value: passenger.pickupLocationDescription,
                         ),
                         _DetailRow(
-                          label: 'Latitude',
+                          label: texts.t('latitude'),
                           value: passenger.latitude?.toString() ?? '',
                         ),
                         _DetailRow(
-                          label: 'Longitude',
+                          label: texts.t('longitude'),
                           value: passenger.longitude?.toString() ?? '',
                         ),
                         _DetailRow(
-                          label: 'Last Update',
+                          label: texts.t('lastUpdate'),
                           value: _formatDate(passenger.lastLocationUpdate),
                         ),
                       ],
                     ),
                     const SizedBox(height: 16),
                     _DetailSection(
-                      title: 'Dates',
+                      title: texts.t('dates'),
                       children: [
                         _DetailRow(
-                          label: 'Created At',
+                          label: texts.t('createdAt'),
                           value: _formatDate(passenger.createdAt),
                         ),
                         _DetailRow(
-                          label: 'Updated At',
+                          label: texts.t('updatedAt'),
                           value: _formatDate(passenger.updatedAt),
                         ),
                       ],
@@ -2514,7 +2680,7 @@ class _PassengersPanelState extends State<_PassengersPanel> {
                           backgroundColor: NavigoColors.primaryOrange,
                           foregroundColor: Colors.white,
                         ),
-                        child: const Text('Close'),
+                        child: Text(texts.t('close')),
                       ),
                     ),
                   ],
@@ -2535,6 +2701,8 @@ class _ReportsPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final texts = context.texts;
+
     return Padding(
       padding: const EdgeInsets.fromLTRB(8, 16, 24, 16),
       child: Container(
@@ -2544,18 +2712,21 @@ class _ReportsPanel extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Padding(
-              padding: EdgeInsets.all(34),
+            Padding(
+              padding: const EdgeInsets.all(34),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'Reports Sent To Admin',
-                    style: TextStyle(fontSize: 30, fontWeight: FontWeight.bold),
+                    texts.t('reportsSentToAdmin'),
+                    style: const TextStyle(
+                      fontSize: 30,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
-                  SizedBox(height: 6),
+                  const SizedBox(height: 6),
                   Text(
-                    'Reports sent by route managers from supportReports',
+                    texts.t('reportsSentSubtitle'),
                     style: NavigoTextStyles.bodyMedium,
                   ),
                 ],
@@ -2572,16 +2743,18 @@ class _ReportsPanel extends StatelessWidget {
 
                   if (snapshot.hasError) {
                     return Center(
-                      child: Text('Error loading reports: ${snapshot.error}'),
+                      child: Text(
+                        '${texts.t('errorLoadingReports')}: ${snapshot.error}',
+                      ),
                     );
                   }
 
                   final reports = snapshot.data ?? [];
 
                   if (reports.isEmpty) {
-                    return const Center(
+                    return Center(
                       child: Text(
-                        'No reports sent to admin yet',
+                        texts.t('noReportsSent'),
                         style: NavigoTextStyles.bodyMedium,
                       ),
                     );
@@ -2610,6 +2783,8 @@ class _ReportsPanel extends StatelessWidget {
   }
 
   void _showReportDetails(BuildContext context, AdminReportItem report) {
+    final texts = context.texts;
+
     showDialog(
       context: context,
       builder: (context) {
@@ -2634,17 +2809,19 @@ class _ReportsPanel extends StatelessWidget {
                       children: [
                         CircleAvatar(
                           radius: 24,
-                          backgroundColor: Colors.purple.withOpacity(0.12),
+                          backgroundColor: Colors.purple.withValues(
+                            alpha: 0.12,
+                          ),
                           child: const Icon(
                             Icons.description_rounded,
                             color: Colors.purple,
                           ),
                         ),
                         const SizedBox(width: 14),
-                        const Expanded(
+                        Expanded(
                           child: Text(
-                            'Report Details',
-                            style: TextStyle(
+                            texts.t('reportDetails'),
+                            style: const TextStyle(
                               fontSize: 24,
                               fontWeight: FontWeight.bold,
                             ),
@@ -2653,46 +2830,59 @@ class _ReportsPanel extends StatelessWidget {
                         IconButton(
                           onPressed: () => Navigator.pop(context),
                           icon: const Icon(Icons.close_rounded),
-                          tooltip: 'Close',
+                          tooltip: texts.t('close'),
                         ),
                       ],
                     ),
                     const SizedBox(height: 24),
                     _DetailSection(
-                      title: 'Report Information',
+                      title: texts.t('reportInformation'),
                       children: [
-                        _DetailRow(label: 'Report ID', value: report.id),
+                        _DetailRow(label: texts.t('routeId'), value: report.id),
                         _DetailRow(
-                          label: 'Status',
+                          label: texts.t('status'),
                           value: _formatStatus(report.status),
                         ),
                         _DetailRow(
-                          label: 'Created At',
+                          label: texts.t('createdAt'),
                           value: _formatDate(report.createdAt),
                         ),
                         _DetailRow(
-                          label: 'Sent To Admin At',
+                          label: texts.t('sentToAdminAt'),
                           value: _formatDate(report.sentToAdminAt),
                         ),
                       ],
                     ),
                     const SizedBox(height: 16),
                     _DetailSection(
-                      title: 'Sender And Route',
+                      title: texts.t('senderAndRoute'),
                       children: [
-                        _DetailRow(label: 'Sender', value: report.senderName),
                         _DetailRow(
-                          label: 'Sender Role',
+                          label: texts.t('sender'),
+                          value: report.senderName,
+                        ),
+                        _DetailRow(
+                          label: texts.t('senderRole'),
                           value: report.senderRole,
                         ),
-                        _DetailRow(label: 'Route', value: report.routeLabel),
+                        _DetailRow(
+                          label: texts.t('route'),
+                          value: _localizedRouteName(
+                            context,
+                            label: report.routeLabel,
+                            fallback: report.routeId,
+                          ),
+                        ),
                         if (report.routeId.isNotEmpty)
-                          _DetailRow(label: 'Route ID', value: report.routeId),
+                          _DetailRow(
+                            label: texts.t('routeId'),
+                            value: report.routeId,
+                          ),
                       ],
                     ),
                     const SizedBox(height: 16),
                     _DetailSection(
-                      title: 'Message',
+                      title: texts.t('message'),
                       children: [
                         SelectableText(
                           report.message,
@@ -2709,7 +2899,7 @@ class _ReportsPanel extends StatelessWidget {
                           backgroundColor: NavigoColors.primaryOrange,
                           foregroundColor: Colors.white,
                         ),
-                        child: const Text('Close'),
+                        child: Text(texts.t('close')),
                       ),
                     ),
                   ],
@@ -2747,7 +2937,7 @@ class _ReportTile extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               CircleAvatar(
-                backgroundColor: Colors.purple.withOpacity(0.12),
+                backgroundColor: Colors.purple.withValues(alpha: 0.12),
                 child: const Icon(
                   Icons.description_rounded,
                   color: Colors.purple,
@@ -2788,7 +2978,11 @@ class _ReportTile extends StatelessWidget {
                         ),
                         _ReportMeta(
                           icon: Icons.route_rounded,
-                          text: report.routeLabel,
+                          text: _localizedRouteName(
+                            context,
+                            label: report.routeLabel,
+                            fallback: report.routeId,
+                          ),
                         ),
                         _ReportMeta(
                           icon: Icons.schedule_rounded,
@@ -2912,6 +3106,8 @@ class _Sidebar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final texts = context.texts;
+
     return Container(
       width: 260,
       margin: const EdgeInsets.all(16),
@@ -2921,21 +3117,24 @@ class _Sidebar extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Row(
+            Row(
               children: [
-                CircleAvatar(
+                const CircleAvatar(
                   radius: 24,
                   backgroundColor: NavigoColors.primaryOrange,
                   child: Icon(Icons.directions_bus, color: Colors.white),
                 ),
-                SizedBox(width: 12),
+                const SizedBox(width: 12),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text('Navigo Admin', style: NavigoTextStyles.titleSmall),
                       Text(
-                        'System Control Panel',
+                        texts.t('navigoAdmin'),
+                        style: NavigoTextStyles.titleSmall,
+                      ),
+                      Text(
+                        texts.t('systemControlPanel'),
                         style: NavigoTextStyles.bodySmall,
                       ),
                     ],
@@ -2947,43 +3146,43 @@ class _Sidebar extends StatelessWidget {
 
             _MenuItem(
               icon: Icons.dashboard_rounded,
-              title: 'Dashboard',
+              title: texts.t('dashboard'),
               selected: selectedSection == _AdminSection.dashboard,
               onTap: onDashboard,
             ),
             _MenuItem(
               icon: Icons.person_rounded,
-              title: 'Drivers',
+              title: texts.t('drivers'),
               selected: selectedSection == _AdminSection.drivers,
               onTap: onDrivers,
             ),
             _MenuItem(
               icon: Icons.route_rounded,
-              title: 'Routes',
+              title: texts.t('routes'),
               selected: selectedSection == _AdminSection.routes,
               onTap: onRoutes,
             ),
             _MenuItem(
               icon: Icons.manage_accounts_rounded,
-              title: 'Route Managers',
+              title: texts.t('routeManagers'),
               selected: selectedSection == _AdminSection.routeManagers,
               onTap: onRouteManagers,
             ),
             _MenuItem(
               icon: Icons.directions_bus_rounded,
-              title: 'Trips',
+              title: texts.t('trips'),
               selected: selectedSection == _AdminSection.trips,
               onTap: onTrips,
             ),
             _MenuItem(
               icon: Icons.people_alt_rounded,
-              title: 'Passengers',
+              title: texts.t('passengers'),
               selected: selectedSection == _AdminSection.passengers,
               onTap: onPassengers,
             ),
             _MenuItem(
               icon: Icons.bar_chart_rounded,
-              title: 'Reports',
+              title: texts.t('reports'),
               selected: selectedSection == _AdminSection.reports,
               onTap: onReports,
             ),
@@ -2992,7 +3191,7 @@ class _Sidebar extends StatelessWidget {
 
             _MenuItem(
               icon: Icons.logout_rounded,
-              title: isLoggingOut ? 'Logging out...' : 'Logout',
+              title: isLoggingOut ? texts.t('loggingOut') : texts.t('logout'),
               onTap: isLoggingOut ? null : onLogout,
               trailing: isLoggingOut
                   ? const SizedBox(
@@ -3017,34 +3216,38 @@ class _Sidebar extends StatelessWidget {
                     borderRadius: BorderRadius.circular(18),
                     border: Border.all(color: NavigoColors.borderLight),
                   ),
-                  child: const Row(
+                  child: Row(
                     children: [
-                      CircleAvatar(
+                      const CircleAvatar(
                         backgroundColor: NavigoColors.primaryOrange,
                         child: Text('A', style: TextStyle(color: Colors.white)),
                       ),
-                      SizedBox(width: 12),
+                      const SizedBox(width: 12),
                       Expanded(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              'Admin',
-                              style: TextStyle(fontWeight: FontWeight.bold),
+                              texts.t('admin'),
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                              ),
                             ),
                             Text(
-                              'Change password',
+                              texts.t('changePassword'),
                               style: NavigoTextStyles.bodySmall,
                             ),
                           ],
                         ),
                       ),
-                      Icon(Icons.edit_rounded, size: 18),
+                      const Icon(Icons.edit_rounded, size: 18),
                     ],
                   ),
                 ),
               ),
             ),
+            const SizedBox(height: 16),
+            const LanguageToggle(),
           ],
         ),
       ),
@@ -3073,7 +3276,7 @@ class _MenuItem extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 10),
       decoration: BoxDecoration(
         color: selected
-            ? NavigoColors.primaryOrange.withOpacity(0.12)
+            ? NavigoColors.primaryOrange.withValues(alpha: 0.12)
             : Colors.transparent,
         borderRadius: BorderRadius.circular(14),
       ),
@@ -3169,13 +3372,13 @@ class _CreateRouteManagerDialogState extends State<_CreateRouteManagerDialog> {
   bool _showContactFieldError(Object error) {
     final message = _friendlyError(error);
     if (message.toLowerCase().contains('phone number')) {
-      setState(() => _phoneError = message);
+      setState(() => _phoneError = context.texts.t('phoneAlreadyExists'));
       _formKey.currentState?.validate();
       return true;
     }
     if (message.toLowerCase().contains('email') ||
         message.contains('email-already-in-use')) {
-      setState(() => _emailError = 'Email is already in the database');
+      setState(() => _emailError = context.texts.t('emailAlreadyExists'));
       _formKey.currentState?.validate();
       return true;
     }
@@ -3184,6 +3387,8 @@ class _CreateRouteManagerDialogState extends State<_CreateRouteManagerDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final texts = context.texts;
+
     return Dialog(
       insetPadding: const EdgeInsets.symmetric(horizontal: 56, vertical: 40),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
@@ -3200,10 +3405,10 @@ class _CreateRouteManagerDialogState extends State<_CreateRouteManagerDialog> {
                 children: [
                   Row(
                     children: [
-                      const Expanded(
+                      Expanded(
                         child: Text(
-                          'Create Route Manager',
-                          style: TextStyle(
+                          texts.t('createRouteManager'),
+                          style: const TextStyle(
                             fontSize: 24,
                             fontWeight: FontWeight.bold,
                           ),
@@ -3214,7 +3419,7 @@ class _CreateRouteManagerDialogState extends State<_CreateRouteManagerDialog> {
                             ? null
                             : () => Navigator.pop(context, false),
                         icon: const Icon(Icons.close_rounded),
-                        tooltip: 'Close',
+                        tooltip: texts.t('close'),
                       ),
                     ],
                   ),
@@ -3226,12 +3431,15 @@ class _CreateRouteManagerDialogState extends State<_CreateRouteManagerDialog> {
                           controller: _firstNameController,
                           decoration: NavigoDecorations.kInputDecoration
                               .copyWith(
-                                labelText: 'First name',
+                                labelText: texts.t('firstName'),
                                 prefixIcon: const Icon(Icons.person_rounded),
                                 fillColor: Colors.white,
                               ),
-                          validator: (value) =>
-                              _validateName(value, 'First name'),
+                          validator: (value) => _validateName(
+                            value,
+                            texts.t('firstName'),
+                            context,
+                          ),
                         ),
                       ),
                       const SizedBox(width: 14),
@@ -3240,12 +3448,15 @@ class _CreateRouteManagerDialogState extends State<_CreateRouteManagerDialog> {
                           controller: _lastNameController,
                           decoration: NavigoDecorations.kInputDecoration
                               .copyWith(
-                                labelText: 'Last name',
+                                labelText: texts.t('lastName'),
                                 prefixIcon: const Icon(Icons.badge_outlined),
                                 fillColor: Colors.white,
                               ),
-                          validator: (value) =>
-                              _validateName(value, 'Last name'),
+                          validator: (value) => _validateName(
+                            value,
+                            texts.t('lastName'),
+                            context,
+                          ),
                         ),
                       ),
                     ],
@@ -3260,11 +3471,12 @@ class _CreateRouteManagerDialogState extends State<_CreateRouteManagerDialog> {
                       }
                     },
                     decoration: NavigoDecorations.kInputDecoration.copyWith(
-                      labelText: 'Email',
+                      labelText: texts.t('email'),
                       prefixIcon: const Icon(Icons.email_rounded),
                       fillColor: Colors.white,
                     ),
-                    validator: (value) => _emailError ?? _validateEmail(value),
+                    validator: (value) =>
+                        _emailError ?? _validateEmail(value, context),
                   ),
                   const SizedBox(height: 14),
                   Row(
@@ -3276,7 +3488,7 @@ class _CreateRouteManagerDialogState extends State<_CreateRouteManagerDialog> {
                           initialValue: _selectedPhonePrefix,
                           decoration: NavigoDecorations.kInputDecoration
                               .copyWith(
-                                labelText: 'Code',
+                                labelText: texts.t('code'),
                                 prefixIcon: const Icon(Icons.phone_rounded),
                                 fillColor: Colors.white,
                               ),
@@ -3314,24 +3526,22 @@ class _CreateRouteManagerDialogState extends State<_CreateRouteManagerDialog> {
                           ],
                           decoration: NavigoDecorations.kInputDecoration
                               .copyWith(
-                                labelText: 'Phone number',
-                                hintText: '9 digits',
+                                labelText: texts.t('phoneNumber'),
+                                hintText: texts.t('nineDigits'),
                                 fillColor: Colors.white,
                               ),
                           validator: (value) =>
-                              _phoneError ?? _validatePhoneDigits(value),
+                              _phoneError ??
+                              _validatePhoneDigits(value, context),
                         ),
                       ),
                     ],
                   ),
                   const SizedBox(height: 8),
-                  const Text(
-                    'Phone must start with +970 or +972 and contain exactly 9 digits after it.',
-                    style: NavigoTextStyles.bodySmall,
-                  ),
+                  Text(texts.t('phoneRule'), style: NavigoTextStyles.bodySmall),
                   const SizedBox(height: 14),
-                  const Text(
-                    'Password rules: at least 8 characters, with uppercase, lowercase, number, and special character.',
+                  Text(
+                    texts.t('passwordRules'),
                     style: NavigoTextStyles.bodySmall,
                   ),
                   const SizedBox(height: 8),
@@ -3343,11 +3553,12 @@ class _CreateRouteManagerDialogState extends State<_CreateRouteManagerDialog> {
                           obscureText: true,
                           decoration: NavigoDecorations.kInputDecoration
                               .copyWith(
-                                labelText: 'Password',
+                                labelText: texts.t('password'),
                                 prefixIcon: const Icon(Icons.lock_rounded),
                                 fillColor: Colors.white,
                               ),
-                          validator: _validatePassword,
+                          validator: (value) =>
+                              _validatePassword(value, context),
                         ),
                       ),
                       const SizedBox(width: 14),
@@ -3357,7 +3568,7 @@ class _CreateRouteManagerDialogState extends State<_CreateRouteManagerDialog> {
                           obscureText: true,
                           decoration: NavigoDecorations.kInputDecoration
                               .copyWith(
-                                labelText: 'Confirm password',
+                                labelText: texts.t('confirmPassword'),
                                 prefixIcon: const Icon(
                                   Icons.lock_outline_rounded,
                                 ),
@@ -3365,7 +3576,7 @@ class _CreateRouteManagerDialogState extends State<_CreateRouteManagerDialog> {
                               ),
                           validator: (value) {
                             if (value != _passwordController.text) {
-                              return 'Passwords do not match';
+                              return texts.t('passwordsDoNotMatch');
                             }
                             return null;
                           },
@@ -3388,8 +3599,11 @@ class _CreateRouteManagerDialogState extends State<_CreateRouteManagerDialog> {
                               (route) => DropdownMenuItem(
                                 value: route.routeId,
                                 child: Text(
-                                  _dash(
-                                    '${route.startPoint} to ${route.endPoint}',
+                                  _localizedRouteName(
+                                    context,
+                                    start: route.startPoint,
+                                    end: route.endPoint,
+                                    fallback: route.routeId,
                                   ),
                                 ),
                               ),
@@ -3401,13 +3615,15 @@ class _CreateRouteManagerDialogState extends State<_CreateRouteManagerDialog> {
                                 setState(() => _selectedRouteId = value);
                               },
                         decoration: NavigoDecorations.kInputDecoration.copyWith(
-                          labelText: isLoading ? 'Loading routes...' : 'Route',
+                          labelText: isLoading
+                              ? texts.t('loadingRoutes')
+                              : texts.t('route'),
                           prefixIcon: const Icon(Icons.route_rounded),
                           fillColor: Colors.white,
                         ),
                         validator: (value) {
                           if (value == null || value.trim().isEmpty) {
-                            return 'Select a route';
+                            return texts.t('selectRoute');
                           }
                           return null;
                         },
@@ -3427,7 +3643,9 @@ class _CreateRouteManagerDialogState extends State<_CreateRouteManagerDialog> {
                             )
                           : const Icon(Icons.person_add_alt_1_rounded),
                       label: Text(
-                        _isSaving ? 'Creating...' : 'Create Route Manager',
+                        _isSaving
+                            ? texts.t('creating')
+                            : texts.t('createRouteManager'),
                       ),
                       style: FilledButton.styleFrom(
                         backgroundColor: NavigoColors.primaryOrange,
@@ -3542,12 +3760,12 @@ class _EditRouteManagerDialogState extends State<_EditRouteManagerDialog> {
   bool _showContactFieldError(Object error) {
     final message = _friendlyError(error);
     if (message.toLowerCase().contains('phone number')) {
-      setState(() => _phoneError = message);
+      setState(() => _phoneError = context.texts.t('phoneAlreadyExists'));
       _formKey.currentState?.validate();
       return true;
     }
     if (message.toLowerCase().contains('email')) {
-      setState(() => _emailError = 'Email is already in the database');
+      setState(() => _emailError = context.texts.t('emailAlreadyExists'));
       _formKey.currentState?.validate();
       return true;
     }
@@ -3556,6 +3774,8 @@ class _EditRouteManagerDialogState extends State<_EditRouteManagerDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final texts = context.texts;
+
     return Dialog(
       insetPadding: const EdgeInsets.symmetric(horizontal: 56, vertical: 40),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
@@ -3572,10 +3792,10 @@ class _EditRouteManagerDialogState extends State<_EditRouteManagerDialog> {
                 children: [
                   Row(
                     children: [
-                      const Expanded(
+                      Expanded(
                         child: Text(
-                          'Edit Route Manager',
-                          style: TextStyle(
+                          texts.t('editRouteManager'),
+                          style: const TextStyle(
                             fontSize: 24,
                             fontWeight: FontWeight.bold,
                           ),
@@ -3586,7 +3806,7 @@ class _EditRouteManagerDialogState extends State<_EditRouteManagerDialog> {
                             ? null
                             : () => Navigator.pop(context, false),
                         icon: const Icon(Icons.close_rounded),
-                        tooltip: 'Close',
+                        tooltip: texts.t('close'),
                       ),
                     ],
                   ),
@@ -3598,12 +3818,15 @@ class _EditRouteManagerDialogState extends State<_EditRouteManagerDialog> {
                           controller: _firstNameController,
                           decoration: NavigoDecorations.kInputDecoration
                               .copyWith(
-                                labelText: 'First name',
+                                labelText: texts.t('firstName'),
                                 prefixIcon: const Icon(Icons.person_rounded),
                                 fillColor: Colors.white,
                               ),
-                          validator: (value) =>
-                              _validateName(value, 'First name'),
+                          validator: (value) => _validateName(
+                            value,
+                            texts.t('firstName'),
+                            context,
+                          ),
                         ),
                       ),
                       const SizedBox(width: 14),
@@ -3612,12 +3835,15 @@ class _EditRouteManagerDialogState extends State<_EditRouteManagerDialog> {
                           controller: _lastNameController,
                           decoration: NavigoDecorations.kInputDecoration
                               .copyWith(
-                                labelText: 'Last name',
+                                labelText: texts.t('lastName'),
                                 prefixIcon: const Icon(Icons.badge_outlined),
                                 fillColor: Colors.white,
                               ),
-                          validator: (value) =>
-                              _validateName(value, 'Last name'),
+                          validator: (value) => _validateName(
+                            value,
+                            texts.t('lastName'),
+                            context,
+                          ),
                         ),
                       ),
                     ],
@@ -3632,11 +3858,12 @@ class _EditRouteManagerDialogState extends State<_EditRouteManagerDialog> {
                       }
                     },
                     decoration: NavigoDecorations.kInputDecoration.copyWith(
-                      labelText: 'Email',
+                      labelText: texts.t('email'),
                       prefixIcon: const Icon(Icons.email_rounded),
                       fillColor: Colors.white,
                     ),
-                    validator: (value) => _emailError ?? _validateEmail(value),
+                    validator: (value) =>
+                        _emailError ?? _validateEmail(value, context),
                   ),
                   const SizedBox(height: 14),
                   Row(
@@ -3648,7 +3875,7 @@ class _EditRouteManagerDialogState extends State<_EditRouteManagerDialog> {
                           initialValue: _selectedPhonePrefix,
                           decoration: NavigoDecorations.kInputDecoration
                               .copyWith(
-                                labelText: 'Code',
+                                labelText: texts.t('code'),
                                 prefixIcon: const Icon(Icons.phone_rounded),
                                 fillColor: Colors.white,
                               ),
@@ -3686,21 +3913,19 @@ class _EditRouteManagerDialogState extends State<_EditRouteManagerDialog> {
                           ],
                           decoration: NavigoDecorations.kInputDecoration
                               .copyWith(
-                                labelText: 'Phone number',
-                                hintText: '9 digits',
+                                labelText: texts.t('phoneNumber'),
+                                hintText: texts.t('nineDigits'),
                                 fillColor: Colors.white,
                               ),
                           validator: (value) =>
-                              _phoneError ?? _validatePhoneDigits(value),
+                              _phoneError ??
+                              _validatePhoneDigits(value, context),
                         ),
                       ),
                     ],
                   ),
                   const SizedBox(height: 8),
-                  const Text(
-                    'Phone must start with +970 or +972 and contain exactly 9 digits after it.',
-                    style: NavigoTextStyles.bodySmall,
-                  ),
+                  Text(texts.t('phoneRule'), style: NavigoTextStyles.bodySmall),
                   const SizedBox(height: 14),
                   StreamBuilder<List<AdminRouteItem>>(
                     stream: widget.service.adminRoutesStream(),
@@ -3722,8 +3947,11 @@ class _EditRouteManagerDialogState extends State<_EditRouteManagerDialog> {
                               (route) => DropdownMenuItem(
                                 value: route.routeId,
                                 child: Text(
-                                  _dash(
-                                    '${route.startPoint} to ${route.endPoint}',
+                                  _localizedRouteName(
+                                    context,
+                                    start: route.startPoint,
+                                    end: route.endPoint,
+                                    fallback: route.routeId,
                                   ),
                                 ),
                               ),
@@ -3735,14 +3963,16 @@ class _EditRouteManagerDialogState extends State<_EditRouteManagerDialog> {
                                 setState(() => _selectedRouteId = value);
                               },
                         decoration: NavigoDecorations.kInputDecoration.copyWith(
-                          labelText: isLoading ? 'Loading routes...' : 'Route',
+                          labelText: isLoading
+                              ? texts.t('loadingRoutes')
+                              : texts.t('route'),
                           prefixIcon: const Icon(Icons.route_rounded),
                           fillColor: Colors.white,
                         ),
                         validator: (value) {
                           if (_selectedRouteId == null ||
                               _selectedRouteId!.trim().isEmpty) {
-                            return 'Select a route';
+                            return texts.t('selectRoute');
                           }
                           return null;
                         },
@@ -3761,7 +3991,9 @@ class _EditRouteManagerDialogState extends State<_EditRouteManagerDialog> {
                               child: CircularProgressIndicator(strokeWidth: 2),
                             )
                           : const Icon(Icons.save_rounded),
-                      label: Text(_isSaving ? 'Saving...' : 'Save Changes'),
+                      label: Text(
+                        _isSaving ? texts.t('saving') : texts.t('saveChanges'),
+                      ),
                       style: FilledButton.styleFrom(
                         backgroundColor: NavigoColors.primaryOrange,
                         foregroundColor: Colors.white,
@@ -3801,45 +4033,49 @@ _PhoneParts _splitPhoneNumber(String phone) {
   );
 }
 
-String? _validateName(String? value, String label) {
+String? _validateName(String? value, String label, BuildContext context) {
   final name = value?.trim() ?? '';
-  if (name.isEmpty) return '$label is required';
+  if (name.isEmpty) {
+    return context.texts.t('nameRequired').replaceAll('{label}', label);
+  }
   if (!RegExp(r"^[A-Za-z\u0600-\u06FF\s'-]+$").hasMatch(name)) {
-    return '$label can contain letters only';
+    return context.texts.t('nameLettersOnly').replaceAll('{label}', label);
   }
   return null;
 }
 
-String? _validateEmail(String? value) {
+String? _validateEmail(String? value, BuildContext context) {
   final email = value?.trim() ?? '';
-  if (email.isEmpty) return 'Email is required';
+  if (email.isEmpty) return context.texts.t('emailRequired');
   if (!RegExp(r'^[^\s@]+@[^\s@]+\.[^\s@]+$').hasMatch(email)) {
-    return 'Enter a valid email';
+    return context.texts.t('validEmail');
   }
   return null;
 }
 
-String? _validatePhoneDigits(String? value) {
+String? _validatePhoneDigits(String? value, BuildContext context) {
   final digits = value?.trim() ?? '';
-  if (digits.isEmpty) return 'Phone number is required';
+  if (digits.isEmpty) return context.texts.t('phoneRequired');
   if (!RegExp(r'^\d{9}$').hasMatch(digits)) {
-    return 'Enter exactly 9 numbers';
+    return context.texts.t('phoneNineNumbers');
   }
   return null;
 }
 
-String? _validatePassword(String? value) {
+String? _validatePassword(String? value, BuildContext context) {
   final password = value ?? '';
-  if (password.length < 8) return 'Use at least 8 characters';
+  if (password.length < 8) return context.texts.t('passwordEight');
   if (!RegExp(r'[A-Z]').hasMatch(password)) {
-    return 'Add an uppercase letter';
+    return context.texts.t('passwordUppercase');
   }
   if (!RegExp(r'[a-z]').hasMatch(password)) {
-    return 'Add a lowercase letter';
+    return context.texts.t('passwordLowercase');
   }
-  if (!RegExp(r'\d').hasMatch(password)) return 'Add a number';
+  if (!RegExp(r'\d').hasMatch(password)) {
+    return context.texts.t('passwordNumber');
+  }
   if (!RegExp(r'[^A-Za-z0-9]').hasMatch(password)) {
-    return 'Add a special character';
+    return context.texts.t('passwordSpecial');
   }
   return null;
 }
@@ -3857,19 +4093,21 @@ class _Header extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final texts = context.texts;
+
     return Row(
       children: [
-        const Expanded(
+        Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                'Dashboard',
+                texts.t('dashboard'),
                 style: TextStyle(fontSize: 30, fontWeight: FontWeight.bold),
               ),
-              SizedBox(height: 6),
+              const SizedBox(height: 6),
               Text(
-                'Welcome back, Admin! Here’s what’s happening with your system.',
+                texts.t('welcomeBackAdmin'),
                 style: NavigoTextStyles.bodyMedium,
               ),
             ],
@@ -4060,6 +4298,7 @@ class _PieChartCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final texts = context.texts;
     final approvedDrivers = totalDrivers - pendingDrivers < 0
         ? 0
         : totalDrivers - pendingDrivers;
@@ -4076,7 +4315,7 @@ class _PieChartCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text('System Overview', style: NavigoTextStyles.titleSmall),
+          Text(texts.t('systemOverview'), style: NavigoTextStyles.titleSmall),
           const SizedBox(height: 20),
 
           Expanded(
@@ -4100,19 +4339,19 @@ class _PieChartCard extends StatelessWidget {
 
           _LegendItem(
             color: NavigoColors.accentGreen,
-            title: 'Approved Drivers',
+            title: texts.t('approvedDrivers'),
             value: approvedDrivers.toString(),
           ),
           const SizedBox(height: 10),
           _LegendItem(
             color: NavigoColors.primaryOrange,
-            title: 'Pending Drivers',
+            title: texts.t('pendingDrivers'),
             value: pendingDrivers.toString(),
           ),
           const SizedBox(height: 10),
           _LegendItem(
             color: NavigoColors.accentBlue,
-            title: 'Passengers / Users',
+            title: texts.t('passengersUsers'),
             value: safePassengers.toString(),
           ),
         ],
@@ -4218,25 +4457,27 @@ class _PendingApprovalsCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final texts = context.texts;
+
     return Container(
       constraints: const BoxConstraints(minHeight: 420),
       decoration: _cardDecoration(),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Padding(
-            padding: EdgeInsets.all(22),
+          Padding(
+            padding: const EdgeInsets.all(22),
             child: Text(
-              'Pending Approvals',
+              texts.t('pendingApprovals'),
               style: NavigoTextStyles.titleSmall,
             ),
           ),
 
           if (approvals.isEmpty)
-            const Padding(
-              padding: EdgeInsets.all(22),
+            Padding(
+              padding: const EdgeInsets.all(22),
               child: Text(
-                'No pending approvals',
+                texts.t('noPendingApprovals'),
                 style: NavigoTextStyles.bodySmall,
               ),
             )
@@ -4247,12 +4488,12 @@ class _PendingApprovalsCard extends StatelessWidget {
                 headingRowColor: WidgetStatePropertyAll(
                   NavigoColors.backgroundAlt,
                 ),
-                columns: const [
-                  DataColumn(label: Text('Type')),
-                  DataColumn(label: Text('Name')),
-                  DataColumn(label: Text('Details')),
-                  DataColumn(label: Text('Status')),
-                  DataColumn(label: Text('Action')),
+                columns: [
+                  DataColumn(label: Text(texts.t('type'))),
+                  DataColumn(label: Text(texts.t('name'))),
+                  DataColumn(label: Text(texts.t('details'))),
+                  DataColumn(label: Text(texts.t('status'))),
+                  DataColumn(label: Text(texts.t('action'))),
                 ],
                 rows: approvals.map((item) {
                   final isBusy = busyApprovalIds.contains(item.id);
@@ -4288,7 +4529,7 @@ class _PendingApprovalsCard extends StatelessWidget {
                               FilledButton.icon(
                                 onPressed: () => onApprove(item),
                                 icon: const Icon(Icons.check, size: 16),
-                                label: const Text('Approve'),
+                                label: Text(texts.t('approve')),
                                 style: FilledButton.styleFrom(
                                   backgroundColor: NavigoColors.accentGreen,
                                   foregroundColor: Colors.white,
@@ -4299,7 +4540,7 @@ class _PendingApprovalsCard extends StatelessWidget {
                               OutlinedButton.icon(
                                 onPressed: () => onReject(item),
                                 icon: const Icon(Icons.close, size: 16),
-                                label: const Text('Reject'),
+                                label: Text(texts.t('reject')),
                                 style: OutlinedButton.styleFrom(
                                   foregroundColor: NavigoColors.accentRed,
                                   side: const BorderSide(
@@ -4335,7 +4576,7 @@ class _IconBox extends StatelessWidget {
       height: 48,
       width: 48,
       decoration: BoxDecoration(
-        color: color.withOpacity(0.12),
+        color: color.withValues(alpha: 0.12),
         borderRadius: BorderRadius.circular(14),
       ),
       child: Icon(icon, color: color),
@@ -4354,7 +4595,7 @@ class _Chip extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.12),
+        color: color.withValues(alpha: 0.12),
         borderRadius: BorderRadius.circular(30),
       ),
       child: Text(
@@ -4375,6 +4616,145 @@ String _formatStatus(String status) {
       .where((part) => part.isNotEmpty)
       .map((part) => '${part[0].toUpperCase()}${part.substring(1)}')
       .join(' ');
+}
+
+String _localizedTripStatus(BuildContext context, String status) {
+  final normalized = status.trim().toLowerCase().replaceAll('-', '_');
+  final texts = context.texts;
+
+  return switch (normalized) {
+    'scheduled' => texts.t('tripStatusScheduled'),
+    'ongoing' || 'ontrip' || 'on_trip' => texts.t('tripStatusOngoing'),
+    'active' => texts.t('tripStatusActive'),
+    'started' => texts.t('tripStatusStarted'),
+    'completed' || 'finished' => texts.t('tripStatusCompleted'),
+    'cancelled' || 'canceled' => texts.t('tripStatusCancelled'),
+    'pending' => texts.t('tripStatusPending'),
+    'assigned' => texts.t('tripStatusAssigned'),
+    'unassigned' => texts.t('tripStatusUnassigned'),
+    _ => _formatStatus(status),
+  };
+}
+
+String _localizedVehicleType(BuildContext context, String value) {
+  final clean = value.trim();
+  if (clean.isEmpty) return '-';
+  if (context.texts.locale.languageCode != 'ar') return _formatStatus(clean);
+
+  final normalized = clean
+      .toLowerCase()
+      .replaceAll(RegExp(r'[_\-]+'), ' ')
+      .replaceAll(RegExp(r'\s+'), ' ')
+      .trim();
+
+  if (normalized == 'microbus' ||
+      normalized == 'micro bus' ||
+      normalized == 'microbus 14' ||
+      normalized == 'microbus 45' ||
+      normalized == 'ford') {
+    return 'فورد';
+  }
+
+  if (normalized == 'bus' || normalized == 'bus 14' || normalized == 'bus 45') {
+    final number = RegExp(r'\d+').firstMatch(normalized)?.group(0);
+    return number == null ? 'حافلة' : 'حافلة $number';
+  }
+
+  return clean;
+}
+
+String _localizedRouteName(
+  BuildContext context, {
+  String? label,
+  String? start,
+  String? end,
+  String? fallback,
+}) {
+  final isArabic = context.texts.locale.languageCode == 'ar';
+  final cleanStart = start?.trim() ?? '';
+  final cleanEnd = end?.trim() ?? '';
+
+  if (cleanStart.isNotEmpty || cleanEnd.isNotEmpty) {
+    final localizedStart = _localizedPlaceName(context, cleanStart);
+    final localizedEnd = _localizedPlaceName(context, cleanEnd);
+
+    if (localizedStart.isNotEmpty && localizedEnd.isNotEmpty) {
+      return isArabic
+          ? '$localizedStart إلى $localizedEnd'
+          : '$localizedStart to $localizedEnd';
+    }
+    if (localizedStart.isNotEmpty) return localizedStart;
+    if (localizedEnd.isNotEmpty) return localizedEnd;
+  }
+
+  final cleanLabel = label?.trim() ?? '';
+  if (cleanLabel.isEmpty) return _dash(fallback ?? '');
+  if (!isArabic) return cleanLabel;
+
+  final separatorPattern = RegExp(
+    r'\s*(?:<[-\s]*>|<----->|↔|→|->|–|\s-\s| to )\s*',
+    caseSensitive: false,
+  );
+  final parts = cleanLabel
+      .split(separatorPattern)
+      .map((part) => part.trim())
+      .where((part) => part.isNotEmpty)
+      .toList();
+
+  if (parts.length >= 2) {
+    return parts
+        .map((part) => _localizedPlaceName(context, part))
+        .join(' إلى ');
+  }
+
+  return _localizedPlaceName(
+    context,
+    cleanLabel,
+  ).replaceAll(RegExp(r'\s+to\s+', caseSensitive: false), ' إلى ');
+}
+
+String _localizedPlaceName(BuildContext context, String value) {
+  final clean = value.trim();
+  if (clean.isEmpty) return '';
+  if (context.texts.locale.languageCode != 'ar') return clean;
+
+  final normalized = clean
+      .toLowerCase()
+      .replaceAll(RegExp(r'[_\-]+'), ' ')
+      .replaceAll(RegExp(r'\s+'), ' ')
+      .trim();
+
+  const arabicPlaces = {
+    'jenin': 'جنين',
+    'nablus': 'نابلس',
+    'ramallah': 'رام الله',
+    'al bireh': 'البيرة',
+    'albireh': 'البيرة',
+    'birzeit': 'بيرزيت',
+    'bir zeit': 'بيرزيت',
+    'rawabi': 'روابي',
+    'tulkarm': 'طولكرم',
+    'tul karem': 'طولكرم',
+    'qalqilya': 'قلقيلية',
+    'salfit': 'سلفيت',
+    'jericho': 'أريحا',
+    'bethlehem': 'بيت لحم',
+    'beit lehem': 'بيت لحم',
+    'hebron': 'الخليل',
+    'al khalil': 'الخليل',
+    'jerusalem': 'القدس',
+    'al quds': 'القدس',
+    'gaza': 'غزة',
+    'rafah': 'رفح',
+    'khan yunis': 'خان يونس',
+    'tubas': 'طوباس',
+    'ya bad': 'يعبد',
+    'yabad': 'يعبد',
+    'qabatiya': 'قباطية',
+    'arraba': 'عرابة',
+  };
+
+  return arabicPlaces[normalized] ?? clean;
 }
 
 String _formatDate(DateTime? date) {
@@ -4420,7 +4800,7 @@ BoxDecoration _cardDecoration({double radius = 18}) {
     border: Border.all(color: NavigoColors.borderLight),
     boxShadow: [
       BoxShadow(
-        color: Colors.black.withOpacity(0.04),
+        color: Colors.black.withValues(alpha: 0.04),
         blurRadius: 18,
         offset: const Offset(0, 8),
       ),

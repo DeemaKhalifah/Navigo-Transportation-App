@@ -1,11 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
+import 'controllers/app_controller_scope.dart';
+import 'controllers/language_controller.dart';
 import 'firebase_options.dart';
+import 'localization/admin_texts.dart';
+import 'localization/localization_x.dart';
 import 'screens/admin_login_screen.dart';
 import 'theme/app_theme.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  final languageController = LanguageController();
+  await languageController.loadSavedLanguage();
 
   Object? startupError;
   try {
@@ -24,22 +31,57 @@ void main() async {
     startupError = e;
   }
 
-  runApp(MyApp(startupError: startupError));
+  runApp(
+    MyApp(startupError: startupError, languageController: languageController),
+  );
 }
 
-class MyApp extends StatelessWidget {
-  const MyApp({super.key, this.startupError});
+class MyApp extends StatefulWidget {
+  const MyApp({super.key, this.startupError, required this.languageController});
 
   final Object? startupError;
+  final LanguageController languageController;
+
+  @override
+  State<MyApp> createState() => _MyAppState();
+}
+
+class _MyAppState extends State<MyApp> {
+  @override
+  void dispose() {
+    widget.languageController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      debugShowCheckedModeBanner: false,
-      theme: appTheme,
-      home: startupError == null
-          ? const AdminLoginScreen()
-          : StartupErrorScreen(error: startupError!),
+    return AppControllerScope(
+      languageController: widget.languageController,
+      child: AnimatedBuilder(
+        animation: widget.languageController,
+        builder: (context, _) => MaterialApp(
+          debugShowCheckedModeBanner: false,
+          theme: appTheme,
+          locale: widget.languageController.locale,
+          supportedLocales: AdminTexts.supportedLocales,
+          localizationsDelegates: const [
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
+          builder: (context, child) {
+            return Directionality(
+              textDirection: widget.languageController.isArabic
+                  ? TextDirection.rtl
+                  : TextDirection.ltr,
+              child: child ?? const SizedBox.shrink(),
+            );
+          },
+          home: widget.startupError == null
+              ? const AdminLoginScreen()
+              : StartupErrorScreen(error: widget.startupError!),
+        ),
+      ),
     );
   }
 }
@@ -51,6 +93,8 @@ class StartupErrorScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final texts = context.texts;
+
     return Scaffold(
       backgroundColor: NavigoColors.backgroundLight,
       body: Center(
@@ -70,18 +114,15 @@ class StartupErrorScreen extends StatelessWidget {
                 color: NavigoColors.accentRed,
               ),
               const SizedBox(height: 16),
-              const Text(
-                'Admin panel could not start',
+              Text(
+                texts.t('adminPanelCouldNotStart'),
                 style: NavigoTextStyles.titleLarge,
               ),
               const SizedBox(height: 10),
-              Text(
-                error.toString(),
-                style: NavigoTextStyles.bodyMedium,
-              ),
+              Text(error.toString(), style: NavigoTextStyles.bodyMedium),
               const SizedBox(height: 18),
-              const Text(
-                'Check Firebase configuration for the platform you are running.',
+              Text(
+                texts.t('checkFirebaseConfiguration'),
                 style: NavigoTextStyles.bodySmall,
               ),
             ],
