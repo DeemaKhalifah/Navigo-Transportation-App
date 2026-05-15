@@ -300,6 +300,48 @@ function chunkArray(arr, chunkSize) {
   return out;
 }
 
+const notificationTextByKey = {
+  driverApprovalNotificationTitle: {
+    en: 'Driver request accepted',
+    ar: 'تم قبول طلب السائق',
+  },
+  driverApprovalNotificationMessage: {
+    en: 'Your driver account has been approved. You can now start accepting trips.',
+    ar: 'تمت الموافقة على حساب السائق الخاص بك. يمكنك الآن قبول الرحلات.',
+  },
+  waitingTripCreatedTitle: {
+    en: 'New trip created',
+    ar: 'تم إنشاء رحلة جديدة',
+  },
+  waitingTripCreatedMessage: {
+    en: 'A new trip was created for your requested date and time.',
+    ar: 'تم إنشاء رحلة جديدة في التاريخ والوقت المطلوبين.',
+  },
+  waitingTripManagerTitle: {
+    en: 'Waiting list trip request',
+    ar: 'طلب رحلة من قائمة الانتظار',
+  },
+  waitingTripManagerMessage: {
+    en: 'Passengers are waiting for a trip at the requested date and time.',
+    ar: 'يوجد ركاب بانتظار رحلة في التاريخ والوقت المطلوبين.',
+  },
+};
+
+function localizedNotificationText(key, languageCode, fallback) {
+  const safeKey = (key || '').toString().trim();
+  const safeLanguage = (languageCode || 'en').toString().trim().toLowerCase();
+  if (!safeKey || !notificationTextByKey[safeKey]) {
+    return (fallback || '').toString();
+  }
+
+  return (
+    notificationTextByKey[safeKey][safeLanguage] ||
+    notificationTextByKey[safeKey].en ||
+    fallback ||
+    ''
+  ).toString();
+}
+
 /**
  * Reusable helper to create a notification document.
  *
@@ -362,8 +404,21 @@ exports.sendNotificationOnCreate = functions.firestore
     const { tokens, tokenToRefs } = await collectUserFcmTokens(userId);
     if (!tokens.length) return null;
 
-    const title = (data.title || 'Navigo').toString();
-    const body = (data.message || data.body || '').toString();
+    const userSnap = await db.collection('users').doc(userId).get();
+    const languageCode = userSnap.exists
+      ? (userSnap.data().language || 'en').toString()
+      : 'en';
+
+    const title = localizedNotificationText(
+      data.titleKey,
+      languageCode,
+      data.title || 'Navigo',
+    );
+    const body = localizedNotificationText(
+      data.messageKey,
+      languageCode,
+      data.message || data.body || '',
+    );
     const type = (data.type || '').toString();
     const tripId = (data.tripId || '').toString();
     const routeId = (data.routeId || '').toString();

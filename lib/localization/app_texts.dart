@@ -151,6 +151,7 @@ class AppTexts {
       'hello': 'Hello',
       'whereToGo': 'Where would you like to go?',
       'loadingRoutes': 'Loading routes...',
+      'loading': 'Loading...',
       'searchRoute': 'Search or select a route',
       'selectLineFirst': 'Please select a line first',
       'line': 'Line',
@@ -216,6 +217,9 @@ class AppTexts {
       'searchNotifications': 'Search notifications...',
       'noNotificationsFound': 'No notifications found',
       'failedToLoadNotifications': 'Failed to load notifications',
+      'driverApprovalNotificationTitle': 'Driver request accepted',
+      'driverApprovalNotificationMessage':
+          'Your driver account has been approved. You can now start accepting trips.',
       // Driver home
       'liveTripInProgress': 'Live trip in progress',
       'noActiveTrip': 'No active trip',
@@ -371,6 +375,35 @@ class AppTexts {
       'seatsAvailableForTrip': 'seat(s) are available for this trip.',
       'setPickupFirst':
           'Set your pickup on the home map (tap the map or use My Location), then try again.',
+      'joinWaitingList': 'Join waiting list',
+      'waitingTripRequested': 'Waiting request submitted.',
+      'waitingTripCreated':
+          'A new trip was created for your requested date and time.',
+      'waitingTripManagerNotified':
+          'Waiting request submitted. The route manager was notified.',
+      'waitingListChooseDateTime':
+          'Choose a date and time to join the waiting list.',
+      'waitingListLoginRequired': 'Please sign in to join the waiting list.',
+      'waitingListSelectSeat': 'Please select at least 1 seat.',
+      'waitingListFutureDateTime': 'Please choose a future date and time.',
+      'waitingListRouteNotFound': 'Route not found for this line.',
+      'waitingTripCreatedTitle': 'New trip created',
+      'waitingTripCreatedMessage':
+          'A new trip was created for your requested date and time.',
+      'waitingTripManagerTitle': 'Waiting list trip request',
+      'waitingTripManagerMessage':
+          'Passengers are waiting for a trip at the requested date and time.',
+      'createTrip': 'Create trip',
+      'makeTrip': 'Make trip',
+      'waitingTripMade': 'Trip created and assigned successfully.',
+      'waitingListManagerPrompt':
+          'You have trip on waiting list for {passengers} passengers on {date} at {time}. If you want to make it.',
+      'waitingList': 'Waiting list',
+      'waitingListSubtitle': 'Passenger requests ready for your decision',
+      'noWaitingListRequests': 'No waiting list requests yet.',
+      'requestedPassengers': 'Requested passengers',
+      'noWaitingPassengerRequests': 'No passenger requests found.',
+      'seatsRequested': 'Seats requested',
       // Add schedule slot - extra
       'select': 'Select',
       'chooseDateAndTime': 'Please choose date and time',
@@ -530,6 +563,7 @@ class AppTexts {
       'hello': 'مرحباً',
       'whereToGo': 'إلى أين تريد الذهاب؟',
       'loadingRoutes': 'جاري تحميل المسارات...',
+      'loading': 'جاري التحميل...',
       'searchRoute': 'ابحث أو اختر مساراً',
       'selectLineFirst': 'يرجى اختيار خط أولاً',
       'line': 'الخط',
@@ -590,6 +624,9 @@ class AppTexts {
       'searchNotifications': 'البحث في الإشعارات...',
       'noNotificationsFound': 'لا توجد إشعارات',
       'failedToLoadNotifications': 'فشل تحميل الإشعارات',
+      'driverApprovalNotificationTitle': 'تم قبول طلب السائق',
+      'driverApprovalNotificationMessage':
+          'تمت الموافقة على حساب السائق الخاص بك. يمكنك الآن قبول الرحلات.',
       'liveTripInProgress': 'رحلة مباشرة قيد التنفيذ',
       'noActiveTrip': 'لا توجد رحلة نشطة',
       'youAreOffline': 'أنت غير متصل',
@@ -733,6 +770,35 @@ class AppTexts {
       'seatsAvailableForTrip': 'مقعد(مقاعد) متاحة لهذه الرحلة.',
       'setPickupFirst':
           'حدد موقع الالتقاط على الخريطة الرئيسية (انقر على الخريطة أو استخدم موقعي)، ثم حاول مرة أخرى.',
+      'joinWaitingList': 'انضم إلى قائمة الانتظار',
+      'waitingTripRequested': 'تم إرسال طلب قائمة الانتظار.',
+      'waitingTripCreated': 'تم إنشاء رحلة جديدة في التاريخ والوقت المطلوبين.',
+      'waitingTripManagerNotified':
+          'تم إرسال طلب قائمة الانتظار. تم إشعار مدير المسار.',
+      'waitingListChooseDateTime':
+          'اختر التاريخ والوقت للانضمام إلى قائمة الانتظار.',
+      'waitingListLoginRequired':
+          'يرجى تسجيل الدخول للانضمام إلى قائمة الانتظار.',
+      'waitingListSelectSeat': 'يرجى اختيار مقعد واحد على الأقل.',
+      'waitingListFutureDateTime': 'يرجى اختيار تاريخ ووقت في المستقبل.',
+      'waitingListRouteNotFound': 'لم يتم العثور على المسار لهذا الخط.',
+      'waitingTripCreatedTitle': 'تم إنشاء رحلة جديدة',
+      'waitingTripCreatedMessage':
+          'تم إنشاء رحلة جديدة في التاريخ والوقت المطلوبين.',
+      'waitingTripManagerTitle': 'طلب رحلة من قائمة الانتظار',
+      'waitingTripManagerMessage':
+          'يوجد ركاب بانتظار رحلة في التاريخ والوقت المطلوبين.',
+      'createTrip': 'إنشاء رحلة',
+      'makeTrip': 'إنشاء الرحلة',
+      'waitingTripMade': 'تم إنشاء الرحلة وتعيينها بنجاح.',
+      'waitingListManagerPrompt':
+          'لديك رحلة في قائمة الانتظار لعدد {passengers} ركاب بتاريخ {date} الساعة {time}. إذا كنت تريد إنشاءها.',
+      'waitingList': 'قائمة الانتظار',
+      'waitingListSubtitle': 'طلبات الركاب الجاهزة لقرارك',
+      'noWaitingListRequests': 'لا توجد طلبات في قائمة الانتظار بعد.',
+      'requestedPassengers': 'الركاب الذين طلبوا الرحلة',
+      'noWaitingPassengerRequests': 'لا توجد طلبات ركاب.',
+      'seatsRequested': 'المقاعد المطلوبة',
       'select': 'اختر',
       'chooseDateAndTime': 'يرجى اختيار التاريخ والوقت',
       'chooseEndTime': 'يرجى اختيار وقت النهاية / آخر مغادرة',

@@ -527,6 +527,9 @@ class NavigoDecorations {
         const SizedBox(height: 4),
         Text(
           label,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          textAlign: TextAlign.center,
           style: NavigoTextStyles.bodySmall.copyWith(
             fontSize: 12,
             color: color,

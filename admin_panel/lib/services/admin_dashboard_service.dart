@@ -728,6 +728,7 @@ class AdminDashboardService {
   Future<void> approveDriver(AdminApprovalItem item) async {
     final now = FieldValue.serverTimestamp();
     final batch = _db.batch();
+    final notificationRef = _db.collection('notifications').doc();
 
     batch.set(_db.collection('drivers').doc(item.id), {
       'isApproved': true,
@@ -748,6 +749,27 @@ class AdminDashboardService {
         'driverRejectionReason': FieldValue.delete(),
         'updatedAt': now,
       }, SetOptions(merge: true));
+
+      const title = 'Driver request accepted / تم قبول طلب السائق';
+      const message =
+          'Your driver account has been approved. You can now start accepting trips.\n'
+          'تمت الموافقة على حساب السائق الخاص بك. يمكنك الآن قبول الرحلات.';
+      batch.set(notificationRef, {
+        'notificationId': notificationRef.id,
+        'userId': userId,
+        'title': title,
+        'message': message,
+        'body': message,
+        'titleKey': 'driverApprovalNotificationTitle',
+        'messageKey': 'driverApprovalNotificationMessage',
+        'type': 'driver_approved',
+        'driverId': item.id,
+        'tripId': '',
+        'routeId': '',
+        'senderRole': 'admin',
+        'isRead': false,
+        'timestamp': now,
+      });
     }
 
     await batch.commit();

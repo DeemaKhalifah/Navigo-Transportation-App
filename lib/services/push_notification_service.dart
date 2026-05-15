@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -70,14 +71,21 @@ class PushNotificationService {
       initSettings,
       onDidReceiveNotificationResponse: (resp) {
         final payload = resp.payload ?? '';
-        if (payload == 'trip_started') {
+        final data = _payloadData(payload);
+        final type = (data['type'] ?? payload).toString();
+
+        if (type == 'trip_started') {
           _openTripStartedDestination();
-        } else if (payload == 'driver_request') {
+        } else if (type == 'driver_request') {
           _openDriverRequests();
-        } else if (payload == 'support_report') {
+        } else if (type == 'support_report') {
           _openRouteManagerReports();
         } else {
-          _openNotifications();
+          _openNotifications(
+            initialNotificationId: data['notificationId']?.toString(),
+            initialTitle: data['title']?.toString(),
+            initialBody: data['body']?.toString(),
+          );
         }
       },
     );
@@ -89,8 +97,8 @@ class PushNotificationService {
       importance: Importance.high,
       description: 'Trip and app notifications',
     );
-    final androidPlugin =
-        _local.resolvePlatformSpecificImplementation<
+    final androidPlugin = _local
+        .resolvePlatformSpecificImplementation<
           AndroidFlutterLocalNotificationsPlugin
         >();
     await androidPlugin?.createNotificationChannel(channel);
@@ -126,7 +134,6 @@ class PushNotificationService {
       'fcm': token,
       'fcmUpdatedAt': FieldValue.serverTimestamp(),
     }, SetOptions(merge: true));
-
   }
 
   Future<void> _showLocalForRemoteMessage(RemoteMessage message) async {
@@ -150,7 +157,12 @@ class PushNotificationService {
       n.title ?? 'Navigo',
       n.body ?? '',
       details,
-      payload: (message.data['type'] ?? '').toString(),
+      payload: jsonEncode({
+        'type': (message.data['type'] ?? '').toString(),
+        'notificationId': (message.data['notificationId'] ?? '').toString(),
+        'title': n.title ?? 'Navigo',
+        'body': n.body ?? '',
+      }),
     );
   }
 
@@ -168,7 +180,22 @@ class PushNotificationService {
       _openRouteManagerReports();
       return;
     }
-    _openNotifications();
+    _openNotifications(
+      initialNotificationId: (message.data['notificationId'] ?? '').toString(),
+      initialTitle: message.notification?.title,
+      initialBody: message.notification?.body,
+    );
+  }
+
+  Map<String, dynamic> _payloadData(String payload) {
+    if (payload.trim().isEmpty) return const {};
+    try {
+      final decoded = jsonDecode(payload);
+      if (decoded is Map) return Map<String, dynamic>.from(decoded);
+    } catch (_) {
+      return {'type': payload};
+    }
+    return {'type': payload};
   }
 
   void _openTripStartedDestination() {
@@ -177,10 +204,22 @@ class PushNotificationService {
     nav.push(MaterialPageRoute(builder: (_) => const PassengerHomeScreen()));
   }
 
-  void _openNotifications() {
+  void _openNotifications({
+    String? initialNotificationId,
+    String? initialTitle,
+    String? initialBody,
+  }) {
     final nav = appNavigatorKey.currentState;
     if (nav == null) return;
-    nav.push(MaterialPageRoute(builder: (_) => const NotificationsScreen()));
+    nav.push(
+      MaterialPageRoute(
+        builder: (_) => NotificationsScreen(
+          initialNotificationId: initialNotificationId,
+          initialTitle: initialTitle,
+          initialBody: initialBody,
+        ),
+      ),
+    );
   }
 
   void _openDriverRequests() {

@@ -6,6 +6,7 @@ import 'manager_profile.dart';
 import 'reports.dart';
 import 'route_schedule.dart';
 import 'assign_driver.dart';
+import 'waiting_list_screen.dart';
 
 class RouteManagerNavBar extends StatefulWidget {
   final int currentIndex;
@@ -32,9 +33,12 @@ class _RouteManagerNavBarState extends State<RouteManagerNavBar> {
         screen = const AssignDriver();
         break;
       case 2:
-        screen = const Reports();
+        screen = const WaitingListScreen();
         break;
       case 3:
+        screen = const Reports();
+        break;
+      case 4:
         screen = const ManagerProfile();
         break;
       default:
@@ -57,20 +61,39 @@ class _RouteManagerNavBarState extends State<RouteManagerNavBar> {
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceAround,
             children: [
-              _buildItem(
-                context,
-                0,
-                Icons.schedule,
-                context.texts.t('schedule'),
+              Expanded(
+                child: _buildItem(
+                  context,
+                  0,
+                  Icons.schedule,
+                  context.texts.t('schedule'),
+                ),
               ),
-              _buildItem(
-                context,
-                1,
-                Icons.assignment,
-                context.texts.t('driverStatus'),
+              Expanded(
+                child: _buildItem(
+                  context,
+                  1,
+                  Icons.assignment,
+                  context.texts.t('driverStatus'),
+                ),
               ),
-              _buildReportsItem(context),
-              _buildItem(context, 3, Icons.person, context.texts.t('profile')),
+              Expanded(
+                child: _buildItem(
+                  context,
+                  2,
+                  Icons.groups_2_outlined,
+                  context.texts.t('waitingList'),
+                ),
+              ),
+              Expanded(child: _buildReportsItem(context)),
+              Expanded(
+                child: _buildItem(
+                  context,
+                  4,
+                  Icons.person,
+                  context.texts.t('profile'),
+                ),
+              ),
             ],
           ),
         ),
@@ -106,9 +129,9 @@ class _RouteManagerNavBarState extends State<RouteManagerNavBar> {
             ? _badgeIcon(Icons.bar_chart, count)
             : const Icon(Icons.bar_chart);
 
-        final bool isActive = widget.currentIndex == 2;
+        final bool isActive = widget.currentIndex == 3;
         return GestureDetector(
-          onTap: () => _onItemTapped(context, 2),
+          onTap: () => _onItemTapped(context, 3),
           child: NavigoDecorations.navItem(
             icon: Icons.bar_chart,
             iconWidget: icon,

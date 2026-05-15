@@ -55,6 +55,8 @@ Future<void> main() async {
     }
   }
 
+  languageController.startAuthLanguageSync();
+
   FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
 
   runApp(MyApp(languageController: languageController));

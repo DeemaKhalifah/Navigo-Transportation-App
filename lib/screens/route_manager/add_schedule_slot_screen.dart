@@ -1,7 +1,9 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:navigo/models/schedule_slot.dart';
 import 'package:navigo/services/schedule_slot_repository.dart';
 import 'package:navigo/services/slot_driver_assignment_service.dart';
+import 'package:navigo/services/waiting_trip_request_service.dart';
 import 'package:navigo/theme/app_theme.dart';
 import '../../localization/localization_x.dart';
 import '../../widgets/app_message.dart';
@@ -13,10 +15,18 @@ class AddScheduleSlotScreen extends StatefulWidget {
     super.key,
     required this.routeId,
     this.existingSlot,
+    this.waitingTripGroupId,
+    this.initialDepartureAt,
+    this.initialCapacity,
+    this.initialVehicleType,
   });
 
   final String routeId;
   final ScheduleSlot? existingSlot;
+  final String? waitingTripGroupId;
+  final DateTime? initialDepartureAt;
+  final int? initialCapacity;
+  final String? initialVehicleType;
 
   bool get isEditing => existingSlot != null;
 
@@ -27,10 +37,11 @@ class AddScheduleSlotScreen extends StatefulWidget {
 class _AddScheduleSlotScreenState extends State<AddScheduleSlotScreen> {
   final ScheduleSlotRepository _repo = ScheduleSlotRepository();
   final SlotDriverAssignmentService _assignment = SlotDriverAssignmentService();
+  final WaitingTripRequestService _waitingRequestService =
+      WaitingTripRequestService();
 
   String _selectedType = 'bus';
 
-  final TextEditingController _priceController = TextEditingController();
   final TextEditingController _frequencyController = TextEditingController();
   final TextEditingController _tripLengthController = TextEditingController(
     text: '60',
@@ -43,10 +54,14 @@ class _AddScheduleSlotScreenState extends State<AddScheduleSlotScreen> {
   DateTime? _selectedDate;
 
   bool _saving = false;
+  double? _routePrice;
+  bool _loadingRoutePrice = true;
 
   @override
   void initState() {
     super.initState();
+    _loadRoutePrice();
+
     final e = widget.existingSlot;
 
     if (e != null) {
@@ -78,22 +93,46 @@ class _AddScheduleSlotScreenState extends State<AddScheduleSlotScreen> {
       if (_selectedType == 'micro' && _capacity == '14') {
         _capacity = '7';
       }
-
-      final p = e.price;
-      if (p != null) {
-        _priceController.text = p.toStringAsFixed(
-          p == p.roundToDouble() ? 0 : 2,
-        );
+    } else if (widget.initialDepartureAt != null) {
+      final initial = widget.initialDepartureAt!;
+      _selectedType = ScheduleSlot.normalizeVehicleType(
+        widget.initialVehicleType,
+      );
+      if (_selectedType != 'bus') _selectedType = 'micro';
+      _selectedDate = DateTime(initial.year, initial.month, initial.day);
+      _fromTime = TimeOfDay.fromDateTime(initial);
+      if (_selectedType == 'bus') {
+        final end = initial.add(const Duration(minutes: 60));
+        _toTime = TimeOfDay.fromDateTime(end);
       }
+      final requested = widget.initialCapacity ?? 1;
+      _capacity = _selectedType == 'bus' ? (requested > 14 ? '45' : '14') : '7';
     }
   }
 
   @override
   void dispose() {
-    _priceController.dispose();
     _frequencyController.dispose();
     _tripLengthController.dispose();
     super.dispose();
+  }
+
+  Future<void> _loadRoutePrice() async {
+    try {
+      final snap = await FirebaseFirestore.instance
+          .collection('route')
+          .doc(widget.routeId)
+          .get();
+      final price = (snap.data()?['price'] as num?)?.toDouble();
+      if (!mounted) return;
+      setState(() {
+        _routePrice = price;
+        _loadingRoutePrice = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _loadingRoutePrice = false);
+    }
   }
 
   Future<void> _pickTime({required bool isFrom}) async {
@@ -134,6 +173,12 @@ class _AddScheduleSlotScreenState extends State<AddScheduleSlotScreen> {
   String _formatDate(DateTime? date) {
     if (date == null) return context.texts.t('selectDate');
     return '${date.day}/${date.month}/${date.year}';
+  }
+
+  String _formatPrice(double? price) {
+    if (_loadingRoutePrice) return 'Loading...';
+    if (price == null) return 'N/A';
+    return '${price.toStringAsFixed(price == price.roundToDouble() ? 0 : 2)} NIS';
   }
 
   DateTime _combine(DateTime date, TimeOfDay time) {
@@ -300,21 +345,9 @@ class _AddScheduleSlotScreenState extends State<AddScheduleSlotScreen> {
       }
     }
 
-    double? price;
-    final priceText = _priceController.text.trim();
-
-    if (priceText.isNotEmpty) {
-      price = double.tryParse(priceText.replaceAll(',', '.'));
-
-      if (price == null) {
-        AppMessage.showError(context, context.texts.t('invalidPrice'));
-        return;
-      }
-    }
-
     final slots = _buildSlotsToCreate(
       capacity: cap,
-      price: price,
+      price: _routePrice,
       frequencyMinutes: frequencyMinutes,
       tripLengthMinutes: tripLengthMinutes,
     );
@@ -334,11 +367,21 @@ class _AddScheduleSlotScreenState extends State<AddScheduleSlotScreen> {
           routeId: widget.routeId,
         );
       } else {
+        final createdSlotIds = <String>[];
         for (final slot in slots) {
-          await _repo.addSlot(slot);
+          final slotId = await _repo.addSlot(slot);
+          createdSlotIds.add(slotId);
 
           await _assignment.autoAssignUpcomingUnassignedSlots(
             routeId: widget.routeId,
+          );
+        }
+
+        final waitingGroupId = widget.waitingTripGroupId?.trim() ?? '';
+        if (waitingGroupId.isNotEmpty && createdSlotIds.isNotEmpty) {
+          await _waitingRequestService.completeGroupWithTrip(
+            groupId: waitingGroupId,
+            tripId: createdSlotIds.first,
           );
         }
 
@@ -601,23 +644,10 @@ class _AddScheduleSlotScreenState extends State<AddScheduleSlotScreen> {
 
                           const SizedBox(height: NavigoSizes.itemGap),
 
-                          Text(
-                            context.texts.t('priceOverride'),
-                            style: NavigoTextStyles.label,
-                          ),
-                          const SizedBox(height: 6),
-                          TextField(
-                            controller: _priceController,
-                            keyboardType: const TextInputType.numberWithOptions(
-                              decimal: true,
-                            ),
-                            style: NavigoTextStyles.fieldText,
-                            decoration: NavigoDecorations.kInputDecoration
-                                .copyWith(
-                                  hintText: context.texts.t(
-                                    'leaveEmptyDefault',
-                                  ),
-                                ),
+                          _buildInfoLabel(
+                            label: context.texts.t('price'),
+                            value: _formatPrice(_routePrice),
+                            icon: Icons.payments_outlined,
                           ),
                         ],
                       ),
@@ -629,7 +659,9 @@ class _AddScheduleSlotScreenState extends State<AddScheduleSlotScreen> {
                       width: double.infinity,
                       height: NavigoSizes.buttonHeight,
                       child: ElevatedButton(
-                        onPressed: _saving ? null : _save,
+                        onPressed: (_saving || _loadingRoutePrice)
+                            ? null
+                            : _save,
                         style: NavigoDecorations.kPrimaryButtonLargeStyle,
                         child: _saving
                             ? const SizedBox(
@@ -712,6 +744,36 @@ class _AddScheduleSlotScreenState extends State<AddScheduleSlotScreen> {
                 Expanded(child: Text(value, style: NavigoTextStyles.fieldText)),
               ],
             ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildInfoLabel({
+    required String label,
+    required String value,
+    required IconData icon,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label, style: NavigoTextStyles.label),
+        const SizedBox(height: 6),
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+          decoration: NavigoDecorations.surfaceDecoration(
+            radius: NavigoSizes.inputRadius,
+            color: NavigoColors.inputFill,
+            bordered: false,
+          ),
+          child: Row(
+            children: [
+              Icon(icon, size: 18, color: NavigoColors.accentGreen),
+              const SizedBox(width: 8),
+              Expanded(child: Text(value, style: NavigoTextStyles.fieldText)),
+            ],
           ),
         ),
       ],

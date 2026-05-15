@@ -2,10 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 
 import '../../models/schedule_slot.dart';
+import '../../models/waiting_trip_request.dart';
 import '../../services/geocoding_service.dart';
 import '../../services/local_storage_service.dart';
 import '../../services/passenger_schedule_service.dart';
 import '../../services/passenger_trip_repository.dart';
+import '../../services/waiting_trip_request_service.dart';
 import '../../localization/localization_x.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/app_message.dart';
@@ -24,6 +26,8 @@ class ScheduleScreen extends StatefulWidget {
 class _ScheduleScreenState extends State<ScheduleScreen> {
   final PassengerScheduleService _scheduleService = PassengerScheduleService();
   final PassengerTripRepository _tripRepository = PassengerTripRepository();
+  final WaitingTripRequestService _waitingRequestService =
+      WaitingTripRequestService();
   final TextEditingController _manualPickupController = TextEditingController();
 
   String? _selectedLine;
@@ -32,6 +36,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
   TimeOfDay? _selectedTime;
   int _seatCount = 1;
   bool _isLoading = false;
+  bool _isSubmittingWaitingRequest = false;
   bool _lineFilterFromNavigation = false;
   List<ScheduleSlot> _schedules = [];
 
@@ -101,14 +106,6 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
     }
   }
 
-  void _incrementSeat() {
-    if (_seatCount < 10) setState(() => _seatCount++);
-  }
-
-  void _decrementSeat() {
-    if (_seatCount > 1) setState(() => _seatCount--);
-  }
-
   String _formatDate() {
     if (_selectedDate == null) return context.texts.t('anyDate');
     return '${_selectedDate!.day}/${_selectedDate!.month}/${_selectedDate!.year}';
@@ -141,6 +138,63 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
+  }
+
+  Future<void> _submitWaitingTripRequest({int? seatsOverride}) async {
+    if (_isSubmittingWaitingRequest) return;
+
+    final line = _selectedLine?.trim() ?? '';
+    if (line.isEmpty) {
+      AppMessage.showError(context, context.texts.t('selectLineFirst'));
+      return;
+    }
+    if (_selectedDate == null || _selectedTime == null) {
+      AppMessage.showError(context, context.texts.t('chooseDateAndTime'));
+      return;
+    }
+
+    setState(() => _isSubmittingWaitingRequest = true);
+    try {
+      final result = await _waitingRequestService.submitRequest(
+        selectedLine: line,
+        selectedDate: _selectedDate!,
+        hour: _selectedTime!.hour,
+        minute: _selectedTime!.minute,
+        vehicleType: _vehicleType,
+        seatsRequested: seatsOverride ?? _seatCount,
+        pickupLocationDescription: _manualPickupController.text,
+      );
+
+      if (!mounted) return;
+      AppMessage.showSuccess(
+        context,
+        result.routeManagerNotified
+            ? context.texts.t('waitingTripManagerNotified')
+            : '${context.texts.t('waitingTripRequested')} ${result.waitingSeatCount}/4',
+      );
+      await _loadSchedules();
+    } catch (e) {
+      if (!mounted) return;
+      AppMessage.showError(context, _waitingListErrorText(e));
+    } finally {
+      if (mounted) setState(() => _isSubmittingWaitingRequest = false);
+    }
+  }
+
+  String _waitingListErrorText(Object error) {
+    if (error is WaitingTripRequestException) {
+      return context.texts.t(error.messageKey);
+    }
+    final raw = error.toString().replaceFirst('Exception: ', '').trim();
+    const knownKeys = {
+      'waitingListLoginRequired',
+      'selectLineFirst',
+      'waitingListSelectSeat',
+      'waitingListFutureDateTime',
+      'waitingListRouteNotFound',
+    };
+    if (knownKeys.contains(raw)) return context.texts.t(raw);
+    return raw;
   }
 
   Future<void> _openTripDetails(ScheduleSlot slot) async {
@@ -246,6 +300,30 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                         ),
                       ),
                     const SizedBox(height: 16),
+                    if (sheetSeatCount > availableSeats &&
+                        _schedules.length == 1) ...[
+                      SizedBox(
+                        width: double.infinity,
+                        height: NavigoSizes.buttonHeightLarge,
+                        child: OutlinedButton.icon(
+                          onPressed: _isSubmittingWaitingRequest
+                              ? null
+                              : () async {
+                                  Navigator.pop(sheetContext);
+                                  await _submitWaitingTripRequest(
+                                    seatsOverride: sheetSeatCount,
+                                  );
+                                },
+                          icon: const Icon(Icons.group_add_outlined),
+                          label: Text(
+                            _isSubmittingWaitingRequest
+                                ? context.texts.t('sending')
+                                : context.texts.t('joinWaitingList'),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                    ],
                     SizedBox(
                       width: double.infinity,
                       height: NavigoSizes.buttonHeightLarge,
@@ -256,13 +334,14 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                                 if (sheetSeatCount > availableSeats) return;
                                 setSheetState(() => isConfirming = true);
                                 try {
+                                  final setPickupFirst = context.texts.t(
+                                    'setPickupFirst',
+                                  );
                                   final LatLng? pickupLatLng =
                                       await _tripRepository
                                           .getSavedPassengerLocation();
                                   if (pickupLatLng == null) {
-                                    throw Exception(
-                                      context.texts.t('setPickupFirst'),
-                                    );
+                                    throw Exception(setPickupFirst);
                                   }
 
                                   await _scheduleService.confirmSchedule(
@@ -529,6 +608,8 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                     ),
 
                     // ────────────────────────────────────────────────────────
+                    const SizedBox(height: 14),
+                    _buildSeatSelector(),
                     const SizedBox(height: 22),
                     Row(
                       children: [
@@ -551,9 +632,43 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                         width: double.infinity,
                         padding: const EdgeInsets.all(16),
                         decoration: NavigoDecorations.kCardDecoration,
-                        child: Text(
-                          context.texts.t('noSchedulesFound'),
-                          style: NavigoTextStyles.bodySmall,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              context.texts.t('noSchedulesFound'),
+                              style: NavigoTextStyles.bodySmall,
+                            ),
+                            const SizedBox(height: 12),
+                            SizedBox(
+                              width: double.infinity,
+                              child: OutlinedButton.icon(
+                                onPressed:
+                                    (_isSubmittingWaitingRequest ||
+                                        _selectedDate == null ||
+                                        _selectedTime == null)
+                                    ? null
+                                    : _submitWaitingTripRequest,
+                                icon: const Icon(Icons.group_add_outlined),
+                                label: Text(
+                                  _isSubmittingWaitingRequest
+                                      ? context.texts.t('sending')
+                                      : context.texts.t('joinWaitingList'),
+                                ),
+                              ),
+                            ),
+                            if (_selectedDate == null ||
+                                _selectedTime == null) ...[
+                              const SizedBox(height: 8),
+                              Text(
+                                context.texts.t('waitingListChooseDateTime'),
+                                style: NavigoTextStyles.bodySmall.copyWith(
+                                  color: NavigoColors.textMuted,
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ],
+                          ],
                         ),
                       )
                     else
@@ -621,6 +736,56 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildSeatSelector() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 14),
+      decoration: NavigoDecorations.kCardDecoration,
+      child: Row(
+        children: [
+          const Icon(
+            Icons.event_seat_outlined,
+            color: NavigoColors.accentGreen,
+            size: 18,
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              context.texts.t('numberOfSeats'),
+              style: NavigoTextStyles.bodyMedium.copyWith(
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+          IconButton(
+            onPressed: _seatCount > 1
+                ? () => setState(() => _seatCount--)
+                : null,
+            icon: const Icon(Icons.remove_circle_outline),
+            color: NavigoColors.accentGreen,
+          ),
+          SizedBox(
+            width: 32,
+            child: Text(
+              '$_seatCount',
+              textAlign: TextAlign.center,
+              style: NavigoTextStyles.bodyMedium.copyWith(
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+          IconButton(
+            onPressed: _seatCount < 10
+                ? () => setState(() => _seatCount++)
+                : null,
+            icon: const Icon(Icons.add_circle_outline),
+            color: NavigoColors.accentGreen,
+          ),
+        ],
       ),
     );
   }

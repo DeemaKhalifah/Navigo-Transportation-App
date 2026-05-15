@@ -298,6 +298,15 @@ class _RouteScheduleState extends State<RouteSchedule> {
     return '${r.startPoint} → ${r.endPoint}';
   }
 
+  String _formatPrice(double price) {
+    return '${price.toStringAsFixed(price == price.roundToDouble() ? 0 : 2)} NIS';
+  }
+
+  String _slotPriceLabel(ScheduleSlot slot) {
+    final price = slot.price ?? _route?.price;
+    return price == null ? '' : ' · ${_formatPrice(price)}';
+  }
+
   Widget _filterChip(String type, String label) {
     final selected = _selectedType == type;
 
@@ -535,7 +544,7 @@ class _RouteScheduleState extends State<RouteSchedule> {
                   const SizedBox(height: 6),
                   Text(
                     '${slot.capacity} seats'
-                    '${slot.price != null ? ' · ${slot.price} (override)' : ''}'
+                    '${_slotPriceLabel(slot)}'
                     '${slot.frequencyMinutes != null && slot.frequencyMinutes! > 0 ? ' · every ${slot.frequencyMinutes} min' : ''}',
                     style: NavigoTextStyles.bodySmall,
                   ),

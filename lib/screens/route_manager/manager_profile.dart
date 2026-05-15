@@ -385,7 +385,7 @@ class _ManagerProfileState extends State<ManagerProfile> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      bottomNavigationBar: const RouteManagerNavBar(currentIndex: 3),
+      bottomNavigationBar: const RouteManagerNavBar(currentIndex: 4),
       body: SafeArea(
         child: Column(
           children: [

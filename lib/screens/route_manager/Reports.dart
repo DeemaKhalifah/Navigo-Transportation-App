@@ -473,7 +473,7 @@ class _ReportsState extends State<Reports> {
           ],
         ),
       ),
-      bottomNavigationBar: const RouteManagerNavBar(currentIndex: 2),
+      bottomNavigationBar: const RouteManagerNavBar(currentIndex: 3),
     );
   }
 }
