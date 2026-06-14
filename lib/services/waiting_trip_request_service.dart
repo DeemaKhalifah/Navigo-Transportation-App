@@ -386,7 +386,7 @@ class WaitingTripRequestService {
 
     final usersSnap = await _db
         .collection('users')
-        .where('role', isEqualTo: 'route_manager')
+        .where('role', whereIn: ['route_manager', 'routeManager', 'route_manger'])
         .where('routeId', isEqualTo: routeId)
         .get();
     for (final doc in usersSnap.docs) {

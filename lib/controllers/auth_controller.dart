@@ -35,6 +35,7 @@ class AuthController extends ChangeNotifier {
     final value = (role ?? '').trim().toLowerCase();
 
     if (value == 'route_manager' ||
+        value == 'route_manger' ||
         value == 'route manager' ||
         value == 'routemanager' ||
         value == 'manager') {

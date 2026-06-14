@@ -1,14 +1,18 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_map/flutter_map.dart';
+import 'package:geocoding/geocoding.dart';
+import 'package:http/http.dart' as http;
 import 'package:latlong2/latlong.dart';
+import '../controllers/app_controller_scope.dart';
 import '../models/admin_dashboard_model.dart';
 import '../localization/localization_x.dart';
 import '../services/admin_auth_service.dart';
 import '../services/admin_dashboard_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/admin_account_dialog.dart';
-import '../widgets/language_toggle.dart';
 import 'admin_login_screen.dart';
 
 enum _AdminSection {
@@ -470,7 +474,7 @@ class _DriversPanelState extends State<_DriversPanel> {
                                         ),
                                       ),
                                     ),
-                                    DataCell(Text(_dash(driver.phone))),
+                                    DataCell(_LtrText(_dash(driver.phone))),
                                     DataCell(
                                       _Chip(
                                         label: driver.isOnline
@@ -506,7 +510,7 @@ class _DriversPanelState extends State<_DriversPanel> {
                                         _localizedRouteName(
                                           context,
                                           label: driver.routeLabel,
-                                          fallback: driver.routeId,
+                                          fallback: '',
                                         ),
                                       ),
                                     ),
@@ -596,14 +600,6 @@ class _DriversPanelState extends State<_DriversPanel> {
                       title: texts.t('accountInformation'),
                       children: [
                         _DetailRow(
-                          label: texts.t('driverId'),
-                          value: driver.driverId,
-                        ),
-                        _DetailRow(
-                          label: texts.t('userId'),
-                          value: driver.userId,
-                        ),
-                        _DetailRow(
                           label: texts.t('email'),
                           value: driver.email,
                         ),
@@ -648,16 +644,8 @@ class _DriversPanelState extends State<_DriversPanel> {
                           value: _localizedRouteName(
                             context,
                             label: driver.routeLabel,
-                            fallback: driver.routeId,
+                            fallback: '',
                           ),
-                        ),
-                        _DetailRow(
-                          label: texts.t('routeId'),
-                          value: driver.routeId,
-                        ),
-                        _DetailRow(
-                          label: texts.t('vehicleId'),
-                          value: driver.vehicleId,
                         ),
                         _DetailRow(
                           label: texts.t('vehicleType'),
@@ -869,7 +857,6 @@ class _RoutesPanelState extends State<_RoutesPanel> {
                                 NavigoColors.backgroundAlt,
                               ),
                               columns: [
-                                DataColumn(label: Text(texts.t('routeId'))),
                                 DataColumn(label: Text(texts.t('start'))),
                                 DataColumn(label: Text(texts.t('end'))),
                                 DataColumn(label: Text(texts.t('price'))),
@@ -881,7 +868,6 @@ class _RoutesPanelState extends State<_RoutesPanel> {
                               rows: routes.map((route) {
                                 return DataRow(
                                   cells: [
-                                    DataCell(Text(_dash(route.routeId))),
                                     DataCell(
                                       Text(
                                         _localizedPlaceName(
@@ -899,7 +885,7 @@ class _RoutesPanelState extends State<_RoutesPanel> {
                                       ),
                                     ),
                                     DataCell(
-                                      Text(route.price.toStringAsFixed(2)),
+                                      _LtrText(route.price.toStringAsFixed(2)),
                                     ),
                                     DataCell(
                                       Text(
@@ -917,13 +903,13 @@ class _RoutesPanelState extends State<_RoutesPanel> {
                                       ),
                                     ),
                                     DataCell(
-                                      Text(route.scheduleSlotCount.toString()),
+                                      _LtrText(route.scheduleSlotCount.toString()),
                                     ),
                                     DataCell(
-                                      Text(route.driverQueueCount.toString()),
+                                      _LtrText(route.driverQueueCount.toString()),
                                     ),
                                     DataCell(
-                                      Text(_formatDate(route.updatedAt)),
+                                      _LtrText(_formatDate(route.updatedAt)),
                                     ),
                                   ],
                                 );
@@ -1285,6 +1271,8 @@ class _RouteLocationField extends StatelessWidget {
           const SizedBox(height: 6),
           Text(
             '${context.texts.t('selected')}: ${location.latitude.toStringAsFixed(6)}, ${location.longitude.toStringAsFixed(6)}',
+            textDirection: TextDirection.ltr,
+            textAlign: TextAlign.left,
             style: NavigoTextStyles.bodySmall,
           ),
         ],
@@ -1305,6 +1293,8 @@ class _RoutePriceField extends StatelessWidget {
     return TextFormField(
       controller: controller,
       keyboardType: const TextInputType.numberWithOptions(decimal: true),
+      textDirection: TextDirection.ltr,
+      textAlign: TextAlign.left,
       decoration: NavigoDecorations.kInputDecoration.copyWith(
         labelText: texts.t('price'),
         prefixIcon: const Icon(Icons.payments_rounded),
@@ -1406,10 +1396,111 @@ class _RouteMapSelector extends StatefulWidget {
 class _RouteMapSelectorState extends State<_RouteMapSelector> {
   static const LatLng _defaultCenter = LatLng(31.9522, 35.2332);
   final MapController _mapController = MapController();
+  final TextEditingController _searchController = TextEditingController();
+  LatLng? _searchedLocation;
+  bool _isSearching = false;
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
 
   void _zoomBy(double delta) {
     final camera = _mapController.camera;
     _mapController.move(camera.center, camera.zoom + delta);
+  }
+
+  Future<void> _searchLocation() async {
+    final query = _searchController.text.trim();
+    if (query.isEmpty || _isSearching) return;
+
+    FocusScope.of(context).unfocus();
+    setState(() => _isSearching = true);
+
+    try {
+      final location = await _findLocation(query);
+      if (!mounted) return;
+
+      if (location == null) {
+        _showSearchError(context.texts.t('locationNotFound'));
+        return;
+      }
+
+      setState(() => _searchedLocation = location);
+      widget.onLocationSelected(location);
+      _mapController.move(location, 15);
+    } catch (_) {
+      if (!mounted) return;
+      _showSearchError(context.texts.t('locationSearchFailed'));
+    } finally {
+      if (mounted) {
+        setState(() => _isSearching = false);
+      }
+    }
+  }
+
+  void _showSearchError(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  Future<LatLng?> _findLocation(String query) async {
+    final candidates = <String>[
+      query,
+      '$query, Palestine',
+      '$query, West Bank',
+    ];
+
+    for (final candidate in candidates) {
+      try {
+        final locations = await locationFromAddress(candidate);
+        if (locations.isNotEmpty) {
+          final first = locations.first;
+          return LatLng(first.latitude, first.longitude);
+        }
+      } on NoResultFoundException {
+        // Try the next candidate, then the HTTP fallback.
+      } catch (_) {
+        // Platform geocoders can fail on desktop/web; use the HTTP fallback.
+        break;
+      }
+    }
+
+    return _findLocationWithNominatim(query);
+  }
+
+  Future<LatLng?> _findLocationWithNominatim(String query) async {
+    final uri = Uri.https('nominatim.openstreetmap.org', '/search', {
+      'q': query,
+      'format': 'jsonv2',
+      'limit': '1',
+      'addressdetails': '1',
+      'accept-language': Localizations.localeOf(context).languageCode,
+      // Bias results toward Palestine while still allowing broader searches.
+      'viewbox': '34.15,32.65,35.75,31.15',
+      'bounded': '0',
+    });
+
+    final response = await http.get(
+      uri,
+      headers: const {
+        'User-Agent': 'NavigoAdmin/1.0 (route-search)',
+      },
+    );
+
+    if (response.statusCode != 200) return null;
+
+    final decoded = jsonDecode(response.body);
+    if (decoded is! List || decoded.isEmpty) return null;
+
+    final first = decoded.first;
+    if (first is! Map) return null;
+
+    final lat = double.tryParse(first['lat']?.toString() ?? '');
+    final lon = double.tryParse(first['lon']?.toString() ?? '');
+    if (lat == null || lon == null) return null;
+
+    return LatLng(lat, lon);
   }
 
   @override
@@ -1438,6 +1529,17 @@ class _RouteMapSelectorState extends State<_RouteMapSelector> {
             Icons.location_pin,
             color: NavigoColors.primaryOrange,
             size: 44,
+          ),
+        ),
+      if (_searchedLocation != null)
+        Marker(
+          point: _searchedLocation!,
+          width: 48,
+          height: 48,
+          child: const Icon(
+            Icons.search_rounded,
+            color: NavigoColors.accentBlue,
+            size: 34,
           ),
         ),
     ];
@@ -1511,7 +1613,7 @@ class _RouteMapSelectorState extends State<_RouteMapSelector> {
                   ],
                 ),
                 Positioned(
-                  top: 12,
+                  top: 78,
                   right: 12,
                   child: Column(
                     children: [
@@ -1527,6 +1629,16 @@ class _RouteMapSelectorState extends State<_RouteMapSelector> {
                         onPressed: () => _zoomBy(-1),
                       ),
                     ],
+                  ),
+                ),
+                Positioned(
+                  top: 12,
+                  left: 12,
+                  right: 12,
+                  child: _MapSearchBar(
+                    controller: _searchController,
+                    isSearching: _isSearching,
+                    onSearch: _searchLocation,
                   ),
                 ),
               ],
@@ -1583,6 +1695,66 @@ class _MapZoomButton extends StatelessWidget {
         icon: Icon(icon),
         tooltip: tooltip,
         color: NavigoColors.textDark,
+      ),
+    );
+  }
+}
+
+class _MapSearchBar extends StatelessWidget {
+  final TextEditingController controller;
+  final bool isSearching;
+  final VoidCallback onSearch;
+
+  const _MapSearchBar({
+    required this.controller,
+    required this.isSearching,
+    required this.onSearch,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final texts = context.texts;
+
+    return Material(
+      color: Colors.white,
+      elevation: 3,
+      borderRadius: BorderRadius.circular(14),
+      child: TextField(
+        controller: controller,
+        enabled: !isSearching,
+        textInputAction: TextInputAction.search,
+        onSubmitted: (_) => onSearch(),
+        decoration: NavigoDecorations.kInputDecoration.copyWith(
+          hintText: texts.t('searchLocationHint'),
+          prefixIcon: const Icon(Icons.search_rounded),
+          suffixIcon: isSearching
+              ? const Padding(
+                  padding: EdgeInsets.all(14),
+                  child: SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  ),
+                )
+              : IconButton(
+                  onPressed: onSearch,
+                  icon: const Icon(Icons.my_location_rounded),
+                  tooltip: texts.t('searchLocation'),
+                ),
+          fillColor: Colors.white,
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(14),
+            borderSide: BorderSide.none,
+          ),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(14),
+            borderSide: BorderSide.none,
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(14),
+            borderSide: const BorderSide(color: NavigoColors.primaryOrange),
+          ),
+        ),
       ),
     );
   }
@@ -1777,13 +1949,13 @@ class _RouteManagersPanelState extends State<_RouteManagersPanel> {
                                       ),
                                     ),
                                     DataCell(Text(_dash(manager.email))),
-                                    DataCell(Text(_dash(manager.phone))),
+                                    DataCell(_LtrText(_dash(manager.phone))),
                                     DataCell(
                                       Text(
                                         _localizedRouteName(
                                           context,
                                           label: manager.routeLabel,
-                                          fallback: manager.routeId,
+                                          fallback: '',
                                         ),
                                       ),
                                     ),
@@ -1914,14 +2086,6 @@ class _RouteManagersPanelState extends State<_RouteManagersPanel> {
                       title: texts.t('accountInformation'),
                       children: [
                         _DetailRow(
-                          label: texts.t('managerId'),
-                          value: manager.managerId,
-                        ),
-                        _DetailRow(
-                          label: texts.t('userId'),
-                          value: manager.userId,
-                        ),
-                        _DetailRow(
                           label: texts.t('email'),
                           value: manager.email,
                         ),
@@ -1940,12 +2104,8 @@ class _RouteManagersPanelState extends State<_RouteManagersPanel> {
                           value: _localizedRouteName(
                             context,
                             label: manager.routeLabel,
-                            fallback: manager.routeId,
+                            fallback: '',
                           ),
-                        ),
-                        _DetailRow(
-                          label: texts.t('routeId'),
-                          value: manager.routeId,
                         ),
                       ],
                     ),
@@ -2249,11 +2409,6 @@ class _TripCard extends StatelessWidget {
                 value: _localizedVehicleType(context, trip.vehicleType),
               ),
               _TripInfo(
-                icon: Icons.person_rounded,
-                label: texts.t('driver'),
-                value: _dash(trip.driverId),
-              ),
-              _TripInfo(
                 icon: Icons.event_seat_rounded,
                 label: texts.t('seats'),
                 value:
@@ -2302,6 +2457,10 @@ class _TripInfo extends StatelessWidget {
                 const SizedBox(height: 3),
                 Text(
                   value,
+                  textDirection: _looksNumeric(value) ? TextDirection.ltr : null,
+                  textAlign: _looksNumeric(value)
+                      ? TextAlign.left
+                      : TextAlign.start,
                   style: const TextStyle(
                     color: Colors.black,
                     fontWeight: FontWeight.bold,
@@ -2474,7 +2633,7 @@ class _PassengersPanelState extends State<_PassengersPanel> {
                                         ),
                                       ),
                                     ),
-                                    DataCell(Text(_dash(passenger.phone))),
+                                    DataCell(_LtrText(_dash(passenger.phone))),
                                     DataCell(
                                       _Chip(
                                         label: passenger.isVerified
@@ -2599,14 +2758,6 @@ class _PassengersPanelState extends State<_PassengersPanel> {
                     _DetailSection(
                       title: texts.t('accountInformation'),
                       children: [
-                        _DetailRow(
-                          label: texts.t('passengerId'),
-                          value: passenger.passengerId,
-                        ),
-                        _DetailRow(
-                          label: texts.t('userId'),
-                          value: passenger.userId,
-                        ),
                         _DetailRow(
                           label: texts.t('email'),
                           value: passenger.email,
@@ -2838,7 +2989,6 @@ class _ReportsPanel extends StatelessWidget {
                     _DetailSection(
                       title: texts.t('reportInformation'),
                       children: [
-                        _DetailRow(label: texts.t('routeId'), value: report.id),
                         _DetailRow(
                           label: texts.t('status'),
                           value: _formatStatus(report.status),
@@ -2870,14 +3020,9 @@ class _ReportsPanel extends StatelessWidget {
                           value: _localizedRouteName(
                             context,
                             label: report.routeLabel,
-                            fallback: report.routeId,
+                            fallback: '',
                           ),
                         ),
-                        if (report.routeId.isNotEmpty)
-                          _DetailRow(
-                            label: texts.t('routeId'),
-                            value: report.routeId,
-                          ),
                       ],
                     ),
                     const SizedBox(height: 16),
@@ -2981,7 +3126,7 @@ class _ReportTile extends StatelessWidget {
                           text: _localizedRouteName(
                             context,
                             label: report.routeLabel,
-                            fallback: report.routeId,
+                            fallback: '',
                           ),
                         ),
                         _ReportMeta(
@@ -3041,6 +3186,8 @@ class _DetailRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final displayValue = value.isEmpty ? '-' : value;
+
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
       child: Row(
@@ -3053,8 +3200,37 @@ class _DetailRow extends StatelessWidget {
               style: const TextStyle(fontWeight: FontWeight.bold),
             ),
           ),
-          Expanded(child: SelectableText(value.isEmpty ? '-' : value)),
+          Expanded(
+            child: SelectableText(
+              displayValue,
+              textDirection: _looksNumeric(displayValue)
+                  ? TextDirection.ltr
+                  : null,
+              textAlign: _looksNumeric(displayValue)
+                  ? TextAlign.left
+                  : TextAlign.start,
+            ),
+          ),
         ],
+      ),
+    );
+  }
+}
+
+class _LtrText extends StatelessWidget {
+  final String value;
+  final TextStyle? style;
+
+  const _LtrText(this.value, {this.style});
+
+  @override
+  Widget build(BuildContext context) {
+    return Directionality(
+      textDirection: TextDirection.ltr,
+      child: Text(
+        value,
+        textAlign: TextAlign.left,
+        style: style,
       ),
     );
   }
@@ -3079,7 +3255,7 @@ class _ReportMeta extends StatelessWidget {
   }
 }
 
-class _Sidebar extends StatelessWidget {
+class _Sidebar extends StatefulWidget {
   const _Sidebar({
     required this.selectedSection,
     required this.isLoggingOut,
@@ -3105,8 +3281,31 @@ class _Sidebar extends StatelessWidget {
   final VoidCallback onReports;
 
   @override
+  State<_Sidebar> createState() => _SidebarState();
+}
+
+class _SidebarState extends State<_Sidebar> {
+  bool _isAccountExpanded = false;
+
+  void _toggleAccountCard() {
+    setState(() => _isAccountExpanded = !_isAccountExpanded);
+  }
+
+  void _toggleLanguage() {
+    final controller = AppControllerScope.of(context).languageController;
+    final nextLanguage = controller.locale.languageCode == 'ar' ? 'en' : 'ar';
+    controller.setLanguage(nextLanguage);
+  }
+
+  @override
   Widget build(BuildContext context) {
     final texts = context.texts;
+    final languageController = AppControllerScope.of(
+      context,
+    ).languageController;
+    final nextLanguage = languageController.locale.languageCode == 'ar'
+        ? texts.t('english')
+        : texts.t('arabic');
 
     return Container(
       width: 260,
@@ -3147,53 +3346,55 @@ class _Sidebar extends StatelessWidget {
             _MenuItem(
               icon: Icons.dashboard_rounded,
               title: texts.t('dashboard'),
-              selected: selectedSection == _AdminSection.dashboard,
-              onTap: onDashboard,
+              selected: widget.selectedSection == _AdminSection.dashboard,
+              onTap: widget.onDashboard,
             ),
             _MenuItem(
               icon: Icons.person_rounded,
               title: texts.t('drivers'),
-              selected: selectedSection == _AdminSection.drivers,
-              onTap: onDrivers,
+              selected: widget.selectedSection == _AdminSection.drivers,
+              onTap: widget.onDrivers,
             ),
             _MenuItem(
               icon: Icons.route_rounded,
               title: texts.t('routes'),
-              selected: selectedSection == _AdminSection.routes,
-              onTap: onRoutes,
+              selected: widget.selectedSection == _AdminSection.routes,
+              onTap: widget.onRoutes,
             ),
             _MenuItem(
               icon: Icons.manage_accounts_rounded,
               title: texts.t('routeManagers'),
-              selected: selectedSection == _AdminSection.routeManagers,
-              onTap: onRouteManagers,
+              selected: widget.selectedSection == _AdminSection.routeManagers,
+              onTap: widget.onRouteManagers,
             ),
             _MenuItem(
               icon: Icons.directions_bus_rounded,
               title: texts.t('trips'),
-              selected: selectedSection == _AdminSection.trips,
-              onTap: onTrips,
+              selected: widget.selectedSection == _AdminSection.trips,
+              onTap: widget.onTrips,
             ),
             _MenuItem(
               icon: Icons.people_alt_rounded,
               title: texts.t('passengers'),
-              selected: selectedSection == _AdminSection.passengers,
-              onTap: onPassengers,
+              selected: widget.selectedSection == _AdminSection.passengers,
+              onTap: widget.onPassengers,
             ),
             _MenuItem(
               icon: Icons.bar_chart_rounded,
               title: texts.t('reports'),
-              selected: selectedSection == _AdminSection.reports,
-              onTap: onReports,
+              selected: widget.selectedSection == _AdminSection.reports,
+              onTap: widget.onReports,
             ),
 
             const SizedBox(height: 18),
 
             _MenuItem(
               icon: Icons.logout_rounded,
-              title: isLoggingOut ? texts.t('loggingOut') : texts.t('logout'),
-              onTap: isLoggingOut ? null : onLogout,
-              trailing: isLoggingOut
+              title: widget.isLoggingOut
+                  ? texts.t('loggingOut')
+                  : texts.t('logout'),
+              onTap: widget.isLoggingOut ? null : widget.onLogout,
+              trailing: widget.isLoggingOut
                   ? const SizedBox(
                       width: 18,
                       height: 18,
@@ -3208,7 +3409,7 @@ class _Sidebar extends StatelessWidget {
               color: Colors.transparent,
               child: InkWell(
                 borderRadius: BorderRadius.circular(18),
-                onTap: () => showAdminAccountDialog(context),
+                onTap: _toggleAccountCard,
                 child: Container(
                   padding: const EdgeInsets.all(14),
                   decoration: BoxDecoration(
@@ -3234,21 +3435,88 @@ class _Sidebar extends StatelessWidget {
                               ),
                             ),
                             Text(
-                              texts.t('changePassword'),
+                              texts.t('adminAccount'),
                               style: NavigoTextStyles.bodySmall,
                             ),
                           ],
                         ),
                       ),
-                      const Icon(Icons.edit_rounded, size: 18),
+                      AnimatedRotation(
+                        turns: _isAccountExpanded ? 0.5 : 0,
+                        duration: const Duration(milliseconds: 180),
+                        child: const Icon(
+                          Icons.keyboard_arrow_down_rounded,
+                          size: 22,
+                        ),
+                      ),
                     ],
                   ),
                 ),
               ),
             ),
-            const SizedBox(height: 16),
-            const LanguageToggle(),
+            AnimatedCrossFade(
+              firstChild: const SizedBox(width: double.infinity),
+              secondChild: Padding(
+                padding: const EdgeInsets.only(top: 10),
+                child: Column(
+                  children: [
+                    _AccountActionButton(
+                      icon: Icons.lock_reset_rounded,
+                      title: texts.t('changePassword'),
+                      onTap: () => showAdminAccountDialog(context),
+                    ),
+                    const SizedBox(height: 8),
+                    _AccountActionButton(
+                      icon: Icons.language_rounded,
+                      title: '${texts.t('language')}: $nextLanguage',
+                      onTap: _toggleLanguage,
+                    ),
+                  ],
+                ),
+              ),
+              crossFadeState: _isAccountExpanded
+                  ? CrossFadeState.showSecond
+                  : CrossFadeState.showFirst,
+              duration: const Duration(milliseconds: 180),
+              sizeCurve: Curves.easeOut,
+            ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+class _AccountActionButton extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final VoidCallback onTap;
+
+  const _AccountActionButton({
+    required this.icon,
+    required this.title,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: double.infinity,
+      child: OutlinedButton.icon(
+        onPressed: onTap,
+        icon: Icon(icon, size: 18),
+        label: Text(
+          title,
+          overflow: TextOverflow.ellipsis,
+        ),
+        style: OutlinedButton.styleFrom(
+          alignment: Alignment.centerLeft,
+          foregroundColor: NavigoColors.textDark,
+          side: const BorderSide(color: NavigoColors.borderLight),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(14),
+          ),
         ),
       ),
     );
@@ -3323,6 +3591,8 @@ class _CreateRouteManagerDialogState extends State<_CreateRouteManagerDialog> {
   String? _selectedRouteId;
   String? _emailError;
   String? _phoneError;
+  bool _obscurePassword = true;
+  bool _obscureConfirmPassword = true;
   bool _isSaving = false;
 
   @override
@@ -3515,6 +3785,8 @@ class _CreateRouteManagerDialogState extends State<_CreateRouteManagerDialog> {
                         child: TextFormField(
                           controller: _phoneController,
                           keyboardType: TextInputType.phone,
+                          textDirection: TextDirection.ltr,
+                          textAlign: TextAlign.left,
                           onChanged: (_) {
                             if (_phoneError != null) {
                               setState(() => _phoneError = null);
@@ -3550,11 +3822,27 @@ class _CreateRouteManagerDialogState extends State<_CreateRouteManagerDialog> {
                       Expanded(
                         child: TextFormField(
                           controller: _passwordController,
-                          obscureText: true,
+                          obscureText: _obscurePassword,
                           decoration: NavigoDecorations.kInputDecoration
                               .copyWith(
                                 labelText: texts.t('password'),
                                 prefixIcon: const Icon(Icons.lock_rounded),
+                                suffixIcon: IconButton(
+                                  onPressed: () {
+                                    setState(
+                                      () => _obscurePassword =
+                                          !_obscurePassword,
+                                    );
+                                  },
+                                  icon: Icon(
+                                    _obscurePassword
+                                        ? Icons.visibility_rounded
+                                        : Icons.visibility_off_rounded,
+                                  ),
+                                  tooltip: _obscurePassword
+                                      ? texts.t('show')
+                                      : texts.t('hide'),
+                                ),
                                 fillColor: Colors.white,
                               ),
                           validator: (value) =>
@@ -3565,12 +3853,28 @@ class _CreateRouteManagerDialogState extends State<_CreateRouteManagerDialog> {
                       Expanded(
                         child: TextFormField(
                           controller: _confirmPasswordController,
-                          obscureText: true,
+                          obscureText: _obscureConfirmPassword,
                           decoration: NavigoDecorations.kInputDecoration
                               .copyWith(
                                 labelText: texts.t('confirmPassword'),
                                 prefixIcon: const Icon(
                                   Icons.lock_outline_rounded,
+                                ),
+                                suffixIcon: IconButton(
+                                  onPressed: () {
+                                    setState(
+                                      () => _obscureConfirmPassword =
+                                          !_obscureConfirmPassword,
+                                    );
+                                  },
+                                  icon: Icon(
+                                    _obscureConfirmPassword
+                                        ? Icons.visibility_rounded
+                                        : Icons.visibility_off_rounded,
+                                  ),
+                                  tooltip: _obscureConfirmPassword
+                                      ? texts.t('show')
+                                      : texts.t('hide'),
                                 ),
                                 fillColor: Colors.white,
                               ),
@@ -3603,7 +3907,7 @@ class _CreateRouteManagerDialogState extends State<_CreateRouteManagerDialog> {
                                     context,
                                     start: route.startPoint,
                                     end: route.endPoint,
-                                    fallback: route.routeId,
+                                    fallback: '',
                                   ),
                                 ),
                               ),
@@ -3902,6 +4206,8 @@ class _EditRouteManagerDialogState extends State<_EditRouteManagerDialog> {
                         child: TextFormField(
                           controller: _phoneController,
                           keyboardType: TextInputType.phone,
+                          textDirection: TextDirection.ltr,
+                          textAlign: TextAlign.left,
                           onChanged: (_) {
                             if (_phoneError != null) {
                               setState(() => _phoneError = null);
@@ -3951,7 +4257,7 @@ class _EditRouteManagerDialogState extends State<_EditRouteManagerDialog> {
                                     context,
                                     start: route.startPoint,
                                     end: route.endPoint,
-                                    fallback: route.routeId,
+                                    fallback: '',
                                   ),
                                 ),
                               ),
@@ -4770,6 +5076,13 @@ String _formatDate(DateTime? date) {
 
 String _dash(String value) {
   return value.trim().isEmpty ? '-' : value;
+}
+
+bool _looksNumeric(String value) {
+  final clean = value.trim();
+  if (clean.isEmpty || clean == '-') return false;
+  return RegExp(r'[0-9]').hasMatch(clean) &&
+      !RegExp(r'[\u0600-\u06FF]').hasMatch(clean);
 }
 
 Color _tripStatusColor(String status) {

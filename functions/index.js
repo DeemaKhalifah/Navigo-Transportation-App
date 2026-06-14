@@ -722,6 +722,7 @@ function normalizeRole(role) {
   const value = (role || '').toString().trim().toLowerCase();
   if (
     value === 'route_manager' ||
+    value === 'route_manger' ||
     value === 'route manager' ||
     value === 'routemanager' ||
     value === 'manager'
@@ -776,6 +777,254 @@ function assertNonEmptyString(value, fieldName) {
   }
   return v;
 }
+
+function normalizeAdminRole(role) {
+  return (role || '').toString().trim().toLowerCase();
+}
+
+async function assertAdmin(context) {
+  if (!context.auth || !context.auth.uid) {
+    throw new functions.https.HttpsError(
+      'unauthenticated',
+      'You must be signed in to create a route manager.',
+    );
+  }
+
+  const callerUid = context.auth.uid;
+  const callerSnap = await db.collection('users').doc(callerUid).get();
+  if (!callerSnap.exists) {
+    throw new functions.https.HttpsError(
+      'permission-denied',
+      'Your user profile was not found.',
+    );
+  }
+
+  const callerData = callerSnap.data() || {};
+  if (normalizeAdminRole(callerData.role) !== 'admin') {
+    throw new functions.https.HttpsError(
+      'permission-denied',
+      'Only admins can create route managers.',
+    );
+  }
+
+  return { callerUid, callerUser: callerData };
+}
+
+function cleanCreateRouteManagerInput(data) {
+  const firstName = assertNonEmptyString(data && data.firstName, 'firstName');
+  const lastName = assertNonEmptyString(data && data.lastName, 'lastName');
+  const email = assertNonEmptyString(data && data.email, 'email').toLowerCase();
+  const phone = assertNonEmptyString(data && data.phone, 'phone');
+  const password = assertNonEmptyString(data && data.password, 'password');
+  const routeId = assertNonEmptyString(data && data.routeId, 'routeId');
+
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    throw new functions.https.HttpsError(
+      'invalid-argument',
+      'Please provide a valid email address.',
+    );
+  }
+
+  if (password.length < 6) {
+    throw new functions.https.HttpsError(
+      'invalid-argument',
+      'Password must be at least 6 characters.',
+    );
+  }
+
+  return { firstName, lastName, email, phone, password, routeId };
+}
+
+function isAuthEmailExistsError(error) {
+  return error && error.code === 'auth/email-already-exists';
+}
+
+function mapCreateRouteManagerError(error) {
+  if (error instanceof functions.https.HttpsError) return error;
+
+  if (isAuthEmailExistsError(error)) {
+    return new functions.https.HttpsError(
+      'already-exists',
+      'A Firebase Authentication user already exists for this email.',
+    );
+  }
+
+  if (error && error.code === 'auth/invalid-password') {
+    return new functions.https.HttpsError(
+      'invalid-argument',
+      'Password does not meet Firebase Authentication requirements.',
+    );
+  }
+
+  if (error && error.code === 'auth/invalid-email') {
+    return new functions.https.HttpsError(
+      'invalid-argument',
+      'Please provide a valid email address.',
+    );
+  }
+
+  if (
+    error &&
+    (error.code === 'auth/invalid-phone-number' ||
+      error.code === 'auth/phone-number-already-exists')
+  ) {
+    return new functions.https.HttpsError(
+      'invalid-argument',
+      'The phone number could not be added to Firebase Authentication. It must be unique and use E.164 format.',
+    );
+  }
+
+  if (error && typeof error.code === 'string' && error.code.startsWith('auth/')) {
+    return new functions.https.HttpsError(
+      'failed-precondition',
+      error.message || 'Firebase Authentication could not create the user.',
+    );
+  }
+
+  if (error && typeof error.message === 'string' && error.message.trim()) {
+    return new functions.https.HttpsError(
+      'failed-precondition',
+      error.message.trim(),
+    );
+  }
+
+  console.error('[createRouteManager] unexpected error', error);
+  return new functions.https.HttpsError(
+    'internal',
+    'Could not create route manager. Please try again.',
+  );
+}
+
+/**
+ * Callable: Create a route manager in Firebase Authentication and Firestore.
+ *
+ * Security:
+ * - Caller must be authenticated.
+ * - Caller must have `users/{uid}.role == "admin"`.
+ *
+ * Writes:
+ * - `users/{newUid}` profile document.
+ * - `route_manger/{newUid}` route-manager document.
+ */
+exports.createRouteManager = functions.https.onCall(async (data, context) => {
+  try {
+    const { callerUid } = await assertAdmin(context);
+    const input = cleanCreateRouteManagerInput(data);
+
+    const existingUserSnap = await db
+      .collection('users')
+      .where('email', '==', input.email)
+      .limit(1)
+      .get();
+    if (!existingUserSnap.empty) {
+      throw new functions.https.HttpsError(
+        'already-exists',
+        'A user profile already exists for this email.',
+      );
+    }
+
+    const existingPhoneSnap = await db
+      .collection('users')
+      .where('phone', '==', input.phone)
+      .limit(1)
+      .get();
+    if (!existingPhoneSnap.empty) {
+      throw new functions.https.HttpsError(
+        'already-exists',
+        'A user profile already exists for this phone number.',
+      );
+    }
+
+    const existingPhoneNumberSnap = await db
+      .collection('users')
+      .where('phoneNumber', '==', input.phone)
+      .limit(1)
+      .get();
+    if (!existingPhoneNumberSnap.empty) {
+      throw new functions.https.HttpsError(
+        'already-exists',
+        'A user profile already exists for this phone number.',
+      );
+    }
+
+    const routeSnap = await db.collection('route').doc(input.routeId).get();
+    if (!routeSnap.exists) {
+      const routeByFieldSnap = await db
+        .collection('route')
+        .where('routeId', '==', input.routeId)
+        .limit(1)
+        .get();
+      if (routeByFieldSnap.empty) {
+        throw new functions.https.HttpsError(
+          'not-found',
+          'The selected route was not found.',
+        );
+      }
+    }
+
+    const authUser = await admin.auth().createUser({
+      email: input.email,
+      password: input.password,
+      displayName: `${input.firstName} ${input.lastName}`.trim(),
+      emailVerified: true,
+      disabled: false,
+    });
+
+    const uid = authUser.uid;
+    const now = admin.firestore.FieldValue.serverTimestamp();
+    const profileData = {
+      userId: uid,
+      uid,
+      firstName: input.firstName,
+      lastName: input.lastName,
+      fullName: `${input.firstName} ${input.lastName}`.trim(),
+      name: `${input.firstName} ${input.lastName}`.trim(),
+      email: input.email,
+      phone: input.phone,
+      phoneNumber: input.phone,
+      role: 'route_manager',
+      routeId: input.routeId,
+      isVerified: true,
+      isOnline: false,
+      createdAt: now,
+      updatedAt: now,
+      createdBy: callerUid,
+    };
+    const routeManagerData = {
+      userId: uid,
+      firstName: input.firstName,
+      lastName: input.lastName,
+      email: input.email,
+      phone: input.phone,
+      role: 'route_manager',
+      routeId: input.routeId,
+      isVerified: true,
+      createdAt: now,
+      updatedAt: now,
+      createdBy: callerUid,
+    };
+    try {
+      const batch = db.batch();
+      batch.set(db.collection('users').doc(uid), profileData);
+      batch.set(db.collection('route_manger').doc(uid), routeManagerData);
+      await batch.commit();
+      await admin.auth().setCustomUserClaims(uid, { role: 'route_manager' });
+    } catch (writeError) {
+      await admin.auth().deleteUser(uid).catch((cleanupError) => {
+        console.error('[createRouteManager] auth cleanup failed', cleanupError);
+      });
+      throw writeError;
+    }
+
+    return {
+      success: true,
+      userId: uid,
+      message: 'Route manager created successfully.',
+    };
+  } catch (error) {
+    throw mapCreateRouteManagerError(error);
+  }
+});
 
 /**
  * Callable: Approve a driver account.

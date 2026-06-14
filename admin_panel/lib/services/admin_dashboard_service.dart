@@ -1,6 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:firebase_core/firebase_core.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/foundation.dart';
 
 import '../models/admin_dashboard_model.dart';
@@ -9,11 +8,14 @@ import 'admin_route_path_service.dart';
 class AdminDashboardService {
   AdminDashboardService({
     FirebaseFirestore? firestore,
+    FirebaseFunctions? functions,
     AdminRoutePathService? routePathService,
   }) : _db = firestore ?? FirebaseFirestore.instance,
+       _functions = functions ?? FirebaseFunctions.instance,
        _routePathService = routePathService ?? AdminRoutePathService();
 
   final FirebaseFirestore _db;
+  final FirebaseFunctions _functions;
   final AdminRoutePathService _routePathService;
 
   Stream<AdminDashboardModel> dashboardStream() {
@@ -425,70 +427,29 @@ class AdminDashboardService {
     required String password,
     required String routeId,
   }) async {
-    final normalizedEmail = email.trim().toLowerCase();
-    final cleanFirstName = firstName.trim();
-    final cleanLastName = lastName.trim();
-    final cleanPhone = phone.trim();
-    final cleanRouteId = routeId.trim();
-    final fullName = '$cleanFirstName $cleanLastName'.trim();
-    final appName =
-        'route-manager-create-${DateTime.now().microsecondsSinceEpoch}';
-    final secondaryApp = await Firebase.initializeApp(
-      name: appName,
-      options: Firebase.app().options,
-    );
-    final secondaryAuth = FirebaseAuth.instanceFor(app: secondaryApp);
-    User? createdUser;
-
     try {
-      await _assertRouteManagerContactAvailable(
-        email: normalizedEmail,
-        phone: cleanPhone,
+      final callable = _functions.httpsCallable(
+        'createRouteManager',
+        options: HttpsCallableOptions(timeout: const Duration(seconds: 30)),
       );
-
-      final credential = await secondaryAuth.createUserWithEmailAndPassword(
-        email: normalizedEmail,
-        password: password.trim(),
-      );
-      createdUser = credential.user;
-      final uid = createdUser!.uid;
-      final now = FieldValue.serverTimestamp();
-      final userData = {
-        'userId': uid,
-        'uid': uid,
-        'firstName': cleanFirstName,
-        'lastName': cleanLastName,
-        'fullName': fullName,
-        'name': fullName,
-        'email': normalizedEmail,
-        'phone': cleanPhone,
-        'phoneNumber': cleanPhone,
-        'role': 'route_manager',
-        'routeId': cleanRouteId,
-        'isVerified': true,
-        'isOnline': true,
-        'createdAt': now,
-        'updatedAt': now,
-      };
-      final managerData = {'email': normalizedEmail, 'routeId': cleanRouteId};
-      final batch = _db.batch();
-
-      batch.set(_db.collection('users').doc(uid), userData);
-      batch.set(_db.collection('route_manger').doc(uid), managerData);
-
-      await batch.commit();
-    } catch (_) {
-      if (createdUser != null) {
-        try {
-          await createdUser.delete();
-        } catch (_) {
-          // Best effort cleanup; surface the original creation/write error.
-        }
+      final result = await callable.call<Map<String, dynamic>>({
+        'firstName': firstName.trim(),
+        'lastName': lastName.trim(),
+        'email': email.trim().toLowerCase(),
+        'phone': phone.trim(),
+        'password': password.trim(),
+        'routeId': routeId.trim(),
+      });
+      final data = result.data;
+      if (data['success'] != true) {
+        throw StateError(
+          (data['message'] ?? 'Could not create route manager').toString(),
+        );
       }
+    } on FirebaseFunctionsException catch (e) {
+      throw StateError(e.message ?? 'Could not create route manager');
+    } catch (_) {
       rethrow;
-    } finally {
-      await secondaryAuth.signOut();
-      await secondaryApp.delete();
     }
   }
 
@@ -538,10 +499,23 @@ class AdminDashboardService {
       'updatedAt': now,
     }, SetOptions(merge: true));
 
-    batch.set(_db.collection('route_manger').doc(cleanUserId), {
+    final managerData = {
+      'userId': cleanUserId,
+      'firstName': cleanFirstName,
+      'lastName': cleanLastName,
       'email': normalizedEmail,
+      'phone': cleanPhone,
+      'role': 'route_manager',
       'routeId': cleanRouteId,
-    }, SetOptions(merge: true));
+      'isVerified': true,
+      'updatedAt': now,
+    };
+
+    batch.set(
+      _db.collection('route_manger').doc(cleanUserId),
+      managerData,
+      SetOptions(merge: true),
+    );
 
     if (managerId.trim().isNotEmpty && managerId.trim() != cleanUserId) {
       batch.delete(_db.collection('route_manger').doc(managerId.trim()));
@@ -553,14 +527,27 @@ class AdminDashboardService {
   Stream<List<AdminRouteManagerItem>> adminRouteManagersStream() {
     return _db
         .collection('users')
-        .where('role', isEqualTo: 'route_manager')
+        .where(
+          'role',
+          whereIn: ['route_manager', 'routeManager', 'route_manger'],
+        )
         .snapshots()
         .asyncMap((usersSnap) async {
           final managersSnap = await _db.collection('route_manger').get();
+          final legacyManagersSnap = await _db.collection('routeManagers').get();
+          final alternateManagersSnap = await _db
+              .collection('route_manager')
+              .get();
           final routesSnap = await _db.collection('route').get();
           final managersById = {
             for (final doc in managersSnap.docs) doc.id: doc.data(),
           };
+          for (final doc in legacyManagersSnap.docs) {
+            managersById.putIfAbsent(doc.id, () => doc.data());
+          }
+          for (final doc in alternateManagersSnap.docs) {
+            managersById.putIfAbsent(doc.id, () => doc.data());
+          }
           final routesById = {
             for (final doc in routesSnap.docs) doc.id: doc.data(),
           };
