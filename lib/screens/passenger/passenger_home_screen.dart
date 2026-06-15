@@ -63,6 +63,7 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> {
 
   List<String> _lines = [];
   List<String> _filteredLines = [];
+  bool _showLineSuggestions = false;
 
   String _userName = "Loading...";
 
@@ -569,7 +570,9 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> {
 
       setState(() {
         _lines = lines;
-        _filteredLines = List.from(lines);
+        if (_showLineSuggestions) {
+          _filteredLines = List.from(lines);
+        }
       });
 
       debugPrint('Loaded route lines: $_lines');
@@ -591,6 +594,8 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> {
       setState(() {
         _selectedLine = savedLine;
         _searchController.text = savedLine;
+        _filteredLines = [];
+        _showLineSuggestions = false;
       });
       unawaited(_drawSelectedLineRoute(savedLine));
     }
@@ -746,8 +751,9 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> {
     final trimmed = query.trim().toLowerCase();
 
     setState(() {
+      _showLineSuggestions = trimmed.isNotEmpty;
       if (trimmed.isEmpty) {
-        _filteredLines = List.from(_lines);
+        _filteredLines = [];
       } else {
         _filteredLines = _lines.where((line) {
           return line.toLowerCase().contains(trimmed);
@@ -784,6 +790,19 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> {
     } catch (e) {
       debugPrint('Draw selected route error: $e');
     }
+  }
+
+  void _clearRouteLine() {
+    setState(() {
+      _polylines.clear();
+      _decodedRoutePoints = const [];
+      _activeRouteRenderKey = null;
+      _markers.removeWhere(
+        (marker) =>
+            marker.markerId.value == 'route_start' ||
+            marker.markerId.value == 'route_end',
+      );
+    });
   }
 
   Future<void> _showDriversNow() async {
@@ -1092,7 +1111,6 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> {
     final isLandscape = media.orientation == Orientation.landscape;
     final pagePadding = Responsive.horizontalPadding(context);
     final bannerTop = media.padding.top + (isLandscape ? 132 : 180);
-    final bottomCardMaxHeight = media.size.height * (isLandscape ? 0.46 : 0.38);
 
     return Scaffold(
       backgroundColor: NavigoColors.backgroundLight,
@@ -1260,8 +1278,9 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> {
                                                     setState(() {
                                                       _searchController.clear();
                                                       _selectedLine = null;
-                                                      _filteredLines =
-                                                          List.from(_lines);
+                                                      _filteredLines = [];
+                                                      _showLineSuggestions =
+                                                          false;
                                                     });
                                                   },
                                                 )
@@ -1273,7 +1292,8 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> {
                                   ),
                               onChanged: _filterLines,
                             ),
-                            if (_filteredLines.isNotEmpty &&
+                            if (_showLineSuggestions &&
+                                _filteredLines.isNotEmpty &&
                                 _searchController.text.isNotEmpty)
                               Container(
                                 margin: const EdgeInsets.only(top: 6),
@@ -1302,7 +1322,9 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> {
                                           _selectedLine = line;
                                           _searchController.text = line;
                                           _filteredLines = [];
+                                          _showLineSuggestions = false;
                                         });
+                                        FocusScope.of(context).unfocus();
                                         await LocalStorageService.saveSelectedLine(
                                           line,
                                         );
@@ -1316,13 +1338,45 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> {
                         ),
                       ),
                       SizedBox(width: Responsive.verticalGap(context, 10)),
-                      _isLocating
-                          ? const CircularProgressIndicator()
-                          : FloatingActionButton.small(
-                              backgroundColor: NavigoColors.primaryOrange,
-                              onPressed: _getUserLocation,
-                              child: const Icon(Icons.my_location),
+                      Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          _isLocating
+                              ? const CircularProgressIndicator()
+                              : FloatingActionButton.small(
+                                  backgroundColor: NavigoColors.primaryOrange,
+                                  onPressed: _getUserLocation,
+                                  child: const Icon(Icons.my_location),
+                                ),
+                          if (_polylines.isNotEmpty && !_isLiveTracking) ...[
+                            const SizedBox(height: 4),
+                            FloatingActionButton.small(
+                              heroTag: 'clear_route_line',
+                              backgroundColor: NavigoColors.surfaceWhite,
+                              onPressed: _clearRouteLine,
+                              child: const Stack(
+                                clipBehavior: Clip.none,
+                                children: [
+                                  Icon(
+                                    Icons.route_outlined,
+                                    size: 20,
+                                    color: NavigoColors.primaryOrange,
+                                  ),
+                                  Positioned(
+                                    right: -5,
+                                    top: -5,
+                                    child: Icon(
+                                      Icons.close,
+                                      size: 12,
+                                      color: NavigoColors.accentRed,
+                                    ),
+                                  ),
+                                ],
+                              ),
                             ),
+                          ],
+                        ],
+                      ),
                     ],
                   ),
                 ],
@@ -1390,90 +1444,15 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> {
               ),
             ),
 
-          // ── Route view banner ─────────────────────────────────────────────
-          if (_polylines.isNotEmpty && !_isLiveTracking)
-            Positioned(
-              top: bannerTop,
-              left: pagePadding,
-              right: pagePadding,
-              child: Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 10,
-                ),
-                decoration: BoxDecoration(
-                  color: NavigoColors.primaryOrange,
-                  borderRadius: BorderRadius.circular(16),
-                  boxShadow: const [
-                    BoxShadow(color: Colors.black26, blurRadius: 8),
-                  ],
-                ),
-                child: Row(
-                  children: [
-                    const Icon(Icons.route, color: Colors.white, size: 20),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Text(
-                        '${widget.routeStartPoint ?? ''} → ${widget.routeEndPoint ?? ''}',
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.w600,
-                          fontSize: 13,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                    GestureDetector(
-                      onTap: () {
-                        setState(() {
-                          _polylines.clear();
-                          _decodedRoutePoints = const [];
-                          _activeRouteRenderKey = null;
-                          _markers.removeWhere(
-                            (m) =>
-                                m.markerId.value == 'route_start' ||
-                                m.markerId.value == 'route_end',
-                          );
-                        });
-                      },
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 6,
-                        ),
-                        decoration: BoxDecoration(
-                          color: Colors.white24,
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Text(
-                          context.texts.t('close'),
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 13,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-
-          Positioned(
-            bottom: media.padding.bottom + Responsive.verticalGap(context, 8),
-            left: pagePadding * 0.5,
-            right: pagePadding * 0.5,
-            child: ConstrainedBox(
-              constraints: BoxConstraints(maxHeight: bottomCardMaxHeight),
-              child: Container(
-                padding: EdgeInsets.fromLTRB(
-                  pagePadding,
-                  Responsive.verticalGap(context, 12),
-                  pagePadding,
-                  Responsive.verticalGap(context, 18),
-                ),
+          DraggableScrollableSheet(
+            initialChildSize: 0.10,
+            minChildSize: 0.10,
+            maxChildSize: isLandscape ? 0.33 : 0.22,
+            snap: true,
+            snapSizes: isLandscape ? const [0.40,0.33] :const[0.15,0.22],
+            builder: (context, scrollController) {
+              return Container(
+                margin: EdgeInsets.symmetric(horizontal: pagePadding * 0.5),
                 decoration: BoxDecoration(
                   color: NavigoColors.lightorange,
                   borderRadius: BorderRadius.vertical(
@@ -1484,11 +1463,14 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> {
                   ],
                 ),
                 child: SingleChildScrollView(
-                  // This card gains content as the user selects a line/location.
-                  // Scrolling inside a capped height prevents landscape overflow
-                  // while the map keeps filling the available background.
+                  controller: scrollController,
+                  padding: EdgeInsets.fromLTRB(
+                    pagePadding,
+                    Responsive.verticalGap(context, 10),
+                    pagePadding,
+                    media.padding.bottom + Responsive.verticalGap(context, 18),
+                  ),
                   child: Column(
-                    mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Center(
@@ -1496,7 +1478,9 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> {
                           width: 40,
                           height: 5,
                           decoration: BoxDecoration(
-                            color: Colors.white24,
+                            color: NavigoColors.textMuted.withValues(
+                              alpha: 0.4,
+                            ),
                             borderRadius: BorderRadius.circular(10),
                           ),
                         ),
@@ -1579,8 +1563,8 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> {
                     ],
                   ),
                 ),
-              ),
-            ),
+              );
+            },
           ),
         ],
       ),

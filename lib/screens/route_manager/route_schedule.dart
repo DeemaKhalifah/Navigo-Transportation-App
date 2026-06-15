@@ -4,6 +4,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:navigo/models/route.dart';
 import 'package:navigo/models/schedule_slot.dart';
+import 'package:navigo/models/trip_status.dart';
 import 'package:navigo/services/google_route_path_service.dart';
 import 'package:navigo/services/route_driver_queue_service.dart';
 import 'package:navigo/services/route_manager_route_id.dart';
@@ -13,6 +14,7 @@ import 'package:navigo/services/slot_driver_assignment_service.dart';
 import '../../localization/localization_x.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/app_message.dart';
+import '../../widgets/manual_time_dialog.dart';
 import 'add_schedule_slot_screen.dart';
 import 'route_manager_nav_bar.dart';
 import 'route_manager_notification_compose.dart';
@@ -32,7 +34,10 @@ class _RouteScheduleState extends State<RouteSchedule> {
 
   final Map<String, Future<String>> _driverLabelFutures = {};
 
-  String _selectedType = 'bus';
+  String _selectedType = 'all';
+  String _selectedStatus = TripStatus.all;
+  DateTime? _selectedDate;
+  TimeOfDay? _selectedTime;
   bool _autoAssignBusy = false;
   DateTime _lastAutoAssign = DateTime.fromMillisecondsSinceEpoch(0);
   bool _queueRefreshing = false;
@@ -307,17 +312,55 @@ class _RouteScheduleState extends State<RouteSchedule> {
     return price == null ? '' : ' · ${_formatPrice(price)}';
   }
 
-  Widget _filterChip(String type, String label) {
-    final selected = _selectedType == type;
-
-    return NavigoDecorations.selectorChip(
-      label: label,
-      selected: selected,
-      onTap: () => setState(() => _selectedType = type),
+  Widget _filterOptionChip({
+    required String label,
+    required bool selected,
+    required VoidCallback onTap,
+    IconData? icon,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+        decoration: NavigoDecorations.selectorDecoration(selected: selected),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (icon != null) ...[
+              Icon(
+                icon,
+                size: 15,
+                color: selected
+                    ? NavigoColors.textLight
+                    : NavigoColors.primaryOrange,
+              ),
+              const SizedBox(width: 5),
+            ],
+            Text(
+              label,
+              style: NavigoTextStyles.chip.copyWith(
+                color: selected
+                    ? NavigoColors.textLight
+                    : NavigoColors.primaryOrange,
+                fontSize: 12,
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
+  bool get _hasNoFilters =>
+      _selectedType == 'all' &&
+      _selectedStatus == TripStatus.all &&
+      _selectedDate == null &&
+      _selectedTime == null;
+
   bool _matchesSelectedType(String rawVehicleType) {
+    if (_selectedType == 'all') return true;
+
     final normalized = rawVehicleType.trim().toLowerCase().replaceAll(
       RegExp(r'[\s_-]+'),
       '',
@@ -332,6 +375,154 @@ class _RouteScheduleState extends State<RouteSchedule> {
     }
 
     return false;
+  }
+
+  String _resolvedStatus(ScheduleSlot slot) {
+    final normalized = TripStatus.normalize(slot.status);
+    if (normalized == TripStatus.cancelled ||
+        normalized == TripStatus.completed ||
+        normalized == TripStatus.onTrip ||
+        normalized == TripStatus.waitingDriver) {
+      return normalized;
+    }
+
+    final now = DateTime.now();
+    if (slot.arrivalAt.isBefore(now)) return TripStatus.completed;
+    if (!slot.departureAt.isAfter(now) && slot.arrivalAt.isAfter(now)) {
+      return TripStatus.onTrip;
+    }
+    return TripStatus.scheduled;
+  }
+
+  bool _matchesFilters(ScheduleSlot slot) {
+    if (!_matchesSelectedType(slot.vehicleType)) return false;
+
+    if (_selectedStatus != TripStatus.all &&
+        _resolvedStatus(slot) != _selectedStatus) {
+      return false;
+    }
+
+    final date = _selectedDate;
+    if (date != null &&
+        (slot.departureAt.year != date.year ||
+            slot.departureAt.month != date.month ||
+            slot.departureAt.day != date.day)) {
+      return false;
+    }
+
+    final time = _selectedTime;
+    if (time != null &&
+        (slot.departureAt.hour != time.hour ||
+            slot.departureAt.minute != time.minute)) {
+      return false;
+    }
+
+    return true;
+  }
+
+  Future<void> _pickFilterDate() async {
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _selectedDate ?? DateTime.now(),
+      firstDate: DateTime(2024),
+      lastDate: DateTime(2100),
+    );
+    if (picked != null && mounted) {
+      setState(() => _selectedDate = picked);
+    }
+  }
+
+  Future<void> _pickFilterTime() async {
+    final picked = await showDialog<TimeOfDay>(
+      context: context,
+      builder: (_) =>
+          ManualTimeDialog(initialTime: _selectedTime ?? TimeOfDay.now()),
+    );
+    if (picked != null && mounted) {
+      setState(() => _selectedTime = picked);
+    }
+  }
+
+  Future<void> _pickStatus() async {
+    final statuses = [
+      TripStatus.all,
+      TripStatus.scheduled,
+      TripStatus.waitingDriver,
+      TripStatus.onTrip,
+      TripStatus.completed,
+      TripStatus.cancelled,
+    ];
+    final picked = await showModalBottomSheet<String>(
+      context: context,
+      showDragHandle: true,
+      builder: (sheetContext) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: statuses.map((status) {
+            final selected = _selectedStatus == status;
+            return ListTile(
+              leading: Icon(
+                selected ? Icons.radio_button_checked : Icons.radio_button_off,
+                color: selected
+                    ? NavigoColors.primaryOrange
+                    : NavigoColors.textMuted,
+              ),
+              title: Text(
+                _statusLabel(status),
+                style: NavigoTextStyles.bodyMedium.copyWith(
+                  color: Colors.black,
+                  fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+                ),
+              ),
+              onTap: () => Navigator.pop(sheetContext, status),
+            );
+          }).toList(),
+        ),
+      ),
+    );
+
+    if (picked != null && mounted) {
+      setState(() => _selectedStatus = picked);
+    }
+  }
+
+  void _clearFilters() {
+    setState(() {
+      _selectedType = 'all';
+      _selectedStatus = TripStatus.all;
+      _selectedDate = null;
+      _selectedTime = null;
+    });
+  }
+
+  String _statusLabel(String status) {
+    switch (status) {
+      case TripStatus.scheduled:
+        return context.texts.t('scheduled');
+      case TripStatus.waitingDriver:
+        return context.texts.t('waitingDriver');
+      case TripStatus.completed:
+        return context.texts.t('completed');
+      case TripStatus.cancelled:
+        return context.texts.t('cancelled');
+      case TripStatus.onTrip:
+        return context.texts.t('onTrip');
+      default:
+        return context.texts.t('all');
+    }
+  }
+
+  Color _statusColor(String status) {
+    switch (status) {
+      case TripStatus.completed:
+        return NavigoColors.accentGreen;
+      case TripStatus.cancelled:
+        return NavigoColors.accentRed;
+      case TripStatus.onTrip:
+        return NavigoColors.primaryOrange;
+      default:
+        return NavigoColors.accentBlue;
+    }
   }
 
   String _vehicleTypeLabel(ScheduleSlot slot) {
@@ -418,6 +609,7 @@ class _RouteScheduleState extends State<RouteSchedule> {
   Widget _buildSlotCard(ScheduleSlot slot) {
     final dateLabel =
         '${slot.serviceDate.day}/${slot.serviceDate.month}/${slot.serviceDate.year}';
+    final status = _resolvedStatus(slot);
 
     return Dismissible(
       key: ValueKey(slot.slotId),
@@ -493,7 +685,7 @@ class _RouteScheduleState extends State<RouteSchedule> {
               width: 42,
               height: 42,
               decoration: NavigoDecorations.iconCircleDecoration(
-                NavigoColors.accentGreen.withOpacity(0.1),
+                NavigoColors.accentGreen.withValues(alpha: 0.1),
               ),
               child: const Icon(
                 Icons.route,
@@ -533,13 +725,27 @@ class _RouteScheduleState extends State<RouteSchedule> {
                     ],
                   ),
                   const SizedBox(height: 6),
-                  NavigoDecorations.statusChip(
-                    label: _vehicleTypeLabel(slot),
-                    color: NavigoColors.primaryOrange,
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 2,
-                    ),
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 6,
+                    children: [
+                      NavigoDecorations.statusChip(
+                        label: _vehicleTypeLabel(slot),
+                        color: NavigoColors.primaryOrange,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 2,
+                        ),
+                      ),
+                      NavigoDecorations.statusChip(
+                        label: _statusLabel(status),
+                        color: _statusColor(status),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 2,
+                        ),
+                      ),
+                    ],
                   ),
                   const SizedBox(height: 6),
                   Text(
@@ -671,31 +877,69 @@ class _RouteScheduleState extends State<RouteSchedule> {
             ),
             const SizedBox(height: 16),
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
               child: Row(
-                crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
-                  _filterChip('bus', context.texts.t('bus')),
-                  const SizedBox(width: 8),
-                  _filterChip('micro', context.texts.t('microBus')),
-                  const Spacer(),
-                  Material(
-                    color: NavigoColors.surfaceWhite,
-                    elevation: 2,
-                    shadowColor: Colors.black26,
-                    shape: const CircleBorder(),
-                    child: InkWell(
-                      customBorder: const CircleBorder(),
-                      onTap: _openDriverQueueBottomSheet,
-                      child: Padding(
-                        padding: const EdgeInsets.all(10),
-                        child: Icon(
-                          Icons.view_list_rounded,
-                          size: 22,
-                          color: NavigoColors.accentGreen,
-                        ),
+                  Expanded(
+                    child: SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: Row(
+                        children: [
+                          _filterOptionChip(
+                            label: context.texts.t('all'),
+                            selected: _hasNoFilters,
+                            onTap: _clearFilters,
+                          ),
+                          const SizedBox(width: 6),
+                          _filterOptionChip(
+                            label: context.texts.t('bus'),
+                            selected: _selectedType == 'bus',
+                            onTap: () => setState(() => _selectedType = 'bus'),
+                          ),
+                          const SizedBox(width: 6),
+                          _filterOptionChip(
+                            label: context.texts.t('microBus'),
+                            selected: _selectedType == 'micro',
+                            onTap: () =>
+                                setState(() => _selectedType = 'micro'),
+                          ),
+                          const SizedBox(width: 6),
+                          _filterOptionChip(
+                            label: _selectedDate == null
+                                ? context.texts.t('date')
+                                : '${_selectedDate!.day}/${_selectedDate!.month}/${_selectedDate!.year}',
+                            selected: _selectedDate != null,
+                            onTap: _pickFilterDate,
+                            icon: Icons.calendar_today_outlined,
+                          ),
+                          const SizedBox(width: 6),
+                          _filterOptionChip(
+                            label: _selectedTime == null
+                                ? context.texts.t('time')
+                                : _selectedTime!.format(context),
+                            selected: _selectedTime != null,
+                            onTap: _pickFilterTime,
+                            icon: Icons.access_time,
+                          ),
+                          const SizedBox(width: 6),
+                          _filterOptionChip(
+                            label: _selectedStatus == TripStatus.all
+                                ? context.texts.t('status')
+                                : _statusLabel(_selectedStatus),
+                            selected: _selectedStatus != TripStatus.all,
+                            onTap: _pickStatus,
+                            icon: Icons.flag_outlined,
+                          ),
+                        ],
                       ),
                     ),
+                  ),
+                  const SizedBox(width: 6),
+                  IconButton(
+                    onPressed: _openDriverQueueBottomSheet,
+                    icon: const Icon(Icons.view_list_rounded),
+                    color: NavigoColors.accentGreen,
+                    tooltip: context.texts.t('driverQueue'),
                   ),
                 ],
               ),
@@ -723,13 +967,13 @@ class _RouteScheduleState extends State<RouteSchedule> {
                   // This StreamBuilder rebuilds many times and caused repeated loading.
 
                   final filtered = snapshot.data!
-                      .where((s) => _matchesSelectedType(s.vehicleType))
+                      .where(_matchesFilters)
                       .toList();
 
                   if (filtered.isEmpty) {
                     return Center(
                       child: Text(
-                        context.texts.t('noTripsForType'),
+                        context.texts.t('noTripsForFilters'),
                         style: NavigoTextStyles.bodySmall,
                       ),
                     );

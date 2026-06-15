@@ -68,10 +68,13 @@ class ManagerProfileController extends ChangeNotifier {
         final fullName = '$firstName $lastName'.trim();
 
         nameController.text = fullName.isNotEmpty ? fullName : 'Route Manager';
-        emailController.text =
-            (data['email'] ?? user.email ?? '').toString().trim();
+        emailController.text = (data['email'] ?? user.email ?? '')
+            .toString()
+            .trim();
         imageId = data['image']?.toString();
-        _resolvedImageUrl = await _profileImageStorageService.getImageUrl(imageId);
+        _resolvedImageUrl = await _profileImageStorageService.getImageUrl(
+          imageId,
+        );
       }
     } catch (e) {
       if (_disposed) return;
@@ -93,10 +96,7 @@ class ManagerProfileController extends ChangeNotifier {
 
   Future<void> pickImage(ImageSource source) async {
     try {
-      final picked = await _picker.pickImage(
-        source: source,
-        imageQuality: 75,
-      );
+      final picked = await _picker.pickImage(source: source, imageQuality: 75);
 
       if (_disposed) return;
 
@@ -120,8 +120,9 @@ class ManagerProfileController extends ChangeNotifier {
 
     try {
       final fullName = nameController.text.trim();
-      final parts =
-          fullName.isEmpty ? <String>[] : fullName.split(RegExp(r'\s+'));
+      final parts = fullName.isEmpty
+          ? <String>[]
+          : fullName.split(RegExp(r'\s+'));
 
       final firstName = parts.isNotEmpty ? parts.first : '';
       final lastName = parts.length > 1 ? parts.sublist(1).join(' ') : '';
@@ -139,7 +140,6 @@ class ManagerProfileController extends ChangeNotifier {
       String? uploadedImageId = imageId;
       if (image != null) {
         uploadedImageId = await _profileImageStorageService.uploadProfileImage(
-          uid: user.uid,
           file: image!,
         );
 
@@ -153,7 +153,9 @@ class ManagerProfileController extends ChangeNotifier {
         if (_disposed) return null;
 
         imageId = uploadedImageId;
-        _resolvedImageUrl = await _profileImageStorageService.getImageUrl(imageId);
+        _resolvedImageUrl = await _profileImageStorageService.getImageUrl(
+          imageId,
+        );
       }
 
       isEditing = false;

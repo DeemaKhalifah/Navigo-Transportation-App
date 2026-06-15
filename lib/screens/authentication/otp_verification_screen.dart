@@ -247,6 +247,10 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
       }
 
       final uid = user.uid;
+      final userRef = FirebaseFirestore.instance.collection('users').doc(uid);
+      final existingUser = await userRef.get();
+      final existingImage =
+          existingUser.data()?['image']?.toString().trim() ?? '';
 
       String firstName = '';
       String lastName = '';
@@ -260,7 +264,7 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
       final Map<String, dynamic> userData = {
         'userId': uid,
         'phone': widget.phoneNumber,
-        'image': null,
+        'image': existingImage,
         'isVerified': true,
         'isOnline': false,
       };
@@ -277,12 +281,9 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
         userData['role'] = widget.role!.trim();
       }
 
-      await FirebaseFirestore.instance
-          .collection('users')
-          .doc(uid)
-          .set(userData, SetOptions(merge: true));
+      await userRef.set(userData, SetOptions(merge: true));
 
-      await FirebaseFirestore.instance.collection('users').doc(uid).update({
+      await userRef.update({
         'latitude': FieldValue.delete(),
         'longitude': FieldValue.delete(),
         'location': FieldValue.delete(),

@@ -6,6 +6,7 @@ import '../../localization/localization_x.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/app_message.dart';
 import '../../widgets/language_toggle_switch.dart';
+import '../authentication/phone_number_screen.dart';
 import 'passenger_bottom_nav_bar.dart';
 import 'passenger_home_screen.dart';
 import 'support_screen.dart';
@@ -44,17 +45,27 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ListTile(
                 leading: const Icon(Icons.camera_alt),
                 title: Text(context.texts.t('takePhoto')),
-                onTap: () {
+                onTap: () async {
                   Navigator.pop(context);
-                  _controller.pickImage(ImageSource.camera);
+                  try {
+                    await _controller.pickImage(ImageSource.camera);
+                  } catch (error) {
+                    if (!mounted) return;
+                    AppMessage.showError(context, error.toString());
+                  }
                 },
               ),
               ListTile(
                 leading: const Icon(Icons.photo),
                 title: Text(context.texts.t('chooseGallery')),
-                onTap: () {
+                onTap: () async {
                   Navigator.pop(context);
-                  _controller.pickImage(ImageSource.gallery);
+                  try {
+                    await _controller.pickImage(ImageSource.gallery);
+                  } catch (error) {
+                    if (!mounted) return;
+                    AppMessage.showError(context, error.toString());
+                  }
                 },
               ),
             ],
@@ -77,7 +88,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
   Future<void> _handleLogout() async {
     await _controller.logout();
     if (!mounted) return;
-    Navigator.of(context).popUntil((route) => route.isFirst);
+    Navigator.of(context).pushAndRemoveUntil(
+      MaterialPageRoute(builder: (_) => const PhoneNumberScreen()),
+      (route) => false,
+    );
   }
 
   Widget _buildProfileImage({
@@ -145,42 +159,46 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   padding: const EdgeInsets.all(20),
                   decoration: NavigoDecorations.kCardDecoration,
                   child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
                       /// PROFILE IMAGE
-                      Stack(
-                        children: [
-                          CircleAvatar(
-                            radius: 50,
-                            backgroundColor: NavigoColors.surfaceWhite,
-                            child: ClipOval(
-                              child: _buildProfileImage(
-                                fit: BoxFit.contain,
-                                width: 80,
-                                height: 80,
-                              ),
-                            ),
-                          ),
-                          if (_controller.isEditing)
-                            Positioned(
-                              bottom: 0,
-                              right: 0,
-                              child: GestureDetector(
-                                onTap: _showImagePicker,
-                                child: Container(
-                                  padding: const EdgeInsets.all(6),
-                                  decoration:
-                                      NavigoDecorations.iconCircleDecoration(
-                                        NavigoColors.accentGreen,
-                                      ),
-                                  child: const Icon(
-                                    Icons.camera_alt,
-                                    size: 16,
-                                    color: NavigoColors.textLight,
-                                  ),
+                      Align(
+                        alignment: Alignment.center,
+                        child: Stack(
+                          children: [
+                            CircleAvatar(
+                              radius: 50,
+                              backgroundColor: NavigoColors.surfaceWhite,
+                              child: ClipOval(
+                                child: _buildProfileImage(
+                                  fit: BoxFit.cover,
+                                  width: 100,
+                                  height: 100,
                                 ),
                               ),
                             ),
-                        ],
+                            if (_controller.isEditing)
+                              PositionedDirectional(
+                                bottom: 0,
+                                end: 0,
+                                child: GestureDetector(
+                                  onTap: _showImagePicker,
+                                  child: Container(
+                                    padding: const EdgeInsets.all(6),
+                                    decoration:
+                                        NavigoDecorations.iconCircleDecoration(
+                                          NavigoColors.accentGreen,
+                                        ),
+                                    child: const Icon(
+                                      Icons.camera_alt,
+                                      size: 16,
+                                      color: NavigoColors.textLight,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                          ],
+                        ),
                       ),
 
                       const SizedBox(height: 20),
@@ -220,7 +238,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
                       /// SETTINGS
                       Align(
-                        alignment: Alignment.centerLeft,
+                        alignment: AlignmentDirectional.centerStart,
                         child: Text(
                           context.texts.t('settings'),
                           style: NavigoTextStyles.titleSmall.copyWith(
@@ -231,9 +249,30 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
                       const SizedBox(height: 10),
 
-                      const Align(
-                        alignment: Alignment.centerLeft,
-                        child: LanguageToggleSwitch(),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 8,
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(
+                              Icons.language,
+                              color: NavigoColors.textDark,
+                            ),
+                            const SizedBox(width: 16),
+                            Expanded(
+                              child: Text(
+                                context.texts.t('language'),
+                                style: NavigoTextStyles.bodyMedium.copyWith(
+                                  fontWeight: FontWeight.w500,
+                                  color: NavigoColors.textDark,
+                                ),
+                              ),
+                            ),
+                            const LanguageToggleSwitch(),
+                          ],
+                        ),
                       ),
                       const SizedBox(height: 8),
                       _settingsItem(
@@ -274,9 +313,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
     IconData icon,
   ) {
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Text(label, style: NavigoTextStyles.label),
+        Align(
+          alignment: AlignmentDirectional.centerStart,
+          child: Text(label, style: NavigoTextStyles.label),
+        ),
         const SizedBox(height: 6),
         TextField(
           controller: controller,
@@ -309,7 +351,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
           color: color,
         ),
       ),
-      trailing: const Icon(Icons.arrow_forward_ios, size: 16),
+      trailing: Icon(
+        Directionality.of(context) == TextDirection.rtl
+            ? Icons.arrow_back_ios_new
+            : Icons.arrow_forward_ios,
+        size: 16,
+      ),
     );
   }
 }

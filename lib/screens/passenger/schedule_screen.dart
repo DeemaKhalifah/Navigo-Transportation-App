@@ -11,6 +11,7 @@ import '../../services/waiting_trip_request_service.dart';
 import '../../localization/localization_x.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/app_message.dart';
+import '../../widgets/manual_time_dialog.dart';
 import 'passenger_bottom_nav_bar.dart';
 import 'passenger_home_screen.dart';
 
@@ -37,7 +38,6 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
   int _seatCount = 1;
   bool _isLoading = false;
   bool _isSubmittingWaitingRequest = false;
-  bool _lineFilterFromNavigation = false;
   List<ScheduleSlot> _schedules = [];
 
   final List<String> _vehicles = ['Bus', 'Micro Bus'];
@@ -56,7 +56,6 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
 
   Future<void> _bootstrapFromWidgetOrStorage() async {
     String? line = widget.selectedLine?.trim();
-    _lineFilterFromNavigation = line != null && line.isNotEmpty;
     if (line == null || line.isEmpty) {
       final saved = await LocalStorageService.getSelectedLine();
       line = saved?.trim();
@@ -95,15 +94,25 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
   }
 
   Future<void> _pickTime() async {
-    final TimeOfDay? picked = await showTimePicker(
+    final TimeOfDay? picked = await showDialog<TimeOfDay>(
       context: context,
-      initialTime: _selectedTime ?? TimeOfDay.now(),
+      builder: (_) =>
+          ManualTimeDialog(initialTime: _selectedTime ?? TimeOfDay.now()),
     );
     if (!mounted) return;
     if (picked != null) {
       setState(() => _selectedTime = picked);
       await _loadSchedules();
     }
+  }
+
+  Future<void> _clearFilters() async {
+    setState(() {
+      _vehicleType = null;
+      _selectedDate = null;
+      _selectedTime = null;
+    });
+    await _loadSchedules();
   }
 
   String _formatDate() {
@@ -119,12 +128,8 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
   Future<void> _loadSchedules() async {
     try {
       setState(() => _isLoading = true);
-      final selectedLineForQuery = _lineFilterFromNavigation
-          ? _selectedLine
-          : null;
-
       final schedules = await _scheduleService.findAvailableSchedules(
-        selectedLine: selectedLineForQuery,
+        selectedLine: _selectedLine,
         vehicleType: _vehicleType,
         selectedDate: _selectedDate,
         selectedTime: _selectedTime,
@@ -198,7 +203,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
   }
 
   Future<void> _openTripDetails(ScheduleSlot slot) async {
-    int sheetSeatCount = _seatCount;
+    final selectedSeatCount = _seatCount;
     bool isConfirming = false;
 
     await showModalBottomSheet<void>(
@@ -266,30 +271,16 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                           ),
                           const SizedBox(width: 10),
                           Text(
-                            '$sheetSeatCount',
+                            '$selectedSeatCount',
                             style: NavigoTextStyles.bodyMedium.copyWith(
                               fontWeight: FontWeight.w700,
+                              color: NavigoColors.textDark,
                             ),
-                          ),
-                          const Spacer(),
-                          IconButton(
-                            onPressed: sheetSeatCount > 1
-                                ? () => setSheetState(() => sheetSeatCount--)
-                                : null,
-                            icon: const Icon(Icons.remove_circle_outline),
-                            color: NavigoColors.accentGreen,
-                          ),
-                          IconButton(
-                            onPressed: sheetSeatCount < 10
-                                ? () => setSheetState(() => sheetSeatCount++)
-                                : null,
-                            icon: const Icon(Icons.add_circle_outline),
-                            color: NavigoColors.accentGreen,
                           ),
                         ],
                       ),
                     ),
-                    if (sheetSeatCount > availableSeats)
+                    if (selectedSeatCount > availableSeats)
                       Padding(
                         padding: const EdgeInsets.only(top: 8),
                         child: Text(
@@ -300,7 +291,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                         ),
                       ),
                     const SizedBox(height: 16),
-                    if (sheetSeatCount > availableSeats &&
+                    if (selectedSeatCount > availableSeats &&
                         _schedules.length == 1) ...[
                       SizedBox(
                         width: double.infinity,
@@ -311,7 +302,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                               : () async {
                                   Navigator.pop(sheetContext);
                                   await _submitWaitingTripRequest(
-                                    seatsOverride: sheetSeatCount,
+                                    seatsOverride: selectedSeatCount,
                                   );
                                 },
                           icon: const Icon(Icons.group_add_outlined),
@@ -331,7 +322,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                         onPressed: isConfirming
                             ? null
                             : () async {
-                                if (sheetSeatCount > availableSeats) return;
+                                if (selectedSeatCount > availableSeats) return;
                                 setSheetState(() => isConfirming = true);
                                 try {
                                   final setPickupFirst = context.texts.t(
@@ -346,7 +337,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
 
                                   await _scheduleService.confirmSchedule(
                                     slot: slot,
-                                    seatsToBook: sheetSeatCount,
+                                    seatsToBook: selectedSeatCount,
                                     pickupLocationDescription:
                                         _manualPickupController.text,
                                   );
@@ -354,14 +345,13 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                                   final updated = _scheduleService
                                       .applyLocalBooking(
                                         slot: slot,
-                                        seatsBooked: sheetSeatCount,
+                                        seatsBooked: selectedSeatCount,
                                         userId: _scheduleService.currentUserId,
                                         pickupLocationDescription:
                                             _manualPickupController.text,
                                       );
                                   if (!mounted) return;
                                   setState(() {
-                                    _seatCount = sheetSeatCount;
                                     final index = _schedules.indexWhere(
                                       (s) =>
                                           s.slotId == updated.slotId &&
@@ -384,7 +374,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                                   Navigator.pop(sheetContext);
                                   AppMessage.showSuccess(
                                     context,
-                                    '${context.texts.t('scheduleConfirmed')} $sheetSeatCount ${context.texts.t('seats')}.',
+                                    '${context.texts.t('scheduleConfirmed')} $selectedSeatCount ${context.texts.t('seats')}.',
                                   );
                                 } catch (e) {
                                   if (!mounted) return;
@@ -447,28 +437,62 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      context.texts.t('searchSchedule'),
-                      style: NavigoTextStyles.titleLarge,
-                    ),
-                    const SizedBox(height: 6),
-                    Text(
-                      context.texts.t('line'),
-                      style: NavigoTextStyles.label.copyWith(fontSize: 12),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            context.texts.t('scheduleTrip'),
+                            style: NavigoTextStyles.titleLarge,
+                          ),
+                        ),
+                        IconButton(
+                          onPressed: _isLoading ? null : _clearFilters,
+                          icon: const Icon(
+                            Icons.filter_alt_off_outlined,
+                            size: 20,
+                          ),
+                          color: NavigoColors.primaryOrange,
+                          tooltip: context.texts.t('clearFilters'),
+                          visualDensity: VisualDensity.compact,
+                        ),
+                      ],
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      _selectedLine ?? context.texts.t('allLines'),
+                      context.texts.t('customizeYourTrip'),
                       style: NavigoTextStyles.bodySmall.copyWith(
                         color: NavigoColors.textMuted,
-                        fontSize: 13,
                       ),
                     ),
-                    const SizedBox(height: 20),
-                    Text(
-                      context.texts.t('vehicleTypeLabel'),
-                      style: NavigoTextStyles.label,
+                    const SizedBox(height: 16),
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 14,
+                      ),
+                      decoration: NavigoDecorations.kCardDecoration,
+                      child: Row(
+                        children: [
+                          const Icon(
+                            Icons.route_outlined,
+                            color: NavigoColors.accentGreen,
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Text(
+                              _selectedLine ?? context.texts.t('notSelected'),
+                              style: NavigoTextStyles.bodyMedium.copyWith(
+                                color: NavigoColors.textDark,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
+                    const SizedBox(height: 16),
+
                     const SizedBox(height: 8),
                     Row(
                       children: _vehicles.map((v) {
@@ -509,38 +533,9 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                         );
                       }).toList(),
                     ),
-                    const SizedBox(height: 20),
-                    Text(
-                      context.texts.t('pickupLocation'),
-                      style: NavigoTextStyles.label,
-                    ),
-                    const SizedBox(height: 6),
-                    Text(
-                      context.texts.t('pickupHint'),
-                      style: NavigoTextStyles.bodySmall.copyWith(
-                        color: NavigoColors.textMuted,
-                        fontSize: 12,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    TextField(
-                      controller: _manualPickupController,
-                      maxLines: 2,
-                      style: const TextStyle(color: NavigoColors.textDark),
-                      decoration: NavigoDecorations.kInputDecoration.copyWith(
-                        hintText: context.texts.t('enterPickup'),
-                        filled: true,
-                        fillColor: NavigoColors.surfaceWhite,
-                      ),
-                    ),
-                    const SizedBox(height: 20),
+                    const SizedBox(height: 12),
 
                     // ── Date & Time on the same row ──────────────────────────
-                    Text(
-                      context.texts.t('dateAndTime'),
-                      style: NavigoTextStyles.label,
-                    ),
-                    const SizedBox(height: 8),
                     Row(
                       children: [
                         Expanded(
@@ -608,9 +603,24 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                     ),
 
                     // ────────────────────────────────────────────────────────
+                    const SizedBox(height: 16),
+                    TextField(
+                      controller: _manualPickupController,
+                      maxLines: 1,
+                      style: const TextStyle(color: NavigoColors.textDark),
+                      decoration: NavigoDecorations.kInputDecoration.copyWith(
+                        hintText: context.texts.t('enterPickup'),
+                        prefixIcon: const Icon(
+                          Icons.location_on_outlined,
+                          color: NavigoColors.accentGreen,
+                        ),
+                        filled: true,
+                        fillColor: NavigoColors.surfaceWhite,
+                      ),
+                    ),
                     const SizedBox(height: 14),
                     _buildSeatSelector(),
-                    const SizedBox(height: 22),
+                    const SizedBox(height: 18),
                     Row(
                       children: [
                         Text(

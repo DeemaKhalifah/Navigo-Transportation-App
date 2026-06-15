@@ -151,6 +151,10 @@ class AdminRouteItem {
   final String routeId;
   final String startPoint;
   final String endPoint;
+  final double? startLatitude;
+  final double? startLongitude;
+  final double? endLatitude;
+  final double? endLongitude;
   final double price;
   final List<String> vehicleTypes;
   final int scheduleSlotCount;
@@ -163,6 +167,10 @@ class AdminRouteItem {
     required this.routeId,
     required this.startPoint,
     required this.endPoint,
+    this.startLatitude,
+    this.startLongitude,
+    this.endLatitude,
+    this.endLongitude,
     required this.price,
     required this.vehicleTypes,
     required this.scheduleSlotCount,

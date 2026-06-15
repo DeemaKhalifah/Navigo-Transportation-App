@@ -145,10 +145,7 @@ class DriverProfileController extends ChangeNotifier {
   Future<String?> _uploadProfileImageId() async {
     if (currentUser == null) return null;
     if (image == null) return imageUrl;
-    return _profileImageStorageService.uploadProfileImage(
-      uid: currentUser!.uid,
-      file: image!,
-    );
+    return _profileImageStorageService.uploadProfileImage(file: image!);
   }
 
   Future<String?> saveProfile() async {
@@ -180,15 +177,17 @@ class DriverProfileController extends ChangeNotifier {
       }, SetOptions(merge: true));
 
       await driverDocRef!.set({
-            'firstName': firstName,
-            'lastName': lastName,
-            'phone': phoneController.text.trim(),
-            'image': uploadedImageId,
-            'updatedAt': FieldValue.serverTimestamp(),
-          }, SetOptions(merge: true));
+        'firstName': firstName,
+        'lastName': lastName,
+        'phone': phoneController.text.trim(),
+        'image': uploadedImageId,
+        'updatedAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
 
       imageUrl = uploadedImageId;
-      _resolvedImageUrl = await _profileImageStorageService.getImageUrl(imageUrl);
+      _resolvedImageUrl = await _profileImageStorageService.getImageUrl(
+        imageUrl,
+      );
       isEditing = false;
 
       return null;
@@ -330,7 +329,8 @@ class DriverProfileController extends ChangeNotifier {
     if (uid != null) {
       try {
         final ref =
-            driverDocRef ?? FirebaseFirestore.instance.collection('drivers').doc(uid);
+            driverDocRef ??
+            FirebaseFirestore.instance.collection('drivers').doc(uid);
         final driverSnap = await ref.get();
 
         final routeId = driverSnap.data()?['routeId']?.toString();

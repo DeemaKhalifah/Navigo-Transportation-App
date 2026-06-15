@@ -43,6 +43,7 @@ class ScheduleSlotRepository {
   }
 
   Future<String> addSlot(ScheduleSlot slot) async {
+    _validateFutureDeparture(slot);
     final routeId = slot.routeId;
     final routeRef = _routeRef(routeId);
     final slotId = _newSlotId();
@@ -65,6 +66,7 @@ class ScheduleSlotRepository {
   }
 
   Future<void> upsertSlot(ScheduleSlot slot) async {
+    _validateFutureDeparture(slot);
     final routeRef = _routeRef(slot.routeId);
 
     await _db.runTransaction((txn) async {
@@ -137,5 +139,11 @@ class ScheduleSlotRepository {
     if (value is DateTime) return value;
     if (value is String) return DateTime.tryParse(value);
     return null;
+  }
+
+  static void _validateFutureDeparture(ScheduleSlot slot) {
+    if (!slot.departureAt.isAfter(DateTime.now())) {
+      throw StateError('Departure date and time must be in the future.');
+    }
   }
 }

@@ -44,8 +44,10 @@ class ProfileController extends ChangeNotifier {
         nameController.text =
             "${data['firstName'] ?? ''} ${data['lastName'] ?? ''}".trim();
         phoneController.text = data['phone'] ?? '';
-        imageId = data['image']?.toString();
-        _resolvedImageUrl = await _profileImageStorageService.getImageUrl(imageId);
+        imageId = data['image']?.toString().trim() ?? '';
+        _resolvedImageUrl = await _profileImageStorageService.getImageUrl(
+          imageId,
+        );
       }
     } catch (e) {
       debugPrint("Error loading user data: $e");
@@ -61,52 +63,84 @@ class ProfileController extends ChangeNotifier {
   }
 
   Future<void> pickImage(ImageSource source) async {
-    final picked = await _picker.pickImage(source: source);
-    if (picked != null) {
-      image = File(picked.path);
-      notifyListeners();
+    try {
+      final picked = await _picker.pickImage(
+        source: source,
+        imageQuality: 85,
+        maxWidth: 1600,
+        maxHeight: 1600,
+      );
+      if (picked != null) {
+        image = File(picked.path);
+        notifyListeners();
+      }
+    } catch (_) {
+      throw const ProfileImageUploadException(
+        'Could not select the image. Please try again.',
+      );
     }
   }
 
   Future<String?> saveProfile() async {
-    if (currentUser == null) return 'No user';
+    final user = currentUser;
+    if (user == null) return 'No user';
 
     isSaving = true;
-    isEditing = false;
     notifyListeners();
 
     try {
-      final names = nameController.text.trim().split(" ");
+      final fullName = nameController.text.trim();
+      final names = fullName.isEmpty
+          ? <String>[]
+          : fullName.split(RegExp(r'\s+'));
       final firstName = names.isNotEmpty ? names[0] : "";
       final lastName = names.length > 1 ? names.sublist(1).join(" ") : "";
+      final phone = phoneController.text.trim();
 
-      final success = await _userApi.updateProfile(
-        firstName: firstName,
-        lastName: lastName,
-        phone: phoneController.text.trim(),
-      );
-
-      if (success && image != null) {
-        final uploadedImageId = await _profileImageStorageService
-            .uploadProfileImage(uid: currentUser!.uid, file: image!);
-        await FirebaseFirestore.instance
-            .collection('users')
-            .doc(currentUser!.uid)
-            .set({
-              'image': uploadedImageId,
-              'updatedAt': FieldValue.serverTimestamp(),
-            }, SetOptions(merge: true));
-        imageId = uploadedImageId;
-        _resolvedImageUrl = await _profileImageStorageService.getImageUrl(imageId);
+      String uploadedImageId = imageId?.trim() ?? '';
+      if (image != null) {
+        uploadedImageId = await _profileImageStorageService.uploadProfileImage(
+          file: image!,
+        );
       }
 
+      await FirebaseFirestore.instance.collection('users').doc(user.uid).set({
+        'firstName': firstName,
+        'lastName': lastName,
+        'phone': phone,
+        'image': uploadedImageId,
+        'updatedAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+
+      imageId = uploadedImageId;
+      _resolvedImageUrl = await _profileImageStorageService.getImageUrl(
+        imageId,
+      );
+      image = null;
+      isEditing = false;
+
+      // Preserve the existing API profile update without allowing an optional
+      // backend failure to roll back a successful Storage/Firestore save.
+      await _userApi.updateProfile(
+        firstName: firstName,
+        lastName: lastName,
+        phone: phone,
+      );
+      return null;
+    } on ProfileImageUploadException catch (error) {
+      return error.message;
+    } on FirebaseException catch (error) {
+      if (error.code == 'permission-denied') {
+        return 'Firestore denied the profile update (${error.code}). '
+            'Allow the signed-in user to update users/${user.uid}.';
+      }
+      return 'Could not update the profile (${error.code}): '
+          '${error.message ?? 'Unknown Firebase error'}';
+    } catch (error) {
+      return 'Could not update the profile: $error';
+    } finally {
       isSaving = false;
       notifyListeners();
-      return success ? null : 'Failed to update profile';
-    } catch (e) {
-      isSaving = false;
-      notifyListeners();
-      return "Failed to update profile: $e";
     }
   }
 

@@ -726,6 +726,20 @@ class _RoutesPanelState extends State<_RoutesPanel> {
     ).showSnackBar(SnackBar(content: Text(context.texts.t('routeCreated'))));
   }
 
+  Future<void> _showEditRouteDialog(AdminRouteItem route) async {
+    final updated = await showDialog<bool>(
+      context: context,
+      builder: (context) =>
+          _CreateRouteDialog(service: widget.service, route: route),
+    );
+
+    if (!mounted || updated != true) return;
+
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(context.texts.t('routeUpdated'))));
+  }
+
   @override
   Widget build(BuildContext context) {
     final texts = context.texts;
@@ -864,6 +878,7 @@ class _RoutesPanelState extends State<_RoutesPanel> {
                                 DataColumn(label: Text(texts.t('slots'))),
                                 DataColumn(label: Text(texts.t('driverQueue'))),
                                 DataColumn(label: Text(texts.t('updated'))),
+                                DataColumn(label: Text(texts.t('actions'))),
                               ],
                               rows: routes.map((route) {
                                 return DataRow(
@@ -903,13 +918,26 @@ class _RoutesPanelState extends State<_RoutesPanel> {
                                       ),
                                     ),
                                     DataCell(
-                                      _LtrText(route.scheduleSlotCount.toString()),
+                                      _LtrText(
+                                        route.scheduleSlotCount.toString(),
+                                      ),
                                     ),
                                     DataCell(
-                                      _LtrText(route.driverQueueCount.toString()),
+                                      _LtrText(
+                                        route.driverQueueCount.toString(),
+                                      ),
                                     ),
                                     DataCell(
                                       _LtrText(_formatDate(route.updatedAt)),
+                                    ),
+                                    DataCell(
+                                      IconButton(
+                                        onPressed: () =>
+                                            _showEditRouteDialog(route),
+                                        icon: const Icon(Icons.edit_rounded),
+                                        tooltip: texts.t('editRoute'),
+                                        color: NavigoColors.accentBlue,
+                                      ),
                                     ),
                                   ],
                                 );
@@ -932,8 +960,9 @@ class _RoutesPanelState extends State<_RoutesPanel> {
 
 class _CreateRouteDialog extends StatefulWidget {
   final AdminDashboardService service;
+  final AdminRouteItem? route;
 
-  const _CreateRouteDialog({required this.service});
+  const _CreateRouteDialog({required this.service, this.route});
 
   @override
   State<_CreateRouteDialog> createState() => _CreateRouteDialogState();
@@ -941,14 +970,36 @@ class _CreateRouteDialog extends StatefulWidget {
 
 class _CreateRouteDialogState extends State<_CreateRouteDialog> {
   final _formKey = GlobalKey<FormState>();
-  final _startController = TextEditingController();
-  final _endController = TextEditingController();
-  final _priceController = TextEditingController();
-  final Set<String> _selectedVehicleTypes = {'bus 14', 'bus 45', 'microbus'};
+  late final TextEditingController _startController;
+  late final TextEditingController _endController;
+  late final TextEditingController _priceController;
+  late final Set<String> _selectedVehicleTypes;
   LatLng? _startLocation;
   LatLng? _endLocation;
   bool _isSelectingStartLocation = true;
   bool _isSaving = false;
+
+  bool get _isEditing => widget.route != null;
+
+  @override
+  void initState() {
+    super.initState();
+    final route = widget.route;
+    _startController = TextEditingController(text: route?.startPoint ?? '');
+    _endController = TextEditingController(text: route?.endPoint ?? '');
+    _priceController = TextEditingController(
+      text: route == null ? '' : route.price.toString(),
+    );
+    _selectedVehicleTypes = route == null
+        ? {'bus 14', 'bus 45', 'microbus'}
+        : route.vehicleTypes.toSet();
+    if (route?.startLatitude != null && route?.startLongitude != null) {
+      _startLocation = LatLng(route!.startLatitude!, route.startLongitude!);
+    }
+    if (route?.endLatitude != null && route?.endLongitude != null) {
+      _endLocation = LatLng(route!.endLatitude!, route.endLongitude!);
+    }
+  }
 
   @override
   void dispose() {
@@ -965,16 +1016,30 @@ class _CreateRouteDialogState extends State<_CreateRouteDialog> {
     try {
       final vehicleTypes = _selectedVehicleTypes.toList();
 
-      await widget.service.createRoute(
-        startPoint: _startController.text,
-        endPoint: _endController.text,
-        startLatitude: _startLocation!.latitude,
-        startLongitude: _startLocation!.longitude,
-        endLatitude: _endLocation!.latitude,
-        endLongitude: _endLocation!.longitude,
-        price: double.parse(_priceController.text.trim()),
-        vehicleTypes: vehicleTypes,
-      );
+      if (_isEditing) {
+        await widget.service.updateRoute(
+          documentId: widget.route!.documentId,
+          startPoint: _startController.text,
+          endPoint: _endController.text,
+          startLatitude: _startLocation!.latitude,
+          startLongitude: _startLocation!.longitude,
+          endLatitude: _endLocation!.latitude,
+          endLongitude: _endLocation!.longitude,
+          price: double.parse(_priceController.text.trim()),
+          vehicleTypes: vehicleTypes,
+        );
+      } else {
+        await widget.service.createRoute(
+          startPoint: _startController.text,
+          endPoint: _endController.text,
+          startLatitude: _startLocation!.latitude,
+          startLongitude: _startLocation!.longitude,
+          endLatitude: _endLocation!.latitude,
+          endLongitude: _endLocation!.longitude,
+          price: double.parse(_priceController.text.trim()),
+          vehicleTypes: vehicleTypes,
+        );
+      }
 
       if (!mounted) return;
       Navigator.pop(context, true);
@@ -982,7 +1047,9 @@ class _CreateRouteDialogState extends State<_CreateRouteDialog> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('${context.texts.t('couldNotCreateRoute')}: $e'),
+          content: Text(
+            '${context.texts.t(_isEditing ? 'couldNotUpdateRoute' : 'couldNotCreateRoute')}: $e',
+          ),
         ),
       );
     } finally {
@@ -1037,7 +1104,7 @@ class _CreateRouteDialogState extends State<_CreateRouteDialog> {
                         children: [
                           Expanded(
                             child: Text(
-                              texts.t('createRoute'),
+                              texts.t(_isEditing ? 'editRoute' : 'createRoute'),
                               style: const TextStyle(
                                 fontSize: 24,
                                 fontWeight: FontWeight.bold,
@@ -1207,11 +1274,17 @@ class _CreateRouteDialogState extends State<_CreateRouteDialog> {
                                     strokeWidth: 2,
                                   ),
                                 )
-                              : const Icon(Icons.add_rounded),
+                              : Icon(
+                                  _isEditing
+                                      ? Icons.save_rounded
+                                      : Icons.add_rounded,
+                                ),
                           label: Text(
                             _isSaving
-                                ? texts.t('creating')
-                                : texts.t('createRoute'),
+                                ? texts.t(_isEditing ? 'saving' : 'creating')
+                                : texts.t(
+                                    _isEditing ? 'saveChanges' : 'createRoute',
+                                  ),
                           ),
                           style: FilledButton.styleFrom(
                             backgroundColor: NavigoColors.primaryOrange,
@@ -1441,7 +1514,9 @@ class _RouteMapSelectorState extends State<_RouteMapSelector> {
   }
 
   void _showSearchError(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
   }
 
   Future<LatLng?> _findLocation(String query) async {
@@ -1483,9 +1558,7 @@ class _RouteMapSelectorState extends State<_RouteMapSelector> {
 
     final response = await http.get(
       uri,
-      headers: const {
-        'User-Agent': 'NavigoAdmin/1.0 (route-search)',
-      },
+      headers: const {'User-Agent': 'NavigoAdmin/1.0 (route-search)'},
     );
 
     if (response.statusCode != 200) return null;
@@ -2457,7 +2530,9 @@ class _TripInfo extends StatelessWidget {
                 const SizedBox(height: 3),
                 Text(
                   value,
-                  textDirection: _looksNumeric(value) ? TextDirection.ltr : null,
+                  textDirection: _looksNumeric(value)
+                      ? TextDirection.ltr
+                      : null,
                   textAlign: _looksNumeric(value)
                       ? TextAlign.left
                       : TextAlign.start,
@@ -3143,7 +3218,7 @@ class _ReportTile extends StatelessWidget {
               const SizedBox(width: 12),
               const Icon(Icons.open_in_new_rounded, size: 18),
             ],
-          ),
+          ), 
         ),
       ),
     );
@@ -3227,11 +3302,7 @@ class _LtrText extends StatelessWidget {
   Widget build(BuildContext context) {
     return Directionality(
       textDirection: TextDirection.ltr,
-      child: Text(
-        value,
-        textAlign: TextAlign.left,
-        style: style,
-      ),
+      child: Text(value, textAlign: TextAlign.left, style: style),
     );
   }
 }
@@ -3505,10 +3576,7 @@ class _AccountActionButton extends StatelessWidget {
       child: OutlinedButton.icon(
         onPressed: onTap,
         icon: Icon(icon, size: 18),
-        label: Text(
-          title,
-          overflow: TextOverflow.ellipsis,
-        ),
+        label: Text(title, overflow: TextOverflow.ellipsis),
         style: OutlinedButton.styleFrom(
           alignment: Alignment.centerLeft,
           foregroundColor: NavigoColors.textDark,
@@ -3830,8 +3898,8 @@ class _CreateRouteManagerDialogState extends State<_CreateRouteManagerDialog> {
                                 suffixIcon: IconButton(
                                   onPressed: () {
                                     setState(
-                                      () => _obscurePassword =
-                                          !_obscurePassword,
+                                      () =>
+                                          _obscurePassword = !_obscurePassword,
                                     );
                                   },
                                   icon: Icon(

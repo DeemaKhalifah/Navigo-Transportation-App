@@ -7,6 +7,7 @@ import 'package:navigo/services/waiting_trip_request_service.dart';
 import 'package:navigo/theme/app_theme.dart';
 import '../../localization/localization_x.dart';
 import '../../widgets/app_message.dart';
+import '../../widgets/manual_time_dialog.dart';
 import 'route_manager_notification_compose.dart';
 import 'route_manager_nav_bar.dart';
 
@@ -136,12 +137,14 @@ class _AddScheduleSlotScreenState extends State<AddScheduleSlotScreen> {
   }
 
   Future<void> _pickTime({required bool isFrom}) async {
-    final picked = await showTimePicker(
+    final initial = (isFrom ? _fromTime : _toTime) ?? TimeOfDay.now();
+
+    final picked = await showDialog<TimeOfDay>(
       context: context,
-      initialTime: TimeOfDay.now(),
+      builder: (_) => ManualTimeDialog(initialTime: initial),
     );
 
-    if (picked != null) {
+    if (picked != null && mounted) {
       setState(() {
         if (isFrom) {
           _fromTime = picked;
@@ -153,11 +156,17 @@ class _AddScheduleSlotScreenState extends State<AddScheduleSlotScreen> {
   }
 
   Future<void> _pickDate() async {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final selectedDate = _selectedDate;
+    final initialDate = selectedDate == null || selectedDate.isBefore(today)
+        ? today
+        : selectedDate;
     final picked = await showDatePicker(
       context: context,
-      firstDate: DateTime(2024),
+      firstDate: today,
       lastDate: DateTime(2035),
-      initialDate: _selectedDate ?? DateTime.now(),
+      initialDate: initialDate,
     );
 
     if (picked != null) {
@@ -354,6 +363,12 @@ class _AddScheduleSlotScreenState extends State<AddScheduleSlotScreen> {
 
     if (slots.isEmpty) {
       AppMessage.showError(context, context.texts.t('checkDepartureTimes'));
+      return;
+    }
+
+    final now = DateTime.now();
+    if (slots.any((slot) => !slot.departureAt.isAfter(now))) {
+      AppMessage.showError(context, context.texts.t('departureMustBeFuture'));
       return;
     }
 

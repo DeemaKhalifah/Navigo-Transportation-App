@@ -340,6 +340,8 @@ class AdminDashboardService {
                 : _readString(data['routeId']);
             final slots = data['scheduleSlots'];
             final driverQueue = data['driverQueueIds'];
+            final startLocation = data['startLocation'];
+            final endLocation = data['endLocation'];
 
             return AdminRouteItem(
               documentId: doc.id,
@@ -350,6 +352,22 @@ class AdminDashboardService {
               endPoint: _readString(
                 data['endPoint'] ?? data['end'] ?? data['to'],
               ),
+              startLatitude: startLocation is Map
+                  ? _readDouble(
+                      startLocation['lat'] ?? startLocation['latitude'],
+                    )
+                  : null,
+              startLongitude: startLocation is Map
+                  ? _readDouble(
+                      startLocation['lng'] ?? startLocation['longitude'],
+                    )
+                  : null,
+              endLatitude: endLocation is Map
+                  ? _readDouble(endLocation['lat'] ?? endLocation['latitude'])
+                  : null,
+              endLongitude: endLocation is Map
+                  ? _readDouble(endLocation['lng'] ?? endLocation['longitude'])
+                  : null,
               price: _readDouble(data['price']) ?? 0,
               vehicleTypes: _readStringList(data['vehicleTypes']),
               scheduleSlotCount: slots is List ? slots.length : 0,
@@ -416,6 +434,54 @@ class AdminDashboardService {
       'driverQueueIds': <String>[],
       'createdAt': now,
       'updatedAt': now,
+    });
+  }
+
+  Future<void> updateRoute({
+    required String documentId,
+    required String startPoint,
+    required String endPoint,
+    required double startLatitude,
+    required double startLongitude,
+    required double endLatitude,
+    required double endLongitude,
+    required double price,
+    required List<String> vehicleTypes,
+  }) async {
+    final cleanDocumentId = documentId.trim();
+    if (cleanDocumentId.isEmpty) {
+      throw StateError('Route document ID is missing');
+    }
+
+    final routePath = await _routePathService.fetchRoutePathByCoordinates(
+      startLatitude: startLatitude,
+      startLongitude: startLongitude,
+      endLatitude: endLatitude,
+      endLongitude: endLongitude,
+    );
+    if (routePath.encodedPolyline.trim().isEmpty) {
+      throw Exception('Could not generate route polyline');
+    }
+
+    await _db.collection('route').doc(cleanDocumentId).update({
+      'startPoint': startPoint.trim(),
+      'endPoint': endPoint.trim(),
+      'startLocation': {'lat': startLatitude, 'lng': startLongitude},
+      'endLocation': {'lat': endLatitude, 'lng': endLongitude},
+      'polyline': routePath.encodedPolyline,
+      'routePolyline': routePath.encodedPolyline,
+      'distanceMeters': routePath.distanceMeters,
+      'distanceText': routePath.distanceText,
+      'etaMinutes': routePath.etaMinutes,
+      'etaText': routePath.etaText,
+      'polylineProvider': routePath.provider,
+      'routePathProvider': routePath.provider,
+      'price': price,
+      'vehicleTypes': vehicleTypes
+          .map((type) => type.trim())
+          .where((type) => type.isNotEmpty)
+          .toList(),
+      'updatedAt': FieldValue.serverTimestamp(),
     });
   }
 
@@ -534,7 +600,9 @@ class AdminDashboardService {
         .snapshots()
         .asyncMap((usersSnap) async {
           final managersSnap = await _db.collection('route_manger').get();
-          final legacyManagersSnap = await _db.collection('routeManagers').get();
+          final legacyManagersSnap = await _db
+              .collection('routeManagers')
+              .get();
           final alternateManagersSnap = await _db
               .collection('route_manager')
               .get();
