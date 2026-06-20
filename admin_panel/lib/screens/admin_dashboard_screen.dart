@@ -3218,7 +3218,7 @@ class _ReportTile extends StatelessWidget {
               const SizedBox(width: 12),
               const Icon(Icons.open_in_new_rounded, size: 18),
             ],
-          ), 
+          ),
         ),
       ),
     );

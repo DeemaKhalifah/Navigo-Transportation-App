@@ -7,6 +7,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import '../../localization/localization_x.dart';
 import '../../theme/app_theme.dart';
 import '../../utils/form_validation.dart';
+import '../../utils/phone_auth_helpers.dart';
 import '../../widgets/app_message.dart';
 import 'otp_verification_screen.dart';
 
@@ -123,8 +124,10 @@ class _DriverSignupScreenState extends State<DriverSignupScreen> {
     super.dispose();
   }
 
-  String get _fullPhoneNumber =>
-      '$_phonePrefix${_phoneDigitsController.text.trim()}';
+  String get _fullPhoneNumber => PhoneAuthHelpers.buildFullPhoneNumber(
+    countryCode: _phonePrefix,
+    localPhoneNumber: _phoneDigitsController.text,
+  );
 
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
@@ -147,14 +150,33 @@ class _DriverSignupScreenState extends State<DriverSignupScreen> {
     final selectedVehicle = _selectedVehicleOption!;
 
     final name = _nameController.text.trim();
-    final formattedPhone = _fullPhoneNumber;
+    final localPhoneNumber = _phoneDigitsController.text.trim();
+    final validationError = PhoneAuthHelpers.validateLocalPhoneNumber(
+      countryCode: _phonePrefix,
+      localPhoneNumber: localPhoneNumber,
+    );
+
+    if (validationError != null) {
+      AppMessage.showError(context, validationError);
+      return;
+    }
+
+    final fullPhoneNumber = PhoneAuthHelpers.buildFullPhoneNumber(
+      countryCode: _phonePrefix,
+      localPhoneNumber: localPhoneNumber,
+    );
+
+    print('FULL PHONE NUMBER = $fullPhoneNumber');
+    debugPrint('Driver signup selected country code: $_phonePrefix');
+    debugPrint('Driver signup local phone number: $localPhoneNumber');
+    PhoneAuthHelpers.logPhoneAuthConfigurationReminder();
 
     setState(() => _isLoading = true);
 
     try {
       final exists = await FirebaseFirestore.instance
           .collection('users')
-          .where('phone', isEqualTo: formattedPhone)
+          .where('phone', isEqualTo: fullPhoneNumber)
           .limit(1)
           .get();
 
@@ -168,22 +190,50 @@ class _DriverSignupScreenState extends State<DriverSignupScreen> {
       }
 
       await FirebaseAuth.instance.verifyPhoneNumber(
-        phoneNumber: formattedPhone,
+        phoneNumber: fullPhoneNumber,
         timeout: const Duration(seconds: 60),
         verificationCompleted: (PhoneAuthCredential credential) async {
-          await FirebaseAuth.instance.signInWithCredential(credential);
+          debugPrint('Driver signup verificationCompleted');
+          if (!mounted) return;
+          setState(() => _isLoading = false);
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(
+              builder: (_) => OtpVerificationScreen(
+                phoneNumber: fullPhoneNumber,
+                verificationId: '',
+                fullName: name,
+                role: 'driver',
+                driverData: {
+                  'routeId': _selectedRouteId,
+                  'plateNumber': _carNumberController.text.trim(),
+                  'vehicleType': selectedVehicle['vehicleType'],
+                  'capacity': selectedVehicle['capacity'],
+                  'vehicleClass': selectedVehicle['vehicleClass'],
+                  'licenseNumber': _licenseController.text.trim(),
+                },
+                autoCredential: credential,
+              ),
+            ),
+          );
         },
         verificationFailed: (FirebaseAuthException e) {
+          PhoneAuthHelpers.logFirebaseAuthException(
+            'Driver signup verificationFailed',
+            e,
+          );
           if (!mounted) return;
 
           setState(() => _isLoading = false);
 
           AppMessage.showError(
             context,
-            '${context.texts.t('errorLabel')}: ${e.message ?? e.code}',
+            PhoneAuthHelpers.userMessageForFirebaseAuthException(e),
           );
         },
         codeSent: (String verificationId, int? resendToken) {
+          debugPrint('Driver signup codeSent verificationId: $verificationId');
+          debugPrint('Driver signup codeSent resendToken: $resendToken');
           if (!mounted) return;
 
           setState(() => _isLoading = false);
@@ -192,8 +242,9 @@ class _DriverSignupScreenState extends State<DriverSignupScreen> {
             context,
             MaterialPageRoute(
               builder: (_) => OtpVerificationScreen(
-                phoneNumber: formattedPhone,
+                phoneNumber: fullPhoneNumber,
                 verificationId: verificationId,
+                resendToken: resendToken,
                 fullName: name,
                 role: 'driver',
                 driverData: {
@@ -209,11 +260,29 @@ class _DriverSignupScreenState extends State<DriverSignupScreen> {
           );
         },
         codeAutoRetrievalTimeout: (String verificationId) {
+          debugPrint(
+            'Driver signup codeAutoRetrievalTimeout verificationId: '
+            '$verificationId',
+          );
           if (!mounted) return;
           setState(() => _isLoading = false);
         },
       );
+    } on FirebaseAuthException catch (e) {
+      PhoneAuthHelpers.logFirebaseAuthException(
+        'Driver signup verifyPhoneNumber threw',
+        e,
+      );
+      if (!mounted) return;
+
+      setState(() => _isLoading = false);
+
+      AppMessage.showError(
+        context,
+        PhoneAuthHelpers.userMessageForFirebaseAuthException(e),
+      );
     } catch (e) {
+      debugPrint('Driver signup phone verification error: $e');
       if (!mounted) return;
 
       setState(() => _isLoading = false);
@@ -327,9 +396,11 @@ class _DriverSignupScreenState extends State<DriverSignupScreen> {
                                       LengthLimitingTextInputFormatter(9),
                                     ],
                                     validator: (_) =>
-                                        AppFormValidators.palestinianPhone(
+                                        AppFormValidators.localPhoneNumber(
                                           context,
-                                          _fullPhoneNumber,
+                                          countryCode: _phonePrefix,
+                                          localPhoneNumber:
+                                              _phoneDigitsController.text,
                                         ),
                                     decoration: NavigoDecorations
                                         .kInputDecoration

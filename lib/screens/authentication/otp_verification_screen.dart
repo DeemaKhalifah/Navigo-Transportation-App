@@ -12,6 +12,7 @@ import '../passenger/passenger_home_screen.dart';
 import '../driver/driver_home_screen.dart';
 import '../../models/driver_status.dart';
 import '../../services/vehicle_seat_count.dart';
+import '../../utils/phone_auth_helpers.dart';
 import '../../widgets/app_message.dart';
 import 'signup_approval.dart';
 
@@ -363,15 +364,11 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
         AppMessage.showError(context, texts.t('userRoleNotFound'));
       }
     } on FirebaseAuthException catch (e) {
-      debugPrint('OTP sign-in exception code: ${e.code}');
-      debugPrint('OTP sign-in exception message: ${e.message}');
-
-      final message = switch (e.code) {
-        'invalid-verification-code' => 'Invalid verification code.',
-        'session-expired' => 'Session expired. Please resend the code.',
-        'too-many-requests' => 'Too many requests. Please try later.',
-        _ => e.message ?? texts.t('verificationFailed'),
-      };
+      PhoneAuthHelpers.logFirebaseAuthException('OTP sign-in exception', e);
+      final message = PhoneAuthHelpers.userMessageForFirebaseAuthException(
+        e,
+        fallback: texts.t('verificationFailed'),
+      );
 
       if (!mounted) return;
       AppMessage.showError(context, message);
@@ -409,15 +406,11 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
       );
       await _signInAndContinue(autoVerifiedCredential: credential, otp: otp);
     } on FirebaseAuthException catch (e) {
-      debugPrint('OTP continue exception code: ${e.code}');
-      debugPrint('OTP continue exception message: ${e.message}');
-
-      final message = switch (e.code) {
-        'invalid-verification-code' => 'Invalid verification code.',
-        'session-expired' => 'Session expired. Please resend the code.',
-        'too-many-requests' => 'Too many requests. Please try later.',
-        _ => e.message ?? texts.t('verificationFailed'),
-      };
+      PhoneAuthHelpers.logFirebaseAuthException('OTP continue exception', e);
+      final message = PhoneAuthHelpers.userMessageForFirebaseAuthException(
+        e,
+        fallback: texts.t('verificationFailed'),
+      );
 
       if (!mounted) return;
       AppMessage.showError(context, message);
@@ -432,22 +425,24 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
     }
   }
 
-  void _showResendErrorForCode(String code) {
-    final message = switch (code) {
-      'invalid-phone-number' => 'Invalid phone number.',
-      'app-not-authorized' => 'App is not authorized for phone auth.',
-      'captcha-check-failed' => 'Captcha check failed. Try again.',
-      'too-many-requests' => 'Too many requests. Please try later.',
-      _ => 'Failed to resend code. Please try again.',
-    };
-    AppMessage.showError(context, message);
-  }
-
   Future<void> _resendCode() async {
     if (_isLoading) return;
 
     setState(() => _isLoading = true);
     try {
+      final validationError = PhoneAuthHelpers.validateFullPhoneNumber(
+        widget.phoneNumber,
+      );
+      if (validationError != null) {
+        AppMessage.showError(context, validationError);
+        setState(() => _isLoading = false);
+        return;
+      }
+
+      print('FULL PHONE NUMBER = ${widget.phoneNumber}');
+      debugPrint('OTP resend phoneNumber: ${widget.phoneNumber}');
+      PhoneAuthHelpers.logPhoneAuthConfigurationReminder();
+
       await FirebaseAuth.instance.verifyPhoneNumber(
         phoneNumber: widget.phoneNumber,
         forceResendingToken: _resendToken,
@@ -456,13 +451,23 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
           await _signInAndContinue(autoVerifiedCredential: credential);
         },
         verificationFailed: (FirebaseAuthException e) {
-          debugPrint('OTP resend failed code: ${e.code}');
-          debugPrint('OTP resend failed message: ${e.message}');
+          PhoneAuthHelpers.logFirebaseAuthException(
+            'OTP resend verificationFailed',
+            e,
+          );
           if (!mounted) return;
-          _showResendErrorForCode(e.code);
+          AppMessage.showError(
+            context,
+            PhoneAuthHelpers.userMessageForFirebaseAuthException(
+              e,
+              fallback: 'Failed to resend code. Please try again.',
+            ),
+          );
+          setState(() => _isLoading = false);
         },
         codeSent: (String verificationId, int? resendToken) {
           debugPrint('OTP resend codeSent verificationId: $verificationId');
+          debugPrint('OTP resend codeSent resendToken: $resendToken');
           if (!mounted) return;
           setState(() {
             _verificationId = verificationId;
@@ -477,6 +482,17 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
           setState(() => _isLoading = false);
         },
       );
+    } on FirebaseAuthException catch (e) {
+      PhoneAuthHelpers.logFirebaseAuthException('OTP resend threw', e);
+      if (!mounted) return;
+      AppMessage.showError(
+        context,
+        PhoneAuthHelpers.userMessageForFirebaseAuthException(
+          e,
+          fallback: 'Failed to resend code. Please try again.',
+        ),
+      );
+      setState(() => _isLoading = false);
     } catch (e) {
       debugPrint('OTP resend error: $e');
       if (!mounted) return;

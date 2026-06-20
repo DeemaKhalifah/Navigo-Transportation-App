@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../localization/localization_x.dart';
+import 'phone_auth_helpers.dart';
 
 class AppFormValidators {
   const AppFormValidators._();
@@ -49,6 +50,17 @@ class AppFormValidators {
     }
 
     return null;
+  }
+
+  static String? localPhoneNumber(
+    BuildContext context, {
+    required String countryCode,
+    required String localPhoneNumber,
+  }) {
+    return PhoneAuthHelpers.validateLocalPhoneNumber(
+      countryCode: countryCode,
+      localPhoneNumber: localPhoneNumber,
+    );
   }
 
   static String? carPlate(BuildContext context, String? value) {
