@@ -263,7 +263,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                             const SizedBox(width: 16),
                             Expanded(
                               child: Text(
-                                context.texts.t('language'),
+                                'Language / \u0627\u0644\u0644\u063A\u0629',
                                 style: NavigoTextStyles.bodyMedium.copyWith(
                                   fontWeight: FontWeight.w500,
                                   color: NavigoColors.textDark,

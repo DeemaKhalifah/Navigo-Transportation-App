@@ -21,7 +21,6 @@ class _TripHistoryScreenState extends State<TripHistoryScreen> {
       PassengerTripHistoryService();
 
   String _filterStatus = TripStatus.all;
-  final Set<String> _cancellingSlotKeys = {};
 
   List<ScheduleSlot> _applyFilter(List<ScheduleSlot> slots) {
     if (_filterStatus == TripStatus.all) return slots;
@@ -95,83 +94,6 @@ class _TripHistoryScreenState extends State<TripHistoryScreen> {
       backgroundColor: NavigoColors.transparent,
       builder: (_) =>
           _TripHistoryDetailsSheet(slot: slot, historyService: _historyService),
-    );
-  }
-
-  String _slotKey(ScheduleSlot slot) => '${slot.routeId}::${slot.slotId}';
-
-  Future<void> _cancelScheduledTrip(ScheduleSlot slot) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (dialogContext) {
-        return AlertDialog(
-          title: Text(context.texts.t('cancelTrip')),
-          content: const Text('Cancel your booking for this scheduled trip?'),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(dialogContext, false),
-              child: Text(context.texts.t('no')),
-            ),
-            TextButton(
-              onPressed: () => Navigator.pop(dialogContext, true),
-              child: Text(context.texts.t('delete')),
-            ),
-          ],
-        );
-      },
-    );
-
-    if (confirmed != true || !mounted) return;
-
-    final key = _slotKey(slot);
-    setState(() => _cancellingSlotKeys.add(key));
-
-    try {
-      final removedSeats = await _historyService.cancelPassengerScheduledTrip(
-        slot,
-      );
-      if (!mounted) return;
-      AppMessage.showSuccess(
-        context,
-        removedSeats > 1
-            ? '$removedSeats seats cancelled.'
-            : '1 seat cancelled.',
-      );
-    } catch (e) {
-      if (!mounted) return;
-      AppMessage.showError(
-        context,
-        e.toString().replaceFirst('Exception: ', ''),
-      );
-    } finally {
-      if (mounted) {
-        setState(() => _cancellingSlotKeys.remove(key));
-      }
-    }
-  }
-
-  Widget _cancelSwipeBackground({required AlignmentDirectional alignment}) {
-    return Container(
-      alignment: alignment,
-      padding: const EdgeInsets.symmetric(horizontal: 20),
-      decoration: BoxDecoration(
-        color: NavigoColors.accentRed,
-        borderRadius: BorderRadius.circular(18),
-      ),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          const Icon(Icons.cancel_outlined, color: Colors.white),
-          const SizedBox(height: 4),
-          Text(
-            context.texts.t('cancel'),
-            style: NavigoTextStyles.bodySmall.copyWith(
-              color: Colors.white,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-        ],
-      ),
     );
   }
 
@@ -273,13 +195,9 @@ class _TripHistoryScreenState extends State<TripHistoryScreen> {
                     itemBuilder: (_, index) {
                       final slot = slots[index];
                       final status = _historyService.statusOf(slot);
-                      final isScheduled = status == TripStatus.scheduled;
-                      final isCancelling = _cancellingSlotKeys.contains(
-                        _slotKey(slot),
-                      );
 
-                      final card = GestureDetector(
-                        onTap: isCancelling ? null : () => _showDetails(slot),
+                      return GestureDetector(
+                        onTap: () => _showDetails(slot),
                         child: Container(
                           padding: const EdgeInsets.all(16),
                           decoration: NavigoDecorations.kCardDecoration,
@@ -293,18 +211,11 @@ class _TripHistoryScreenState extends State<TripHistoryScreen> {
                                     NavigoDecorations.iconCircleDecoration(
                                       _statusColor(status),
                                     ),
-                                child: isCancelling
-                                    ? const Padding(
-                                        padding: EdgeInsets.all(10),
-                                        child: CircularProgressIndicator(
-                                          strokeWidth: 2,
-                                        ),
-                                      )
-                                    : Icon(
-                                        _statusIcon(status),
-                                        color: _statusColor(status),
-                                        size: 22,
-                                      ),
+                                child: Icon(
+                                  _statusIcon(status),
+                                  color: _statusColor(status),
+                                  size: 22,
+                                ),
                               ),
                               const SizedBox(width: 12),
                               Expanded(
@@ -356,26 +267,6 @@ class _TripHistoryScreenState extends State<TripHistoryScreen> {
                           ),
                         ),
                       );
-
-                      if (!isScheduled) return card;
-
-                      return Dismissible(
-                        key: ValueKey(_slotKey(slot)),
-                        direction: isCancelling
-                            ? DismissDirection.none
-                            : DismissDirection.horizontal,
-                        background: _cancelSwipeBackground(
-                          alignment: AlignmentDirectional.centerStart,
-                        ),
-                        secondaryBackground: _cancelSwipeBackground(
-                          alignment: AlignmentDirectional.centerEnd,
-                        ),
-                        confirmDismiss: (_) async {
-                          await _cancelScheduledTrip(slot);
-                          return false;
-                        },
-                        child: card,
-                      );
                     },
                   );
                 },
@@ -408,6 +299,7 @@ class _TripHistoryDetailsSheetState extends State<_TripHistoryDetailsSheet> {
   String _plateNumber = '...';
   String _driverPhone = '...';
   bool _loadingDriverInfo = true;
+  bool _isCancelling = false;
 
   @override
   void initState() {
@@ -483,6 +375,56 @@ class _TripHistoryDetailsSheetState extends State<_TripHistoryDetailsSheet> {
     );
   }
 
+  Future<void> _cancelScheduledTrip() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: Text(context.texts.t('cancelTrip')),
+          content: Text(context.texts.t('cancelTripConfirm')),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: Text(context.texts.t('no')),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext, true),
+              style: TextButton.styleFrom(
+                foregroundColor: NavigoColors.accentRed,
+              ),
+              child: Text(context.texts.t('yesCancelTrip')),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (confirmed != true || !mounted) return;
+
+    setState(() => _isCancelling = true);
+
+    try {
+      final removedSeats = await widget.historyService
+          .cancelPassengerScheduledTrip(widget.slot);
+      if (!mounted) return;
+      AppMessage.showSuccess(
+        context,
+        removedSeats > 1
+            ? '$removedSeats seats cancelled.'
+            : '1 seat cancelled.',
+      );
+      Navigator.pop(context);
+    } catch (e) {
+      if (!mounted) return;
+      AppMessage.showError(
+        context,
+        e.toString().replaceFirst('Exception: ', ''),
+      );
+    } finally {
+      if (mounted) setState(() => _isCancelling = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final status = widget.historyService.statusOf(widget.slot);
@@ -510,7 +452,7 @@ class _TripHistoryDetailsSheetState extends State<_TripHistoryDetailsSheet> {
             ],
           ),
           const SizedBox(height: 16),
-          Divider(color: NavigoColors.primaryOrange.withOpacity(0.3)),
+          Divider(color: NavigoColors.primaryOrange.withValues(alpha: 0.3)),
           const SizedBox(height: 8),
 
           // Only show: Line, Date, Departure, Arrival, Vehicle, Plate Number, Driver Phone
@@ -551,21 +493,27 @@ class _TripHistoryDetailsSheetState extends State<_TripHistoryDetailsSheet> {
               width: double.infinity,
               height: 52,
               child: ElevatedButton.icon(
-                onPressed: () {
-                  Navigator.pop(context);
-                  final startPoint = widget.historyService.fromOf(widget.slot);
-                  final endPoint = widget.historyService.toOf(widget.slot);
-                  Navigator.pushReplacement(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => PassengerHomeScreen(
-                        routeId: widget.slot.routeId,
-                        routeStartPoint: startPoint,
-                        routeEndPoint: endPoint,
-                      ),
-                    ),
-                  );
-                },
+                onPressed: _isCancelling
+                    ? null
+                    : () {
+                        Navigator.pop(context);
+                        final startPoint = widget.historyService.fromOf(
+                          widget.slot,
+                        );
+                        final endPoint = widget.historyService.toOf(
+                          widget.slot,
+                        );
+                        Navigator.pushReplacement(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => PassengerHomeScreen(
+                              routeId: widget.slot.routeId,
+                              routeStartPoint: startPoint,
+                              routeEndPoint: endPoint,
+                            ),
+                          ),
+                        );
+                      },
                 style: NavigoDecorations.kPrimaryButtonLargeStyle,
                 icon: const Icon(Icons.route, size: 20),
                 label: Text(
@@ -574,6 +522,32 @@ class _TripHistoryDetailsSheetState extends State<_TripHistoryDetailsSheet> {
                 ),
               ),
             ),
+
+          if (status == TripStatus.scheduled) ...[
+            const SizedBox(height: 10),
+            SizedBox(
+              width: double.infinity,
+              height: 52,
+              child: ElevatedButton.icon(
+                onPressed: _isCancelling ? null : _cancelScheduledTrip,
+                style: NavigoDecorations.coloredButton(NavigoColors.accentRed),
+                icon: _isCancelling
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: NavigoColors.textLight,
+                        ),
+                      )
+                    : const Icon(Icons.cancel_outlined, size: 20),
+                label: Text(
+                  context.texts.t('cancelTrip'),
+                  style: NavigoTextStyles.button,
+                ),
+              ),
+            ),
+          ],
 
           // "Track Live Trip" button for on-trip trips
           if (status == TripStatus.onTrip)
