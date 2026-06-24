@@ -10,6 +10,42 @@ class DriversApiService {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
   final FirebaseAuth _auth = FirebaseAuth.instance;
 
+  Future<DocumentReference<Map<String, dynamic>>> _driverDocRef(
+    String uid,
+  ) async {
+    final directRef = _db.collection('drivers').doc(uid);
+    final directSnap = await directRef.get();
+    if (directSnap.exists) return directRef;
+
+    final query = await _db
+        .collection('drivers')
+        .where('userId', isEqualTo: uid)
+        .limit(1)
+        .get();
+
+    if (query.docs.isNotEmpty) {
+      return query.docs.first.reference;
+    }
+
+    return directRef;
+  }
+
+  String _fullNameFromData(Map<String, dynamic> data) {
+    final direct =
+        (data['fullName'] ??
+                data['name'] ??
+                data['displayName'] ??
+                data['driverName'] ??
+                '')
+            .toString()
+            .trim();
+    if (direct.isNotEmpty) return direct;
+
+    final firstName = (data['firstName'] ?? '').toString().trim();
+    final lastName = (data['lastName'] ?? '').toString().trim();
+    return '$firstName $lastName'.trim();
+  }
+
   Future<Map<String, dynamic>> getDriverProfile() async {
     final user = _auth.currentUser;
     if (user == null) {
@@ -17,11 +53,13 @@ class DriversApiService {
     }
 
     if (!ApiConfig.useBackend) {
-      final doc = await _db.collection('drivers').doc(user.uid).get();
+      final ref = await _driverDocRef(user.uid);
+      final doc = await ref.get();
 
       if (!doc.exists) {
         return {
           'userId': user.uid,
+          'fullName': '',
           'firstName': '',
           'lastName': '',
           'phone': user.phoneNumber ?? '',
@@ -37,6 +75,7 @@ class DriversApiService {
 
       return {
         'userId': user.uid,
+        'fullName': _fullNameFromData(data),
         'firstName': data['firstName'] ?? '',
         'lastName': data['lastName'] ?? '',
         'phone': data['phone'] ?? user.phoneNumber ?? '',
@@ -64,7 +103,9 @@ class DriversApiService {
     }
 
     if (!ApiConfig.useBackend) {
-      await _db.collection('drivers').doc(user.uid).set({
+      final driverRef = await _driverDocRef(user.uid);
+
+      await driverRef.set({
         'firstName': firstName,
         'lastName': lastName,
         'phone': phone,
@@ -103,7 +144,9 @@ class DriversApiService {
     final normalized = DriverStatus.normalize(status);
 
     if (!ApiConfig.useBackend) {
-      await _db.collection('drivers').doc(user.uid).set({
+      final driverRef = await _driverDocRef(user.uid);
+
+      await driverRef.set({
         'status': normalized,
         'isOnline': normalized == DriverStatus.available,
         'updatedAt': FieldValue.serverTimestamp(),
@@ -125,7 +168,9 @@ class DriversApiService {
     if (user == null) return;
 
     if (!ApiConfig.useBackend) {
-      await _db.collection('drivers').doc(user.uid).set({
+      final driverRef = await _driverDocRef(user.uid);
+
+      await driverRef.set({
         'latitude': latitude,
         'longitude': longitude,
         'location': {'lat': latitude, 'lng': longitude},

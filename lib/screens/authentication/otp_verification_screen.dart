@@ -8,6 +8,7 @@ import 'package:flutter/services.dart';
 import '../../localization/localization_x.dart';
 import '../../theme/app_theme.dart';
 import '../../services/passenger_trip_repository.dart';
+import '../../services/local_storage_service.dart';
 import '../passenger/passenger_home_screen.dart';
 import '../driver/driver_home_screen.dart';
 import '../../models/driver_status.dart';
@@ -214,6 +215,12 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
 
     final driverDoc = await fs.collection('drivers').doc(uid).get();
     final bool approved = driverDoc.data()?['isApproved'] == true;
+    await LocalStorageService.saveDriverDisplayName(
+      '$firstName $lastName'.trim(),
+    );
+    await LocalStorageService.saveDriverStatus(
+      DriverStatus.normalize(driverDoc.data()?['status']?.toString()),
+    );
 
     if (!mounted) return;
 
@@ -346,6 +353,9 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
             .get();
 
         final bool isApproved = driverDoc.data()?['isApproved'] == true;
+        await LocalStorageService.saveDriverStatus(
+          DriverStatus.normalize(driverDoc.data()?['status']?.toString()),
+        );
 
         if (!mounted) return;
 

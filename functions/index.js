@@ -495,6 +495,177 @@ exports.sendNotificationOnCreate = functions.firestore
 // Export helper for reuse by other Cloud Functions files (or tests).
 exports.createNotificationDoc = createNotificationDoc;
 
+async function authenticatedUidFromRequest(req) {
+  const header = (req.get('Authorization') || '').toString();
+  const match = header.match(/^Bearer\s+(.+)$/i);
+  if (!match) {
+    throw new functions.https.HttpsError(
+      'unauthenticated',
+      'Authentication is required.',
+    );
+  }
+
+  const decoded = await admin.auth().verifyIdToken(match[1]);
+  return decoded.uid;
+}
+
+async function resolveRouteIdForTrip(routeId, tripId) {
+  const safeRouteId = (routeId || '').toString().trim();
+  const safeTripId = (tripId || '').toString().trim();
+
+  if (safeRouteId) return safeRouteId;
+  if (!safeTripId) return '';
+
+  const snap = await db.collection('route').get();
+  for (const doc of snap.docs) {
+    const slots = doc.data().scheduleSlots;
+    if (!Array.isArray(slots)) continue;
+    if (
+      slots.some(
+        (slot) =>
+          slot &&
+          (slot.slotId || '').toString().trim() === safeTripId,
+      )
+    ) {
+      return doc.id;
+    }
+  }
+
+  return '';
+}
+
+/**
+ * HTTPS endpoint: start a driver trip quickly and atomically.
+ *
+ * The app can call this with a Firebase ID token. If this function has not
+ * been deployed yet, the app falls back to its existing direct Firestore write.
+ */
+exports.startDriverTrip = functions.https.onRequest(async (req, res) => {
+  setCors(res);
+  if (req.method === 'OPTIONS') {
+    res.status(204).send('');
+    return;
+  }
+  if (req.method !== 'POST') {
+    res.status(405).json({ success: false, error: 'Method not allowed' });
+    return;
+  }
+
+  try {
+    const uid = await authenticatedUidFromRequest(req);
+    const body = req.body || {};
+    const tripId = (body.tripId || '').toString().trim();
+    const driverId = (body.driverId || uid).toString().trim();
+    const routeId = await resolveRouteIdForTrip(body.routeId, tripId);
+    const startLatitude =
+      typeof body.startLatitude === 'number' ? body.startLatitude : null;
+    const startLongitude =
+      typeof body.startLongitude === 'number' ? body.startLongitude : null;
+
+    if (!tripId) {
+      res.status(400).json({ success: false, error: 'Trip ID is missing.' });
+      return;
+    }
+    if (!driverId || driverId !== uid) {
+      res.status(403).json({ success: false, error: 'Driver mismatch.' });
+      return;
+    }
+    if (!routeId) {
+      res.status(404).json({ success: false, error: 'Trip route not found.' });
+      return;
+    }
+
+    const routeRef = db.collection('route').doc(routeId);
+    const driverRef = db.collection('drivers').doc(driverId);
+
+    await db.runTransaction(async (tx) => {
+      const routeSnap = await tx.get(routeRef);
+      if (!routeSnap.exists) {
+        throw new functions.https.HttpsError('not-found', 'Route not found.');
+      }
+
+      const routeData = routeSnap.data() || {};
+      const rawSlots = routeData.scheduleSlots;
+      if (!Array.isArray(rawSlots)) {
+        throw new functions.https.HttpsError(
+          'failed-precondition',
+          'scheduleSlots is missing in this route.',
+        );
+      }
+
+      const slots = rawSlots.map((slot) =>
+        slot && typeof slot === 'object' && !Array.isArray(slot)
+          ? { ...slot }
+          : {},
+      );
+      const index = slots.findIndex(
+        (slot) => (slot.slotId || '').toString().trim() === tripId,
+      );
+
+      if (index === -1) {
+        throw new functions.https.HttpsError('not-found', 'Trip slot not found.');
+      }
+
+      const slotDriverId = (slots[index].driverId || driverId).toString().trim();
+      if (slotDriverId && slotDriverId !== driverId) {
+        throw new functions.https.HttpsError(
+          'permission-denied',
+          'This trip is assigned to another driver.',
+        );
+      }
+
+      slots[index] = {
+        ...slots[index],
+        slotId: tripId,
+        routeId,
+        driverId,
+        status: 'onTrip',
+        startedAt: admin.firestore.Timestamp.now(),
+      };
+
+      const driverUpdate = {
+        status: 'onTrip',
+        isOnline: true,
+        currentRouteId: routeId,
+        currentTripId: tripId,
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      };
+
+      if (startLatitude != null && startLongitude != null) {
+        driverUpdate.latitude = startLatitude;
+        driverUpdate.longitude = startLongitude;
+        driverUpdate.location = { lat: startLatitude, lng: startLongitude };
+        driverUpdate.lastLocationUpdate =
+          admin.firestore.FieldValue.serverTimestamp();
+      }
+
+      tx.update(routeRef, {
+        scheduleSlots: slots,
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+      tx.set(driverRef, driverUpdate, { merge: true });
+    });
+
+    res.json({ success: true, routeId, tripId, driverId });
+  } catch (error) {
+    const code = error && error.code;
+    const message = error && error.message ? error.message : String(error);
+    console.error('[startDriverTrip] error', error);
+
+    if (code === 'unauthenticated') {
+      res.status(401).json({ success: false, error: message });
+    } else if (code === 'permission-denied') {
+      res.status(403).json({ success: false, error: message });
+    } else if (code === 'not-found') {
+      res.status(404).json({ success: false, error: message });
+    } else if (code === 'failed-precondition') {
+      res.status(412).json({ success: false, error: message });
+    } else {
+      res.status(500).json({ success: false, error: message });
+    }
+  }
+});
+
 /**
  * Firestore trigger: notify passenger when a trip request status changes.
  *

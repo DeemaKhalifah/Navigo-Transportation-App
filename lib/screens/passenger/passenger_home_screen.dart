@@ -1085,22 +1085,15 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> {
     );
   }
 
-  Future<void> _openScheduleTrip() async {
-    final saved = await LocalStorageService.getSelectedLine();
-    final line = (saved != null && saved.trim().isNotEmpty)
-        ? saved.trim()
-        : _selectedLine?.trim();
-
-    if (line == null || line.isEmpty) {
-      if (!mounted) return;
-      AppMessage.showError(context, context.texts.t('selectLineFirst'));
-      return;
-    }
+  void _openScheduleTrip() {
+    final line = _selectedLine?.trim();
 
     if (!mounted) return;
     Navigator.push(
       context,
-      MaterialPageRoute(builder: (_) => ScheduleScreen(selectedLine: line)),
+      MaterialPageRoute(
+        builder: (_) => ScheduleScreen(selectedLine: line ?? ''),
+      ),
     );
   }
 
@@ -1282,6 +1275,10 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> {
                                                       _showLineSuggestions =
                                                           false;
                                                     });
+                                                    unawaited(
+                                                      LocalStorageService
+                                                          .clearSelectedLine(),
+                                                    );
                                                   },
                                                 )
                                               : null),

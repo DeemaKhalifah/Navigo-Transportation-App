@@ -247,11 +247,8 @@ class _DriverTripsScreenState extends State<DriverTripsScreen> {
             Expanded(
               child: StreamBuilder<List<ScheduleSlot>>(
                 stream: _tripsService.watchDriverTrips(),
+                initialData: const [],
                 builder: (context, snapshot) {
-                  if (snapshot.connectionState == ConnectionState.waiting) {
-                    return const Center(child: CircularProgressIndicator());
-                  }
-
                   if (snapshot.hasError) {
                     return Center(
                       child: Padding(

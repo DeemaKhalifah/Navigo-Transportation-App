@@ -10,9 +10,11 @@ import 'package:google_maps_flutter/google_maps_flutter.dart';
 import '../../models/schedule_slot.dart';
 import '../../models/trip_status.dart';
 import '../../models/driver_status.dart';
+import '../../models/route.dart';
 import '../../services/driver_live_trip_service.dart';
 import '../../services/driver_trips_service.dart';
 import '../../services/google_route_path_service.dart';
+import '../../services/local_storage_service.dart';
 import '../../services/notification_service.dart';
 import '../../localization/localization_x.dart';
 import '../../theme/app_theme.dart';
@@ -22,7 +24,9 @@ import 'driver_bottom_nav_bar.dart';
 import 'package:navigo/screens/notifications_screen.dart';
 
 class DriverHomeScreen extends StatefulWidget {
-  const DriverHomeScreen({super.key});
+  const DriverHomeScreen({super.key, this.initialActiveSlot});
+
+  final ScheduleSlot? initialActiveSlot;
 
   @override
   State<DriverHomeScreen> createState() => _DriverHomeScreenState();
@@ -65,6 +69,7 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
   String _activeRoutePolyline = '';
   List<LatLng> _decodedTripPath = const [];
   String? _locationStreamDriverId;
+  bool _liveTrackingStarted = false;
 
   // ── Passenger pin data ──────────────────────────────────────────────────────
   List<Map<String, dynamic>> _passengerPins = [];
@@ -72,10 +77,25 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
   @override
   void initState() {
     super.initState();
-    _loadDriverName();
-    _watchDriverStatus();
-    _getUserLocation();
-    _watchTrips();
+    _primeStartedTrip();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || _isDisposed) return;
+      _loadSavedDriverStatus();
+      _loadSavedDriverName();
+      _loadDriverName();
+      _watchDriverStatus();
+      _watchTrips();
+
+      final initialSlot = widget.initialActiveSlot;
+      if (initialSlot != null) {
+        Future<void>.delayed(const Duration(milliseconds: 150), () {
+          if (!mounted || _isDisposed || _liveTrackingStarted) return;
+          _startLiveTracking(initialSlot);
+        });
+      } else {
+        _getUserLocation();
+      }
+    });
   }
 
   @override
@@ -90,6 +110,66 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
       _mapController?.dispose();
     } catch (_) {}
     super.dispose();
+  }
+
+  void _primeStartedTrip() {
+    final slot = widget.initialActiveSlot;
+    if (slot == null) return;
+
+    _activeSlot = slot;
+    _activeRouteId = slot.routeId;
+    _tripLine = _routeLabelFromCachedTrip(slot);
+    _assignedTripsCount = 1;
+    _driverStatus = DriverStatus.onTrip;
+  }
+
+  String? _routeLabelFromCachedTrip(ScheduleSlot slot) {
+    final label = _tripsService.lineOf(slot).trim();
+    if (_isRouteEndpointLabel(label)) return label;
+    return null;
+  }
+
+  String? _routeLabelFromRoute(RouteModel? route) {
+    if (route == null) return null;
+    final start = route.startPoint.trim();
+    final end = route.endPoint.trim();
+    if (start.isEmpty || end.isEmpty) return null;
+    return '$start ↔ $end';
+  }
+
+  bool _isRouteEndpointLabel(String label) {
+    return label.contains('↔') || label.contains('→') || label.contains('->');
+  }
+
+  Future<void> _loadRouteLabel(String routeId) async {
+    final safeRouteId = routeId.trim();
+    if (safeRouteId.isEmpty) return;
+
+    try {
+      final snap = await FirebaseFirestore.instance
+          .collection('route')
+          .doc(safeRouteId)
+          .get();
+      if (!mounted || _isDisposed || !snap.exists) return;
+      final data = snap.data() ?? {};
+      final routeMap = Map<String, dynamic>.from(data);
+      routeMap['routeId'] = (routeMap['routeId'] ?? snap.id).toString();
+      final label = _routeLabelFromRoute(RouteModel.fromMap(routeMap));
+      if (label == null) return;
+      setState(() => _tripLine = label);
+    } catch (_) {}
+  }
+
+  Future<void> _loadSavedDriverStatus() async {
+    final status = await LocalStorageService.getDriverStatus();
+    if (!mounted || _isDisposed || _activeSlot != null) return;
+    setState(() => _driverStatus = status);
+  }
+
+  Future<void> _loadSavedDriverName() async {
+    final name = await LocalStorageService.getDriverDisplayName();
+    if (!mounted || _isDisposed || name == null) return;
+    setState(() => _driverName = name);
   }
 
   Future<void> _watchDriverStatus() async {
@@ -116,10 +196,12 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
       if (!mounted || _isDisposed) return;
       if (!snap.exists) return;
       final data = snap.data() ?? {};
+      final status = DriverStatus.normalize(
+        data['status']?.toString() ?? DriverStatus.offline,
+      );
+      unawaited(LocalStorageService.saveDriverStatus(status));
       setState(() {
-        _driverStatus = DriverStatus.normalize(
-          data['status']?.toString() ?? DriverStatus.offline,
-        );
+        _driverStatus = status;
       });
     });
   }
@@ -128,16 +210,61 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
     final uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid == null) return;
     try {
-      final doc = await FirebaseFirestore.instance
-          .collection('users')
-          .doc(uid)
-          .get();
+      final db = FirebaseFirestore.instance;
+      final userDoc = await db.collection('users').doc(uid).get();
+      final driverDoc = await db.collection('drivers').doc(uid).get();
+      DocumentSnapshot<Map<String, dynamic>>? userIdDriverDoc;
+
+      if (!driverDoc.exists) {
+        final query = await db
+            .collection('drivers')
+            .where('userId', isEqualTo: uid)
+            .limit(1)
+            .get();
+        if (query.docs.isNotEmpty) {
+          userIdDriverDoc = query.docs.first;
+        }
+      }
+
+      final name = _displayNameFromMaps([
+        userDoc.data(),
+        driverDoc.data(),
+        userIdDriverDoc?.data(),
+        {
+          'displayName': FirebaseAuth.instance.currentUser?.displayName,
+          'phone': FirebaseAuth.instance.currentUser?.phoneNumber,
+          'email': FirebaseAuth.instance.currentUser?.email,
+        },
+      ]);
       if (!mounted || _isDisposed) return;
-      final first = (doc.data()?['firstName'] ?? '').toString().trim();
-      final last = (doc.data()?['lastName'] ?? '').toString().trim();
-      final name = '$first $last'.trim();
-      setState(() => _driverName = name.isNotEmpty ? name : 'Driver');
+      if (name.isNotEmpty) {
+        await LocalStorageService.saveDriverDisplayName(name);
+        if (!mounted || _isDisposed) return;
+        setState(() => _driverName = name);
+      }
     } catch (_) {}
+  }
+
+  String _displayNameFromMaps(List<Map<String, dynamic>?> maps) {
+    for (final data in maps) {
+      if (data == null) continue;
+      final direct =
+          (data['fullName'] ??
+                  data['name'] ??
+                  data['displayName'] ??
+                  data['driverName'] ??
+                  '')
+              .toString()
+              .trim();
+      if (direct.isNotEmpty) return direct;
+
+      final first = (data['firstName'] ?? '').toString().trim();
+      final last = (data['lastName'] ?? '').toString().trim();
+      final full = '$first $last'.trim();
+      if (full.isNotEmpty) return full;
+    }
+
+    return '';
   }
 
   void _watchTrips() {
@@ -164,22 +291,30 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
         if (newActive != null) {
           _startLiveTracking(newActive);
         }
+      } else if (newActive != null && !_liveTrackingStarted) {
+        _startLiveTracking(newActive);
       }
     });
   }
 
   void _startLiveTracking(ScheduleSlot slot) {
     if (_isDisposed) return;
+    if (_liveTrackingStarted && _activeSlot?.slotId == slot.slotId) return;
 
     final driverId =
         _driverDocRef?.id ?? FirebaseAuth.instance.currentUser?.uid;
     if (driverId == null) return;
 
+    _liveTrackingStarted = true;
     setState(() {
       _activeSlot = slot;
       _activeRouteId = slot.routeId;
-      _tripLine = _tripsService.lineOf(slot);
+      _tripLine = _routeLabelFromCachedTrip(slot);
     });
+
+    if (_tripLine == null) {
+      unawaited(_loadRouteLabel(slot.routeId));
+    }
 
     _startGpsPublishing(driverId);
 
@@ -194,6 +329,10 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
           final endLng = _toDouble(data['endLng']);
           final routePolyline =
               (data['polyline'] ?? data['routePolyline'] ?? '').toString();
+          final liveRoute = data['route'] is RouteModel
+              ? data['route'] as RouteModel
+              : null;
+          final liveRouteLabel = _routeLabelFromRoute(liveRoute);
           if (routePolyline.trim().isNotEmpty &&
               routePolyline != _activeRoutePolyline) {
             _activeRoutePolyline = routePolyline;
@@ -221,6 +360,9 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
 
           if (mounted && !_isDisposed) {
             setState(() {
+              if (liveRouteLabel != null) {
+                _tripLine = liveRouteLabel;
+              }
               _polylines.clear();
               _markers.removeWhere(
                 (m) =>
@@ -292,6 +434,7 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
   }
 
   void _stopLiveTracking() {
+    _liveTrackingStarted = false;
     _locationSub?.cancel();
     _locationSub = null;
     _locationStreamDriverId = null;
@@ -540,7 +683,8 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
       AppMessage.showSuccess(context, 'Trip ended successfully');
 
       _stopLiveTracking();
-      setState(() {});
+      await LocalStorageService.saveDriverStatus(DriverStatus.available);
+      setState(() => _driverStatus = DriverStatus.available);
     } catch (e) {
       if (!mounted || _isDisposed) return;
       AppMessage.showError(context, 'Failed to end trip: $e');

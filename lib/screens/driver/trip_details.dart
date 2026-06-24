@@ -31,11 +31,14 @@ class _TripDetailesState extends State<TripDetailes> {
       TripNotificationController();
 
   bool _isCancelling = false;
+  bool _isStarting = false;
+  late Future<Map<String, dynamic>?> _tripDetailsFuture;
   Timer? _clockTick;
 
   @override
   void initState() {
     super.initState();
+    _tripDetailsFuture = _loadTripDetails();
     // Refresh UI so the "Start Trip" button enables itself
     // when the allowed window is reached.
     _clockTick = Timer.periodic(const Duration(seconds: 30), (_) {
@@ -47,6 +50,62 @@ class _TripDetailesState extends State<TripDetailes> {
   void dispose() {
     _clockTick?.cancel();
     super.dispose();
+  }
+
+  Future<Map<String, dynamic>?> _loadTripDetails() {
+    return service.getTripDetails(
+      tripId: (widget.trip['tripId'] ?? '').toString().trim(),
+      routeId: widget.trip['routeId']?.toString(),
+    );
+  }
+
+  Future<void> _startTrip(ScheduleSlot slot) async {
+    if (_isStarting) return;
+
+    final safeTripId = (widget.trip['tripId'] ?? slot.slotId).toString().trim();
+    final safeRouteId = (widget.trip['routeId'] ?? slot.routeId)
+        .toString()
+        .trim();
+    final driverId = FirebaseAuth.instance.currentUser?.uid ?? '';
+
+    if (safeTripId.isEmpty) {
+      AppMessage.showError(context, context.texts.t('tripIdMissing'));
+      return;
+    }
+
+    setState(() => _isStarting = true);
+
+    try {
+      await _liveTripService.startTrip(
+        routeId: safeRouteId,
+        tripId: safeTripId,
+        driverId: driverId,
+      );
+    } catch (e) {
+      if (!mounted) return;
+      AppMessage.showError(context, '${context.texts.t('couldNotStart')}: $e');
+      setState(() => _isStarting = false);
+      return;
+    }
+
+    unawaited(
+      _tripNotificationController.notifyPassengersTripStarted(
+        routeId: slot.routeId,
+        tripId: slot.slotId,
+        passengerIds: slot.passengersIds,
+      ).catchError((_) {}),
+    );
+
+    if (!mounted) return;
+    Navigator.pushAndRemoveUntil(
+      context,
+      PageRouteBuilder<void>(
+        pageBuilder: (_, _, _) => DriverHomeScreen(initialActiveSlot: slot),
+        transitionDuration: Duration.zero,
+        reverseTransitionDuration: Duration.zero,
+      ),
+      (route) => false,
+    );
   }
 
   Future<void> _cancelTrip() async {
@@ -110,9 +169,6 @@ class _TripDetailesState extends State<TripDetailes> {
 
   @override
   Widget build(BuildContext context) {
-    final String tripId = (widget.trip['tripId'] ?? '').toString().trim();
-    final String? routeId = widget.trip['routeId']?.toString();
-
     return Scaffold(
       backgroundColor: NavigoColors.backgroundLight,
       bottomNavigationBar: const DriverBottomNavBar(currentIndex: 1),
@@ -145,10 +201,7 @@ class _TripDetailesState extends State<TripDetailes> {
 
             Expanded(
               child: FutureBuilder<Map<String, dynamic>?>(
-                future: service.getTripDetails(
-                  tripId: tripId,
-                  routeId: routeId,
-                ),
+                future: _tripDetailsFuture,
                 builder: (context, snapshot) {
                   if (snapshot.connectionState == ConnectionState.waiting) {
                     return const Center(child: CircularProgressIndicator());
@@ -304,68 +357,22 @@ class _TripDetailesState extends State<TripDetailes> {
                           height: NavigoSizes.buttonHeight,
                           child: ElevatedButton(
                             style: NavigoDecorations.kPrimaryButtonLargeStyle,
-                            onPressed: canStartTrip
-                                ? () async {
-                                    final safeTripId =
-                                        (widget.trip['tripId'] ?? '')
-                                            .toString()
-                                            .trim();
-                                    final safeRouteId =
-                                        (widget.trip['routeId'] ?? '')
-                                            .toString()
-                                            .trim();
-                                    final driverId =
-                                        FirebaseAuth
-                                            .instance
-                                            .currentUser
-                                            ?.uid ??
-                                        '';
-
-                                    if (safeTripId.isEmpty) {
-                                      AppMessage.showError(
-                                        context,
-                                        context.texts.t('tripIdMissing'),
-                                      );
-                                      return;
-                                    }
-
-                                    try {
-                                      await _liveTripService.startTrip(
-                                        routeId: safeRouteId,
-                                        tripId: safeTripId,
-                                        driverId: driverId,
-                                      );
-
-                                      await _tripNotificationController
-                                          .notifyPassengersTripStarted(
-                                            routeId: slot.routeId,
-                                            tripId: slot.slotId,
-                                            passengerIds: slot.passengersIds,
-                                          );
-                                    } catch (e) {
-                                      if (!context.mounted) return;
-                                      AppMessage.showError(
-                                        context,
-                                        '${context.texts.t('couldNotStart')}: $e',
-                                      );
-                                      return;
-                                    }
-
-                                    if (!context.mounted) return;
-                                    Navigator.pushAndRemoveUntil(
-                                      context,
-                                      MaterialPageRoute(
-                                        builder: (_) =>
-                                            const DriverHomeScreen(),
-                                      ),
-                                      (route) => false,
-                                    );
-                                  }
+                            onPressed: canStartTrip && !_isStarting
+                                ? () => _startTrip(slot)
                                 : null,
-                            child: Text(
-                              context.texts.t('startTrip'),
-                              style: NavigoTextStyles.button,
-                            ),
+                            child: _isStarting
+                                ? const SizedBox(
+                                    width: 22,
+                                    height: 22,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      color: NavigoColors.textLight,
+                                    ),
+                                  )
+                                : Text(
+                                    context.texts.t('startTrip'),
+                                    style: NavigoTextStyles.button,
+                                  ),
                           ),
                         ),
 

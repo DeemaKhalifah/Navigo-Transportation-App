@@ -63,7 +63,14 @@ class PassengerScheduleService {
               .trim();
 
       if (normalizedLine.isNotEmpty &&
-          !lineText.toLowerCase().contains(normalizedLine)) {
+          !_routeMatchesSelectedLine(
+            selectedLine: normalizedLine,
+            routeId: routeId,
+            routeData: data,
+            lineText: lineText,
+            fromText: fromText,
+            toText: toText,
+          )) {
         continue;
       }
 
@@ -83,8 +90,8 @@ class PassengerScheduleService {
         if (slot.departureAt.isBefore(now)) continue;
 
         if (normalizedVehicle.isNotEmpty &&
-            slot.vehicleType.toLowerCase() != normalizedVehicle &&
-            !slot.vehicleType.toLowerCase().contains(normalizedVehicle)) {
+            ScheduleSlot.normalizeVehicleType(slot.vehicleType) !=
+                ScheduleSlot.normalizeVehicleType(normalizedVehicle)) {
           continue;
         }
 
@@ -331,6 +338,46 @@ class PassengerScheduleService {
 
   String _slotKey(String routeId, String slotId) => '$routeId::$slotId';
 
+  bool _routeMatchesSelectedLine({
+    required String selectedLine,
+    required String routeId,
+    required Map<String, dynamic> routeData,
+    required String lineText,
+    required String fromText,
+    required String toText,
+  }) {
+    final selected = _normalizeRouteLabel(selectedLine);
+    if (selected.isEmpty) return true;
+
+    final aliases = <String>{
+      routeId,
+      (routeData['routeId'] ?? '').toString(),
+      lineText,
+      (routeData['line'] ?? '').toString(),
+      (routeData['routeName'] ?? '').toString(),
+      if (fromText.isNotEmpty && toText.isNotEmpty) '$fromText <-----> $toText',
+      if (fromText.isNotEmpty && toText.isNotEmpty) '$fromText ↔ $toText',
+      if (fromText.isNotEmpty && toText.isNotEmpty) '$fromText -> $toText',
+    }.map(_normalizeRouteLabel).where((value) => value.isNotEmpty).toSet();
+
+    return aliases.any(
+      (alias) =>
+          alias == selected ||
+          alias.contains(selected) ||
+          selected.contains(alias),
+    );
+  }
+
+  String _normalizeRouteLabel(String value) {
+    return value
+        .trim()
+        .toLowerCase()
+        .replaceAll(RegExp(r'\s*<[-\s]*>\s*'), '|')
+        .replaceAll(RegExp(r'\s*[-=]+>\s*'), '|')
+        .replaceAll(RegExp(r'\s*[↔→]\s*'), '|')
+        .replaceAll(RegExp(r'\s+'), ' ');
+  }
+
   String _resolveStatus({
     required String rawStatus,
     required DateTime departureAt,
@@ -362,17 +409,15 @@ class PassengerScheduleService {
     String routeId,
     Map<String, dynamic> routeData,
   ) async {
-    final subSnap = await _db
-        .collection(_routesCollection)
-        .doc(routeId)
-        .collection('scheduleSlots')
-        .get();
-
-    if (subSnap.docs.isNotEmpty) {
-      return subSnap.docs.map((doc) {
-        final map = doc.data();
-        final slot = ScheduleSlot.fromMap(doc.id, map);
-        return ScheduleSlot(
+    final slotsById = <String, ScheduleSlot>{};
+    final rawSlots = routeData['scheduleSlots'];
+    if (rawSlots is List) {
+      for (int i = 0; i < rawSlots.length; i++) {
+        final raw = rawSlots[i];
+        if (raw is! Map) continue;
+        final map = Map<String, dynamic>.from(raw);
+        final slot = ScheduleSlot.fromMap('slot_$i', map);
+        final fixedSlot = ScheduleSlot(
           slotId: slot.slotId,
           routeId: slot.routeId.isEmpty ? routeId : slot.routeId,
           departureAt: slot.departureAt,
@@ -385,35 +430,36 @@ class PassengerScheduleService {
           frequencyMinutes: slot.frequencyMinutes,
           status: slot.status,
         );
-      }).toList();
+        slotsById[fixedSlot.slotId] = fixedSlot;
+      }
     }
 
-    final rawSlots = routeData['scheduleSlots'];
-    if (rawSlots is! List) return <ScheduleSlot>[];
+    final subSnap = await _db
+        .collection(_routesCollection)
+        .doc(routeId)
+        .collection('scheduleSlots')
+        .get();
 
-    final List<ScheduleSlot> slots = [];
-    for (int i = 0; i < rawSlots.length; i++) {
-      final raw = rawSlots[i];
-      if (raw is! Map) continue;
-      final map = Map<String, dynamic>.from(raw);
-      final slot = ScheduleSlot.fromMap('slot_$i', map);
-      slots.add(
-        ScheduleSlot(
-          slotId: slot.slotId,
-          routeId: slot.routeId.isEmpty ? routeId : slot.routeId,
-          departureAt: slot.departureAt,
-          arrivalAt: slot.arrivalAt,
-          price: slot.price,
-          capacity: slot.capacity,
-          vehicleType: slot.vehicleType,
-          driverId: slot.driverId,
-          passengersIds: List<String>.from(slot.passengersIds),
-          frequencyMinutes: slot.frequencyMinutes,
-          status: slot.status,
-        ),
+    for (final doc in subSnap.docs) {
+      final map = doc.data();
+      final slot = ScheduleSlot.fromMap(doc.id, map);
+      final fixedSlot = ScheduleSlot(
+        slotId: slot.slotId,
+        routeId: slot.routeId.isEmpty ? routeId : slot.routeId,
+        departureAt: slot.departureAt,
+        arrivalAt: slot.arrivalAt,
+        price: slot.price,
+        capacity: slot.capacity,
+        vehicleType: slot.vehicleType,
+        driverId: slot.driverId,
+        passengersIds: List<String>.from(slot.passengersIds),
+        frequencyMinutes: slot.frequencyMinutes,
+        status: slot.status,
       );
+      slotsById[fixedSlot.slotId] = fixedSlot;
     }
-    return slots;
+
+    return slotsById.values.toList();
   }
 
   String priceTextOf(ScheduleSlot slot) {

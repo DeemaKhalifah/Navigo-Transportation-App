@@ -160,6 +160,117 @@ class PassengerTripHistoryService {
     return _statusBySlotId[slot.slotId] ?? slot.status;
   }
 
+  Future<int> cancelPassengerScheduledTrip(ScheduleSlot slot) async {
+    final uid = currentUserId?.trim();
+    if (uid == null || uid.isEmpty) {
+      throw Exception('User is not logged in.');
+    }
+
+    final routeId = slot.routeId.trim();
+    final slotId = slot.slotId.trim();
+    if (routeId.isEmpty || slotId.isEmpty) {
+      throw Exception('Schedule slot is missing route data.');
+    }
+
+    var removedSeats = 0;
+    final routeRef = _db.collection(_routesCollection).doc(routeId);
+    final subSlotRef = routeRef.collection('scheduleSlots').doc(slotId);
+
+    await _db.runTransaction((tx) async {
+      final routeSnap = await tx.get(routeRef);
+      final subSnap = await tx.get(subSlotRef);
+
+      if (!routeSnap.exists) {
+        throw Exception('Route not found.');
+      }
+
+      final routeData = routeSnap.data() as Map<String, dynamic>;
+      final rawList = routeData['scheduleSlots'];
+      var changedArray = false;
+      List<dynamic> scheduleSlots = [];
+
+      if (rawList is List) {
+        scheduleSlots = List<dynamic>.from(rawList);
+
+        final index = scheduleSlots.indexWhere(
+          (item) =>
+              item is Map &&
+              (item['slotId'] ?? '').toString().trim() == slotId,
+        );
+        if (index != -1) {
+          final currentMap = Map<String, dynamic>.from(
+            scheduleSlots[index] as Map,
+          );
+          final updated = _removePassengerBookings(
+            currentMap['passengersIds'],
+            uid,
+          );
+          if (updated.removedCount > 0) {
+            removedSeats = updated.removedCount;
+            currentMap['passengersIds'] = updated.bookings;
+            scheduleSlots[index] = currentMap;
+            changedArray = true;
+          }
+        }
+      }
+
+      var changedSubDoc = false;
+      Map<String, dynamic>? updatedSubData;
+      if (subSnap.exists) {
+        final subData = subSnap.data() ?? <String, dynamic>{};
+        updatedSubData = Map<String, dynamic>.from(subData);
+        final updated = _removePassengerBookings(
+          updatedSubData['passengersIds'],
+          uid,
+        );
+        if (updated.removedCount > 0) {
+          removedSeats = removedSeats == 0 ? updated.removedCount : removedSeats;
+          updatedSubData['passengersIds'] = updated.bookings;
+          changedSubDoc = true;
+        }
+      }
+
+      if (!changedArray && !changedSubDoc) {
+        throw Exception('This passenger is not booked on this trip.');
+      }
+
+      if (changedArray) {
+        tx.update(routeRef, {'scheduleSlots': scheduleSlots});
+      }
+      if (changedSubDoc && updatedSubData != null) {
+        tx.update(subSlotRef, {
+          'passengersIds': updatedSubData['passengersIds'],
+        });
+      }
+    });
+
+    return removedSeats;
+  }
+
+  _PassengerBookingRemoval _removePassengerBookings(
+    dynamic rawBookings,
+    String passengerId,
+  ) {
+    final current = ScheduleSlot.fromMap(
+      'slot',
+      {'passengersIds': rawBookings},
+    ).passengerBookings;
+
+    final updated = <Map<String, dynamic>>[];
+    var removed = 0;
+
+    for (final booking in current) {
+      final id = (booking['passengerId'] ?? '').toString().trim();
+      if (id == passengerId) {
+        removed++;
+        continue;
+      }
+      updated.add(Map<String, dynamic>.from(booking));
+    }
+
+    return _PassengerBookingRemoval(bookings: updated, removedCount: removed);
+  }
+
   String priceTextOf(ScheduleSlot slot) {
     if (slot.price == null) return 'N/A';
     return '${slot.price!.toStringAsFixed(2)} NIS';
@@ -261,4 +372,14 @@ class PassengerTripHistoryService {
       return '$minutes min';
     }
   }
+}
+
+class _PassengerBookingRemoval {
+  const _PassengerBookingRemoval({
+    required this.bookings,
+    required this.removedCount,
+  });
+
+  final List<Map<String, dynamic>> bookings;
+  final int removedCount;
 }

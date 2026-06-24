@@ -1,6 +1,9 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
+import '../models/driver_status.dart';
+import 'local_storage_service.dart';
+
 enum AppSessionDestination {
   welcome,
   phoneLogin,
@@ -20,6 +23,25 @@ class AuthSessionService {
   }) : _auth = auth ?? FirebaseAuth.instance,
        _db = firestore ?? FirebaseFirestore.instance;
 
+  Future<DocumentSnapshot<Map<String, dynamic>>> _driverDocForUser(
+    String uid,
+  ) async {
+    final directDoc = await _db.collection('drivers').doc(uid).get();
+    if (directDoc.exists) return directDoc;
+
+    final query = await _db
+        .collection('drivers')
+        .where('userId', isEqualTo: uid)
+        .limit(1)
+        .get();
+
+    if (query.docs.isNotEmpty) {
+      return query.docs.first;
+    }
+
+    return directDoc;
+  }
+
   Future<AppSessionDestination> resolveStartupDestination() async {
     final user = _auth.currentUser;
     if (user == null) return AppSessionDestination.welcome;
@@ -32,8 +54,14 @@ class AuthSessionService {
     }
 
     if (role == 'driver') {
-      final driverDoc = await _db.collection('drivers').doc(user.uid).get();
+      final driverDoc = await _driverDocForUser(user.uid);
       final isApproved = driverDoc.data()?['isApproved'] == true;
+      await LocalStorageService.saveDriverDisplayName(
+        _displayNameFromMaps([userDoc.data(), driverDoc.data()]),
+      );
+      await LocalStorageService.saveDriverStatus(
+        DriverStatus.normalize(driverDoc.data()?['status']?.toString()),
+      );
       return isApproved
           ? AppSessionDestination.driverHome
           : AppSessionDestination.driverApproval;
@@ -44,6 +72,27 @@ class AuthSessionService {
     }
 
     return AppSessionDestination.welcome;
+  }
+
+  String _displayNameFromMaps(List<Map<String, dynamic>?> maps) {
+    for (final data in maps) {
+      if (data == null) continue;
+      final direct =
+          (data['fullName'] ??
+                  data['name'] ??
+                  data['displayName'] ??
+                  data['driverName'] ??
+                  '')
+              .toString()
+              .trim();
+      if (direct.isNotEmpty) return direct;
+
+      final first = (data['firstName'] ?? '').toString().trim();
+      final last = (data['lastName'] ?? '').toString().trim();
+      final full = '$first $last'.trim();
+      if (full.isNotEmpty) return full;
+    }
+    return '';
   }
 
   String _normalizeRole(String? role) {

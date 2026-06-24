@@ -1,25 +1,34 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_core/firebase_core.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:http/http.dart' as http;
 
 import '../controllers/driver_proximity_controller.dart';
 import '../models/driver_status.dart';
 import '../models/route.dart';
 import '../models/schedule_slot.dart';
+import 'local_storage_service.dart';
 import 'route_driver_queue_service.dart';
 import 'slot_driver_assignment_service.dart';
 
 class DriverLiveTripService {
-  DriverLiveTripService({FirebaseFirestore? firestore, FirebaseAuth? auth})
-    : _db = firestore ?? FirebaseFirestore.instance,
+  DriverLiveTripService({
+    FirebaseFirestore? firestore,
+    FirebaseAuth? auth,
+    http.Client? client,
+  }) : _db = firestore ?? FirebaseFirestore.instance,
       _auth = auth ?? FirebaseAuth.instance,
+      _client = client ?? http.Client(),
       _queueSvc = RouteDriverQueueService(firestore: firestore),
       _slotAssign = SlotDriverAssignmentService(firestore: firestore);
 
   final FirebaseFirestore _db;
   final FirebaseAuth _auth;
+  final http.Client _client;
   final RouteDriverQueueService _queueSvc;
   final SlotDriverAssignmentService _slotAssign;
   final DriverProximityController _proximityController =
@@ -29,6 +38,11 @@ class DriverLiveTripService {
   static const String _driversCollection = 'drivers';
   static const String _usersCollection = 'users';
   static const String _passengersCollection = 'passengers';
+  static const String _functionsRegion = String.fromEnvironment(
+    'FIREBASE_FUNCTIONS_REGION',
+    defaultValue: 'us-central1',
+  );
+  static bool _cloudStartTripUnavailable = false;
 
   String? get currentDriverId => _auth.currentUser?.uid;
 
@@ -48,6 +62,17 @@ class DriverLiveTripService {
 
     if (safeDriverId.isEmpty) {
       throw Exception('Driver ID is missing.');
+    }
+
+    if (await _startTripWithCloudFunction(
+      routeId: routeId,
+      tripId: safeTripId,
+      driverId: safeDriverId,
+      startLatitude: startLatitude,
+      startLongitude: startLongitude,
+    )) {
+      await LocalStorageService.saveDriverStatus(DriverStatus.onTrip);
+      return;
     }
 
     final resolvedRouteId = await _resolveRouteId(
@@ -102,7 +127,8 @@ class DriverLiveTripService {
 
     cleanSlots[index] = selectedSlot;
 
-    await routeRef.update({
+    final batch = _db.batch();
+    batch.update(routeRef, {
       'scheduleSlots': cleanSlots,
       'updatedAt': FieldValue.serverTimestamp(),
     });
@@ -122,8 +148,84 @@ class DriverLiveTripService {
       driverUpdate['lastLocationUpdate'] = FieldValue.serverTimestamp();
     }
 
-    await driverRef.set(driverUpdate, SetOptions(merge: true));
+    batch.set(driverRef, driverUpdate, SetOptions(merge: true));
+    await batch.commit();
 
+    await LocalStorageService.saveDriverStatus(DriverStatus.onTrip);
+  }
+
+  Future<bool> _startTripWithCloudFunction({
+    required String routeId,
+    required String tripId,
+    required String driverId,
+    double? startLatitude,
+    double? startLongitude,
+  }) async {
+    if (_cloudStartTripUnavailable) return false;
+
+    try {
+      final projectId = Firebase.app().options.projectId;
+      if (projectId.isEmpty) return false;
+
+      final token = await _auth.currentUser?.getIdToken();
+      if (token == null || token.trim().isEmpty) return false;
+
+      final uri = Uri.https(
+        '$_functionsRegion-$projectId.cloudfunctions.net',
+        '/startDriverTrip',
+      );
+
+      final response = await _client
+          .post(
+            uri,
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': 'Bearer $token',
+            },
+            body: jsonEncode({
+              'routeId': routeId,
+              'tripId': tripId,
+              'driverId': driverId,
+              if (startLatitude != null) 'startLatitude': startLatitude,
+              if (startLongitude != null) 'startLongitude': startLongitude,
+            }),
+          )
+          .timeout(const Duration(seconds: 2));
+
+      if (response.statusCode >= 200 && response.statusCode < 300) {
+        return true;
+      }
+
+      if (response.statusCode == 404 || response.statusCode == 501) {
+        _cloudStartTripUnavailable = true;
+        return false;
+      }
+
+      if (response.statusCode == 400 ||
+          response.statusCode == 401 ||
+          response.statusCode == 403 ||
+          response.statusCode == 412) {
+        final message = _cloudFunctionErrorMessage(response.body);
+        throw _StartTripFunctionException(
+          message.isEmpty ? 'Could not start trip.' : message,
+        );
+      }
+      return false;
+    } catch (e) {
+      if (e is _StartTripFunctionException) rethrow;
+      _cloudStartTripUnavailable = true;
+      return false;
+    }
+  }
+
+  String _cloudFunctionErrorMessage(String responseBody) {
+    try {
+      final decoded = jsonDecode(responseBody);
+      if (decoded is Map) {
+        return (decoded['error'] ?? '').toString().trim();
+      }
+    } catch (_) {}
+    return '';
   }
 
   Map<String, dynamic> _cleanFirestoreMap(Map<String, dynamic> map) {
@@ -218,10 +320,13 @@ class DriverLiveTripService {
 
     await driverRef.set({
       'status': DriverStatus.available,
+      'isOnline': true,
       'updatedAt': FieldValue.serverTimestamp(),
       'currentRouteId': FieldValue.delete(),
       'currentTripId': FieldValue.delete(),
     }, SetOptions(merge: true));
+
+    await LocalStorageService.saveDriverStatus(DriverStatus.available);
 
     await _queueSvc.syncQueueWithOnlineAvailableDrivers(resolvedRouteId);
     await _slotAssign.autoAssignUpcomingUnassignedSlots(routeId: resolvedRouteId);
@@ -291,10 +396,13 @@ class DriverLiveTripService {
 
     await driverRef.set({
       'status': DriverStatus.available,
+      'isOnline': true,
       'updatedAt': FieldValue.serverTimestamp(),
       'currentRouteId': FieldValue.delete(),
       'currentTripId': FieldValue.delete(),
     }, SetOptions(merge: true));
+
+    await LocalStorageService.saveDriverStatus(DriverStatus.available);
 
     await _queueSvc.syncQueueWithOnlineAvailableDrivers(resolvedRouteId);
     await _slotAssign.autoAssignUpcomingUnassignedSlots(routeId: resolvedRouteId);
@@ -739,4 +847,13 @@ class DriverLiveTripService {
 
     return '$minutes min';
   }
+}
+
+class _StartTripFunctionException implements Exception {
+  const _StartTripFunctionException(this.message);
+
+  final String message;
+
+  @override
+  String toString() => message;
 }

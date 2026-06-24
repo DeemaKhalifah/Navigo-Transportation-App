@@ -74,13 +74,8 @@ class _DriverRequestsScreenState extends State<DriverRequestsScreen> {
                     )
                   : StreamBuilder<List<TripDriverRequest>>(
                       stream: _requestService.watchPendingForDriver(driverId),
+                      initialData: const [],
                       builder: (context, snapshot) {
-                        if (snapshot.connectionState ==
-                            ConnectionState.waiting) {
-                          return const Center(
-                            child: CircularProgressIndicator(),
-                          );
-                        }
                         if (snapshot.hasError) {
                           return Center(
                             child: Padding(

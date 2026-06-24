@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../models/driver_status.dart';
+import 'local_storage_service.dart';
 import 'route_driver_queue_service.dart';
 import 'slot_driver_assignment_service.dart';
 
@@ -20,6 +21,7 @@ class TripCompletionService {
     final st = DriverStatus.normalize(snap.data()?['status'] as String?);
     if (st == DriverStatus.assigned) {
       await ref.update({'status': DriverStatus.onTrip});
+      await LocalStorageService.saveDriverStatus(DriverStatus.onTrip);
     }
   }
 
@@ -36,7 +38,9 @@ class TripCompletionService {
     } else {
       await _db.collection('drivers').doc(driverId).update({
         'status': DriverStatus.available,
+        'isOnline': true,
       });
     }
+    await LocalStorageService.saveDriverStatus(DriverStatus.available);
   }
 }

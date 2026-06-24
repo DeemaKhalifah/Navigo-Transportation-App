@@ -162,217 +162,202 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
               ),
             ),
             Expanded(
-              child: controller.isLoading
-                  ? const Center(child: CircularProgressIndicator())
-                  : SingleChildScrollView(
-                      child: Container(
-                        margin: const EdgeInsets.symmetric(horizontal: 20),
-                        padding: const EdgeInsets.all(20),
-                        decoration: NavigoDecorations.kCardDecoration,
-                        child: Column(
-                          children: [
-                            Stack(
-                              children: <Widget>[
-                                CircleAvatar(
-                                  radius: 50,
-                                  backgroundColor: NavigoColors.surfaceWhite,
-                                  child: ClipOval(
-                                    child: _buildProfileImage(
-                                      fit: BoxFit.contain,
-                                      width: 80,
-                                      height: 80,
+              child: SingleChildScrollView(
+                child: Container(
+                  margin: const EdgeInsets.symmetric(horizontal: 20),
+                  padding: const EdgeInsets.all(20),
+                  decoration: NavigoDecorations.kCardDecoration,
+                  child: Column(
+                    children: [
+                      Stack(
+                        children: <Widget>[
+                          CircleAvatar(
+                            radius: 50,
+                            backgroundColor: NavigoColors.surfaceWhite,
+                            child: ClipOval(
+                              child: _buildProfileImage(
+                                fit: BoxFit.contain,
+                                width: 80,
+                                height: 80,
+                              ),
+                            ),
+                          ),
+                          if (controller.isEditing)
+                            Positioned(
+                              bottom: 0,
+                              right: 0,
+                              child: GestureDetector(
+                                onTap: _showImagePicker,
+                                child: Container(
+                                  padding: const EdgeInsets.all(6),
+                                  decoration:
+                                      NavigoDecorations.iconCircleDecoration(
+                                    NavigoColors.accentGreen,
+                                  ),
+                                  child: const Icon(
+                                    Icons.camera_alt,
+                                    size: 16,
+                                    color: NavigoColors.textLight,
+                                  ),
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
+                      const SizedBox(height: 20),
+                      _field(
+                        context.texts.t('fullName'),
+                        controller.nameController,
+                        controller.isEditing,
+                        Icons.person,
+                      ),
+                      const SizedBox(height: 16),
+                      _field(
+                        context.texts.t('phone'),
+                        controller.phoneController,
+                        controller.isEditing,
+                        Icons.phone,
+                      ),
+                      const SizedBox(height: 20),
+                      if (controller.isEditing)
+                        SizedBox(
+                          width: double.infinity,
+                          child: ElevatedButton(
+                            onPressed: controller.isSaving
+                                ? null
+                                : _saveProfile,
+                            style: NavigoDecorations.kPrimaryButtonLargeStyle,
+                            child: controller.isSaving
+                                ? const SizedBox(
+                                    width: 22,
+                                    height: 22,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      color: NavigoColors.textLight,
                                     ),
-                                  ),
-                                ),
-                                if (controller.isEditing)
-                                  Positioned(
-                                    bottom: 0,
-                                    right: 0,
-                                    child: GestureDetector(
-                                      onTap: _showImagePicker,
-                                      child: Container(
-                                        padding: const EdgeInsets.all(6),
-                                        decoration:
-                                            NavigoDecorations.iconCircleDecoration(
-                                              NavigoColors.accentGreen,
-                                            ),
-                                        child: const Icon(
-                                          Icons.camera_alt,
-                                          size: 16,
-                                          color: NavigoColors.textLight,
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                              ],
-                            ),
-                            const SizedBox(height: 20),
-                            _field(
-                              context.texts.t('fullName'),
-                              controller.nameController,
-                              controller.isEditing,
-                              Icons.person,
-                            ),
-                            const SizedBox(height: 16),
-                            _field(
-                              context.texts.t('phone'),
-                              controller.phoneController,
-                              controller.isEditing,
-                              Icons.phone,
-                            ),
-                            const SizedBox(height: 20),
-                            if (controller.isEditing)
-                              SizedBox(
-                                width: double.infinity,
-                                child: ElevatedButton(
-                                  onPressed: controller.isSaving
-                                      ? null
-                                      : _saveProfile,
-                                  style: NavigoDecorations
-                                      .kPrimaryButtonLargeStyle,
-                                  child: controller.isSaving
-                                      ? const SizedBox(
-                                          width: 22,
-                                          height: 22,
-                                          child: CircularProgressIndicator(
-                                            strokeWidth: 2,
-                                            color: NavigoColors.textLight,
-                                          ),
-                                        )
-                                      : Text(context.texts.t('save')),
-                                ),
-                              ),
-                            const SizedBox(height: 16),
-                            Align(
-                              // Use directional start so this text moves with
-                              // the active language: left for English, right
-                              // for Arabic after Directionality rebuilds.
-                              alignment: AlignmentDirectional.centerStart,
-                              child: Text(
-                                '${context.texts.t('driverStatus')}: ${controller.statusLabel}',
-                                style: NavigoTextStyles.bodyMedium.copyWith(
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                            ),
-                            if (controller.onLiveTrip)
-                              Padding(
-                                padding: const EdgeInsets.only(top: 8),
-                                child: Text(
-                                  context.texts.t('finishTripHint'),
-                                  style: NavigoTextStyles.bodySmall.copyWith(
-                                    color: NavigoColors.textMuted,
-                                  ),
-                                ),
-                              )
-                            else if (controller.assignedTrip)
-                              Padding(
-                                padding: const EdgeInsets.only(top: 8),
-                                child: Text(
-                                  context.texts.t('assignedTripHint'),
-                                  style: NavigoTextStyles.bodySmall.copyWith(
-                                    color: NavigoColors.textMuted,
-                                  ),
-                                ),
-                              ),
-                            const SizedBox(height: 16),
-                            Row(
-                              children: [
-                                Expanded(
-                                  child: ElevatedButton(
-                                    onPressed:
-                                        (controller.statusBusy ||
-                                            controller
-                                                .blocksAvailabilityToggle ||
-                                            isAvailable)
-                                        ? null
-                                        : _goOnline,
-                                    style: NavigoDecorations
-                                        .kPrimaryButtonLargeStyle
-                                        .copyWith(
-                                          backgroundColor:
-                                              const WidgetStatePropertyAll(
-                                                NavigoColors.accentGreen,
-                                              ),
-                                        ),
-                                    child: controller.statusBusy
-                                        ? const SizedBox(
-                                            width: 18,
-                                            height: 18,
-                                            child: CircularProgressIndicator(
-                                              strokeWidth: 2,
-                                              color: NavigoColors.textLight,
-                                            ),
-                                          )
-                                        : Text(context.texts.t('goOnline')),
-                                  ),
-                                ),
-                                const SizedBox(width: 12),
-                                Expanded(
-                                  child: ElevatedButton(
-                                    onPressed:
-                                        (controller.statusBusy ||
-                                            controller
-                                                .blocksAvailabilityToggle ||
-                                            isOffline)
-                                        ? null
-                                        : _goOffline,
-                                    style: NavigoDecorations
-                                        .kPrimaryButtonLargeStyle
-                                        .copyWith(
-                                          backgroundColor:
-                                              const WidgetStatePropertyAll(
-                                                NavigoColors.accentRed,
-                                              ),
-                                        ),
-                                    child: Text(context.texts.t('goOffline')),
-                                  ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 20),
-                            Align(
-                              // Keep section headers aligned to the reading
-                              // start instead of hard-coding the left side.
-                              alignment: AlignmentDirectional.centerStart,
-                              child: Text(
-                                context.texts.t('settings'),
-                                style: NavigoTextStyles.titleSmall.copyWith(
-                                  color: NavigoColors.textGray,
-                                ),
-                              ),
-                            ),
-                            const SizedBox(height: 10),
-                            const Align(
-                              // The language switch follows the current text
-                              // direction: English/LTR start is left, Arabic
-                              // /RTL start is right.
-                              alignment: AlignmentDirectional.centerStart,
-                              child: LanguageToggleSwitch(),
-                            ),
-                            const SizedBox(height: 8),
-                            _settingsItem(
-                              icon: Icons.help_outline,
-                              title: context.texts.t('helpSupport'),
-                              onTap: () {
-                                Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (_) => const HelpSupportScreen(),
-                                  ),
-                                );
-                              },
-                            ),
-                            _settingsItem(
-                              icon: Icons.logout,
-                              title: context.texts.t('logout'),
-                              color: NavigoColors.accentRed,
-                              onTap: _logout,
-                            ),
-                          ],
+                                  )
+                                : Text(context.texts.t('save')),
+                          ),
+                        ),
+                      const SizedBox(height: 16),
+                      Align(
+                        alignment: AlignmentDirectional.centerStart,
+                        child: Text(
+                          '${context.texts.t('driverStatus')}: ${controller.statusLabel}',
+                          style: NavigoTextStyles.bodyMedium.copyWith(
+                            fontWeight: FontWeight.w600,
+                          ),
                         ),
                       ),
-                    ),
+                      if (controller.onLiveTrip)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 8),
+                          child: Text(
+                            context.texts.t('finishTripHint'),
+                            style: NavigoTextStyles.bodySmall.copyWith(
+                              color: NavigoColors.textMuted,
+                            ),
+                          ),
+                        )
+                      else if (controller.assignedTrip)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 8),
+                          child: Text(
+                            context.texts.t('assignedTripHint'),
+                            style: NavigoTextStyles.bodySmall.copyWith(
+                              color: NavigoColors.textMuted,
+                            ),
+                          ),
+                        ),
+                      const SizedBox(height: 16),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: ElevatedButton(
+                              onPressed:
+                                  (controller.statusBusy ||
+                                      controller.blocksAvailabilityToggle ||
+                                      isAvailable)
+                                  ? null
+                                  : _goOnline,
+                              style: NavigoDecorations.kPrimaryButtonLargeStyle
+                                  .copyWith(
+                                backgroundColor:
+                                    const WidgetStatePropertyAll(
+                                  NavigoColors.accentGreen,
+                                ),
+                              ),
+                              child: controller.statusBusy
+                                  ? const SizedBox(
+                                      width: 18,
+                                      height: 18,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                        color: NavigoColors.textLight,
+                                      ),
+                                    )
+                                  : Text(context.texts.t('goOnline')),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: ElevatedButton(
+                              onPressed:
+                                  (controller.statusBusy ||
+                                      controller.blocksAvailabilityToggle ||
+                                      isOffline)
+                                  ? null
+                                  : _goOffline,
+                              style: NavigoDecorations.kPrimaryButtonLargeStyle
+                                  .copyWith(
+                                backgroundColor:
+                                    const WidgetStatePropertyAll(
+                                  NavigoColors.accentRed,
+                                ),
+                              ),
+                              child: Text(context.texts.t('goOffline')),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 20),
+                      Align(
+                        alignment: AlignmentDirectional.centerStart,
+                        child: Text(
+                          context.texts.t('settings'),
+                          style: NavigoTextStyles.titleSmall.copyWith(
+                            color: NavigoColors.textGray,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      const Align(
+                        alignment: AlignmentDirectional.centerStart,
+                        child: LanguageToggleSwitch(),
+                      ),
+                      const SizedBox(height: 8),
+                      _settingsItem(
+                        icon: Icons.help_outline,
+                        title: context.texts.t('helpSupport'),
+                        onTap: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => const HelpSupportScreen(),
+                            ),
+                          );
+                        },
+                      ),
+                      _settingsItem(
+                        icon: Icons.logout,
+                        title: context.texts.t('logout'),
+                        color: NavigoColors.accentRed,
+                        onTap: _logout,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
             ),
           ],
         ),

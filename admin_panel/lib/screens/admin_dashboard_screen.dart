@@ -3904,8 +3904,9 @@ class _CreateRouteManagerDialogState extends State<_CreateRouteManagerDialog> {
                                   },
                                   icon: Icon(
                                     _obscurePassword
-                                        ? Icons.visibility_rounded
-                                        : Icons.visibility_off_rounded,
+                                        ? Icons.visibility_off
+                                        : Icons.visibility,
+                                    color: NavigoColors.textMuted,
                                   ),
                                   tooltip: _obscurePassword
                                       ? texts.t('show')
@@ -3937,8 +3938,9 @@ class _CreateRouteManagerDialogState extends State<_CreateRouteManagerDialog> {
                                   },
                                   icon: Icon(
                                     _obscureConfirmPassword
-                                        ? Icons.visibility_rounded
-                                        : Icons.visibility_off_rounded,
+                                        ? Icons.visibility_off
+                                        : Icons.visibility,
+                                    color: NavigoColors.textMuted,
                                   ),
                                   tooltip: _obscureConfirmPassword
                                       ? texts.t('show')

@@ -8,6 +8,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../models/driver_status.dart';
 import '../services/driver_queue_repository.dart';
+import '../services/local_storage_service.dart';
 import '../services/profile_image_storage_service.dart';
 
 class DriverProfileController extends ChangeNotifier {
@@ -76,6 +77,7 @@ class DriverProfileController extends ChangeNotifier {
       driverStatus = DriverStatus.normalize(
         data['status']?.toString() ?? DriverStatus.offline,
       );
+      unawaited(LocalStorageService.saveDriverStatus(driverStatus));
 
       assignedRouteId = data['routeId']?.toString();
 
@@ -83,6 +85,30 @@ class DriverProfileController extends ChangeNotifier {
     });
 
     await loadUserData();
+  }
+
+  String _fullNameFromData(Map<String, dynamic> data) {
+    final direct =
+        (data['fullName'] ??
+                data['name'] ??
+                data['displayName'] ??
+                data['driverName'] ??
+                '')
+            .toString()
+            .trim();
+    if (direct.isNotEmpty) return direct;
+
+    final firstName = (data['firstName'] ?? '').toString().trim();
+    final lastName = (data['lastName'] ?? '').toString().trim();
+    return '$firstName $lastName'.trim();
+  }
+
+  String _firstNonEmpty(List<dynamic> values) {
+    for (final value in values) {
+      final text = (value ?? '').toString().trim();
+      if (text.isNotEmpty && text.toLowerCase() != 'null') return text;
+    }
+    return '';
   }
 
   Future<void> loadUserData() async {
@@ -93,32 +119,58 @@ class DriverProfileController extends ChangeNotifier {
     }
 
     try {
-      final userSnap = await userDocRef!.get();
-
-      if (userSnap.exists) {
-        final data = userSnap.data() ?? {};
-
-        final firstName = (data['firstName'] ?? '').toString();
-        final lastName = (data['lastName'] ?? '').toString();
-
-        nameController.text = '$firstName $lastName'.trim();
-        phoneController.text = (data['phone'] ?? '').toString();
-        imageUrl = data['image']?.toString();
-        _resolvedImageUrl = await _profileImageStorageService.getImageUrl(
-          imageUrl,
-        );
+      final savedName = await LocalStorageService.getDriverDisplayName();
+      if (savedName != null && nameController.text.trim().isEmpty) {
+        nameController.text = savedName;
       }
 
-      final driverSnap = await driverDocRef!.get();
+      final userSnapFuture = userDocRef!.get();
+      final driverSnapFuture = driverDocRef!.get();
+
+      final userSnap = await userSnapFuture;
+      final driverSnap = await driverSnapFuture;
+      final userData = userSnap.data() ?? {};
+      final driverData = driverSnap.data() ?? {};
+
+      final resolvedName = _firstNonEmpty([
+        _fullNameFromData(userData),
+        _fullNameFromData(driverData),
+        savedName,
+        currentUser?.displayName,
+      ]);
+      if (resolvedName.isNotEmpty) {
+        nameController.text = resolvedName;
+        unawaited(LocalStorageService.saveDriverDisplayName(resolvedName));
+      }
+
+      final resolvedPhone = _firstNonEmpty([
+        userData['phone'],
+        userData['phoneNumber'],
+        driverData['phone'],
+        driverData['phoneNumber'],
+        currentUser?.phoneNumber,
+      ]);
+      if (resolvedPhone.isNotEmpty) {
+        phoneController.text = resolvedPhone;
+      }
+
+      imageUrl = _firstNonEmpty([
+        userData['image'],
+        userData['imageUrl'],
+        driverData['image'],
+        driverData['imageUrl'],
+      ]);
+      _resolvedImageUrl = await _profileImageStorageService.getImageUrl(
+        imageUrl,
+      );
 
       if (driverSnap.exists) {
-        final data = driverSnap.data() ?? {};
-
         driverStatus = DriverStatus.normalize(
-          data['status']?.toString() ?? DriverStatus.offline,
+          driverData['status']?.toString() ?? DriverStatus.offline,
         );
+        unawaited(LocalStorageService.saveDriverStatus(driverStatus));
 
-        assignedRouteId = data['routeId']?.toString();
+        assignedRouteId = driverData['routeId']?.toString();
       }
     } catch (e) {
       debugPrint('Error loading driver profile: $e');
@@ -189,6 +241,7 @@ class DriverProfileController extends ChangeNotifier {
         imageUrl,
       );
       isEditing = false;
+      await LocalStorageService.saveDriverDisplayName(fullName);
 
       return null;
     } catch (e) {
@@ -257,6 +310,7 @@ class DriverProfileController extends ChangeNotifier {
       );
 
       driverStatus = DriverStatus.available;
+      await LocalStorageService.saveDriverStatus(DriverStatus.available);
       return null;
     } catch (e) {
       try {
@@ -313,6 +367,7 @@ class DriverProfileController extends ChangeNotifier {
       }
 
       driverStatus = DriverStatus.offline;
+      await LocalStorageService.saveDriverStatus(DriverStatus.offline);
       return null;
     } catch (e) {
       debugPrint('Go offline error: $e');
@@ -348,6 +403,8 @@ class DriverProfileController extends ChangeNotifier {
           'isOnline': false,
           'updatedAt': FieldValue.serverTimestamp(),
         }, SetOptions(merge: true));
+
+        await LocalStorageService.saveDriverStatus(DriverStatus.offline);
 
         await FirebaseFirestore.instance.collection('users').doc(uid).set({
           'isOnline': false,

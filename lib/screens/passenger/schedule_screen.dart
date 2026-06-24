@@ -55,13 +55,15 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
   }
 
   Future<void> _bootstrapFromWidgetOrStorage() async {
-    String? line = widget.selectedLine?.trim();
-    if (line == null || line.isEmpty) {
+    String? line;
+    if (widget.selectedLine != null) {
+      line = widget.selectedLine!.trim();
+    } else {
       final saved = await LocalStorageService.getSelectedLine();
       line = saved?.trim();
     }
     if (!mounted) return;
-    setState(() => _selectedLine = line);
+    setState(() => _selectedLine = line?.isEmpty == true ? null : line);
     await _loadSchedules();
     await _prefillPickupFromSavedMap();
   }

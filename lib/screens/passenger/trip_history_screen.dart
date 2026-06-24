@@ -21,6 +21,7 @@ class _TripHistoryScreenState extends State<TripHistoryScreen> {
       PassengerTripHistoryService();
 
   String _filterStatus = TripStatus.all;
+  final Set<String> _cancellingSlotKeys = {};
 
   List<ScheduleSlot> _applyFilter(List<ScheduleSlot> slots) {
     if (_filterStatus == TripStatus.all) return slots;
@@ -94,6 +95,83 @@ class _TripHistoryScreenState extends State<TripHistoryScreen> {
       backgroundColor: NavigoColors.transparent,
       builder: (_) =>
           _TripHistoryDetailsSheet(slot: slot, historyService: _historyService),
+    );
+  }
+
+  String _slotKey(ScheduleSlot slot) => '${slot.routeId}::${slot.slotId}';
+
+  Future<void> _cancelScheduledTrip(ScheduleSlot slot) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: Text(context.texts.t('cancelTrip')),
+          content: const Text('Cancel your booking for this scheduled trip?'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: Text(context.texts.t('no')),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext, true),
+              child: Text(context.texts.t('delete')),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (confirmed != true || !mounted) return;
+
+    final key = _slotKey(slot);
+    setState(() => _cancellingSlotKeys.add(key));
+
+    try {
+      final removedSeats = await _historyService.cancelPassengerScheduledTrip(
+        slot,
+      );
+      if (!mounted) return;
+      AppMessage.showSuccess(
+        context,
+        removedSeats > 1
+            ? '$removedSeats seats cancelled.'
+            : '1 seat cancelled.',
+      );
+    } catch (e) {
+      if (!mounted) return;
+      AppMessage.showError(
+        context,
+        e.toString().replaceFirst('Exception: ', ''),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _cancellingSlotKeys.remove(key));
+      }
+    }
+  }
+
+  Widget _cancelSwipeBackground({required AlignmentDirectional alignment}) {
+    return Container(
+      alignment: alignment,
+      padding: const EdgeInsets.symmetric(horizontal: 20),
+      decoration: BoxDecoration(
+        color: NavigoColors.accentRed,
+        borderRadius: BorderRadius.circular(18),
+      ),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          const Icon(Icons.cancel_outlined, color: Colors.white),
+          const SizedBox(height: 4),
+          Text(
+            context.texts.t('cancel'),
+            style: NavigoTextStyles.bodySmall.copyWith(
+              color: Colors.white,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -195,9 +273,13 @@ class _TripHistoryScreenState extends State<TripHistoryScreen> {
                     itemBuilder: (_, index) {
                       final slot = slots[index];
                       final status = _historyService.statusOf(slot);
+                      final isScheduled = status == TripStatus.scheduled;
+                      final isCancelling = _cancellingSlotKeys.contains(
+                        _slotKey(slot),
+                      );
 
-                      return GestureDetector(
-                        onTap: () => _showDetails(slot),
+                      final card = GestureDetector(
+                        onTap: isCancelling ? null : () => _showDetails(slot),
                         child: Container(
                           padding: const EdgeInsets.all(16),
                           decoration: NavigoDecorations.kCardDecoration,
@@ -211,11 +293,18 @@ class _TripHistoryScreenState extends State<TripHistoryScreen> {
                                     NavigoDecorations.iconCircleDecoration(
                                       _statusColor(status),
                                     ),
-                                child: Icon(
-                                  _statusIcon(status),
-                                  color: _statusColor(status),
-                                  size: 22,
-                                ),
+                                child: isCancelling
+                                    ? const Padding(
+                                        padding: EdgeInsets.all(10),
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                        ),
+                                      )
+                                    : Icon(
+                                        _statusIcon(status),
+                                        color: _statusColor(status),
+                                        size: 22,
+                                      ),
                               ),
                               const SizedBox(width: 12),
                               Expanded(
@@ -266,6 +355,26 @@ class _TripHistoryScreenState extends State<TripHistoryScreen> {
                             ],
                           ),
                         ),
+                      );
+
+                      if (!isScheduled) return card;
+
+                      return Dismissible(
+                        key: ValueKey(_slotKey(slot)),
+                        direction: isCancelling
+                            ? DismissDirection.none
+                            : DismissDirection.horizontal,
+                        background: _cancelSwipeBackground(
+                          alignment: AlignmentDirectional.centerStart,
+                        ),
+                        secondaryBackground: _cancelSwipeBackground(
+                          alignment: AlignmentDirectional.centerEnd,
+                        ),
+                        confirmDismiss: (_) async {
+                          await _cancelScheduledTrip(slot);
+                          return false;
+                        },
+                        child: card,
                       );
                     },
                   );
