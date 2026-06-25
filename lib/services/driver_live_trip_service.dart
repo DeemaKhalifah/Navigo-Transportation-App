@@ -21,10 +21,10 @@ class DriverLiveTripService {
     FirebaseAuth? auth,
     http.Client? client,
   }) : _db = firestore ?? FirebaseFirestore.instance,
-      _auth = auth ?? FirebaseAuth.instance,
-      _client = client ?? http.Client(),
-      _queueSvc = RouteDriverQueueService(firestore: firestore),
-      _slotAssign = SlotDriverAssignmentService(firestore: firestore);
+       _auth = auth ?? FirebaseAuth.instance,
+       _client = client ?? http.Client(),
+       _queueSvc = RouteDriverQueueService(firestore: firestore),
+       _slotAssign = SlotDriverAssignmentService(firestore: firestore);
 
   final FirebaseFirestore _db;
   final FirebaseAuth _auth;
@@ -186,8 +186,8 @@ class DriverLiveTripService {
               'routeId': routeId,
               'tripId': tripId,
               'driverId': driverId,
-              if (startLatitude != null) 'startLatitude': startLatitude,
-              if (startLongitude != null) 'startLongitude': startLongitude,
+              'startLatitude': ?startLatitude,
+              'startLongitude': ?startLongitude,
             }),
           )
           .timeout(const Duration(seconds: 2));
@@ -329,7 +329,9 @@ class DriverLiveTripService {
     await LocalStorageService.saveDriverStatus(DriverStatus.available);
 
     await _queueSvc.syncQueueWithOnlineAvailableDrivers(resolvedRouteId);
-    await _slotAssign.autoAssignUpcomingUnassignedSlots(routeId: resolvedRouteId);
+    await _slotAssign.autoAssignUpcomingUnassignedSlots(
+      routeId: resolvedRouteId,
+    );
   }
 
   Future<void> cancelTrip({
@@ -405,7 +407,9 @@ class DriverLiveTripService {
     await LocalStorageService.saveDriverStatus(DriverStatus.available);
 
     await _queueSvc.syncQueueWithOnlineAvailableDrivers(resolvedRouteId);
-    await _slotAssign.autoAssignUpcomingUnassignedSlots(routeId: resolvedRouteId);
+    await _slotAssign.autoAssignUpcomingUnassignedSlots(
+      routeId: resolvedRouteId,
+    );
   }
 
   Future<void> updateDriverLocation({

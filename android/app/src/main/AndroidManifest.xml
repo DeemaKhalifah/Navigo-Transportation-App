@@ -51,6 +51,10 @@
             android:value="navigo_default" />
 
         <meta-data
+            android:name="com.google.firebase.messaging.default_notification_icon"
+            android:resource="@drawable/ic_notification_logo" />
+
+        <meta-data
             android:name="flutterEmbedding"
             android:value="2" />
 
