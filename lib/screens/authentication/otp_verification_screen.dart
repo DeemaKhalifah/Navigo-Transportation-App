@@ -67,6 +67,7 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
     final auto = widget.autoCredential;
     if (auto != null) {
       WidgetsBinding.instance.addPostFrameCallback((_) async {
+        if (!mounted) return;
         await _signInAndContinue(autoVerifiedCredential: auto);
       });
     }
@@ -96,6 +97,16 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
     }
   }
 
+  String _stringValue(dynamic value) {
+    return value?.toString().trim() ?? '';
+  }
+
+  int? _intValue(dynamic value) {
+    if (value is int) return value;
+    if (value is num) return value.toInt();
+    return int.tryParse(_stringValue(value));
+  }
+
   @override
   void dispose() {
     for (final c in _otpControllers) {
@@ -115,36 +126,35 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
     final driverInfo = widget.driverData ?? {};
     final fs = FirebaseFirestore.instance;
 
-    String vehicleId = (driverInfo['vehicleId'] as String?)?.trim() ?? '';
-    final String plate = (driverInfo['plateNumber'] as String?)?.trim() ?? '';
+    String vehicleId = _stringValue(driverInfo['vehicleId']);
+    final String plate = _stringValue(driverInfo['plateNumber']);
 
-    final String vehicleType =
-        (driverInfo['vehicleType'] as String?)?.trim().isNotEmpty == true
-        ? (driverInfo['vehicleType'] as String).trim()
+    final rawVehicleType = _stringValue(driverInfo['vehicleType']);
+    final String vehicleType = rawVehicleType.isNotEmpty
+        ? rawVehicleType
         : 'bus';
 
     final int capacity =
-        (driverInfo['capacity'] as num?)?.toInt() ??
+        _intValue(driverInfo['capacity']) ??
         defaultSeatCountForVehicleType(vehicleType);
 
-    final String vehicleClass =
-        (driverInfo['vehicleClass'] as String?)?.trim().isNotEmpty == true
-        ? (driverInfo['vehicleClass'] as String).trim()
+    final rawVehicleClass = _stringValue(driverInfo['vehicleClass']);
+    final String vehicleClass = rawVehicleClass.isNotEmpty
+        ? rawVehicleClass
         : vehicleType == 'microbus'
         ? 'microbus-7'
         : 'bus-$capacity';
 
-    final String license =
-        (driverInfo['licenseNumber'] as String?)?.trim() ?? '';
+    final String license = _stringValue(driverInfo['licenseNumber']);
 
     final String routeId =
-        (driverInfo['routeId'] as String?)?.trim() ??
-        (driverInfo['route'] as String?)?.trim() ??
-        '';
+        _stringValue(driverInfo['routeId']).isNotEmpty
+            ? _stringValue(driverInfo['routeId'])
+            : _stringValue(driverInfo['route']);
 
-    final String driverStatus =
-        (driverInfo['status'] as String?)?.trim().isNotEmpty == true
-        ? (driverInfo['status'] as String).trim()
+    final rawDriverStatus = _stringValue(driverInfo['status']);
+    final String driverStatus = rawDriverStatus.isNotEmpty
+        ? rawDriverStatus
         : DriverStatus.offline;
 
     final bool isApproved = driverInfo['isApproved'] == true;
@@ -241,6 +251,8 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
     required PhoneAuthCredential autoVerifiedCredential,
     String? otp,
   }) async {
+    if (!mounted) return;
+
     final texts = context.texts;
     setState(() => _isLoading = true);
 
@@ -407,6 +419,7 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
       return;
     }
 
+    if (!mounted) return;
     setState(() => _isLoading = true);
 
     try {
@@ -438,6 +451,7 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
   Future<void> _resendCode() async {
     if (_isLoading) return;
 
+    if (!mounted) return;
     setState(() => _isLoading = true);
     try {
       final validationError = PhoneAuthHelpers.validateFullPhoneNumber(
@@ -479,6 +493,13 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
           debugPrint('OTP resend codeSent verificationId: $verificationId');
           debugPrint('OTP resend codeSent resendToken: $resendToken');
           if (!mounted) return;
+
+          if (verificationId.trim().isEmpty) {
+            setState(() => _isLoading = false);
+            AppMessage.showError(context, context.texts.t('verificationIdMissing'));
+            return;
+          }
+
           setState(() {
             _verificationId = verificationId;
             _resendToken = resendToken;

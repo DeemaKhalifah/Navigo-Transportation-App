@@ -46,6 +46,22 @@ class DriverLiveTripService {
 
   String? get currentDriverId => _auth.currentUser?.uid;
 
+  Future<bool> isDriverOffline(String driverId) async {
+    final safeDriverId = driverId.trim();
+
+    if (safeDriverId.isEmpty) {
+      throw Exception('Driver ID is missing.');
+    }
+
+    final driverSnap = await _driverDocForDriverId(safeDriverId);
+
+    if (!driverSnap.exists) {
+      throw Exception('Driver profile not found.');
+    }
+
+    return _driverDataIsOffline(driverSnap.data() ?? {});
+  }
+
   Future<void> startTrip({
     required String routeId,
     required String tripId,
@@ -64,10 +80,22 @@ class DriverLiveTripService {
       throw Exception('Driver ID is missing.');
     }
 
+    final driverSnap = await _driverDocForDriverId(safeDriverId);
+
+    if (!driverSnap.exists) {
+      throw Exception('Driver profile not found.');
+    }
+
+    if (_driverDataIsOffline(driverSnap.data() ?? {})) {
+      throw const OfflineDriverStartTripException();
+    }
+
+    final resolvedDriverId = driverSnap.id;
+
     if (await _startTripWithCloudFunction(
       routeId: routeId,
       tripId: safeTripId,
-      driverId: safeDriverId,
+      driverId: resolvedDriverId,
       startLatitude: startLatitude,
       startLongitude: startLongitude,
     )) {
@@ -85,7 +113,7 @@ class DriverLiveTripService {
     }
 
     final routeRef = _db.collection(_routesCollection).doc(resolvedRouteId);
-    final driverRef = _db.collection(_driversCollection).doc(safeDriverId);
+    final driverRef = driverSnap.reference;
 
     final routeSnap = await routeRef.get();
 
@@ -120,7 +148,7 @@ class DriverLiveTripService {
 
     selectedSlot['slotId'] = safeTripId;
     selectedSlot['routeId'] = resolvedRouteId;
-    selectedSlot['driverId'] = (selectedSlot['driverId'] ?? safeDriverId)
+    selectedSlot['driverId'] = (selectedSlot['driverId'] ?? resolvedDriverId)
         .toString();
     selectedSlot['status'] = 'onTrip';
     selectedSlot['startedAt'] = Timestamp.now();
@@ -152,6 +180,37 @@ class DriverLiveTripService {
     await batch.commit();
 
     await LocalStorageService.saveDriverStatus(DriverStatus.onTrip);
+  }
+
+  Future<DocumentSnapshot<Map<String, dynamic>>> _driverDocForDriverId(
+    String driverId,
+  ) async {
+    final directDoc = await _db.collection(_driversCollection).doc(driverId).get();
+    if (directDoc.exists) return directDoc;
+
+    final query = await _db
+        .collection(_driversCollection)
+        .where('userId', isEqualTo: driverId)
+        .limit(1)
+        .get();
+
+    if (query.docs.isNotEmpty) {
+      return query.docs.first;
+    }
+
+    return directDoc;
+  }
+
+  bool _driverDataIsOffline(Map<String, dynamic> data) {
+    final rawStatus = data['status']?.toString();
+    final isOnline = data['isOnline'];
+
+    if (rawStatus != null &&
+        DriverStatus.normalize(rawStatus) == DriverStatus.offline) {
+      return true;
+    }
+
+    return isOnline == false;
   }
 
   Future<bool> _startTripWithCloudFunction({
@@ -857,6 +916,16 @@ class _StartTripFunctionException implements Exception {
   const _StartTripFunctionException(this.message);
 
   final String message;
+
+  @override
+  String toString() => message;
+}
+
+class OfflineDriverStartTripException implements Exception {
+  const OfflineDriverStartTripException();
+
+  static const message =
+      'You are currently offline. You cannot start a trip while your status is Offline.';
 
   @override
   String toString() => message;

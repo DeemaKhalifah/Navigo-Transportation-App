@@ -6,6 +6,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../localization/localization_x.dart';
 import '../../theme/app_theme.dart';
 import '../../utils/form_validation.dart';
+import '../../utils/phone_auth_helpers.dart';
 import '../../widgets/app_message.dart';
 import 'otp_verification_screen.dart';
 
@@ -66,40 +67,95 @@ class _PassengerSignupScreenState extends State<PassengerSignupScreen> {
       return;
     }
 
-    await FirebaseAuth.instance.verifyPhoneNumber(
-      phoneNumber: formattedPhone,
-      timeout: const Duration(seconds: 60),
-      verificationCompleted: (PhoneAuthCredential credential) async {
-        await FirebaseAuth.instance.signInWithCredential(credential);
-      },
-      verificationFailed: (FirebaseAuthException e) {
-        if (!mounted) return;
-        setState(() => _isLoading = false);
-        AppMessage.showError(
-          context,
-          '${context.texts.t('errorLabel')}: ${e.message ?? e.code}',
-        );
-      },
-      codeSent: (String verificationId, int? resendToken) {
-        if (!mounted) return;
-        setState(() => _isLoading = false);
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (_) => OtpVerificationScreen(
-              phoneNumber: formattedPhone,
-              verificationId: verificationId,
-              fullName: name,
-              role: "passenger",
+    debugPrint('Passenger signup phoneNumber: $formattedPhone');
+    PhoneAuthHelpers.logPhoneAuthConfigurationReminder();
+
+    try {
+      await FirebaseAuth.instance.verifyPhoneNumber(
+        phoneNumber: formattedPhone,
+        timeout: const Duration(seconds: 60),
+        verificationCompleted: (PhoneAuthCredential credential) async {
+          debugPrint('Passenger signup verificationCompleted');
+          if (!mounted) return;
+          setState(() => _isLoading = false);
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(
+              builder: (_) => OtpVerificationScreen(
+                phoneNumber: formattedPhone,
+                verificationId: '',
+                fullName: name,
+                role: 'passenger',
+                autoCredential: credential,
+              ),
             ),
-          ),
-        );
-      },
-      codeAutoRetrievalTimeout: (String verificationId) {
-        if (!mounted) return;
-        setState(() => _isLoading = false);
-      },
-    );
+          );
+        },
+        verificationFailed: (FirebaseAuthException e) {
+          PhoneAuthHelpers.logFirebaseAuthException(
+            'Passenger signup verificationFailed',
+            e,
+          );
+          if (!mounted) return;
+          setState(() => _isLoading = false);
+          AppMessage.showError(
+            context,
+            PhoneAuthHelpers.userMessageForFirebaseAuthException(e),
+          );
+        },
+        codeSent: (String verificationId, int? resendToken) {
+          debugPrint('Passenger signup codeSent verificationId: $verificationId');
+          debugPrint('Passenger signup codeSent resendToken: $resendToken');
+          if (!mounted) return;
+          setState(() => _isLoading = false);
+
+          if (verificationId.trim().isEmpty) {
+            AppMessage.showError(context, context.texts.t('verificationIdMissing'));
+            return;
+          }
+
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => OtpVerificationScreen(
+                phoneNumber: formattedPhone,
+                verificationId: verificationId,
+                resendToken: resendToken,
+                fullName: name,
+                role: 'passenger',
+              ),
+            ),
+          );
+        },
+        codeAutoRetrievalTimeout: (String verificationId) {
+          debugPrint(
+            'Passenger signup codeAutoRetrievalTimeout verificationId: '
+            '$verificationId',
+          );
+          if (!mounted) return;
+          setState(() => _isLoading = false);
+        },
+      );
+    } on FirebaseAuthException catch (e) {
+      PhoneAuthHelpers.logFirebaseAuthException(
+        'Passenger signup verifyPhoneNumber threw',
+        e,
+      );
+      if (!mounted) return;
+      setState(() => _isLoading = false);
+      AppMessage.showError(
+        context,
+        PhoneAuthHelpers.userMessageForFirebaseAuthException(e),
+      );
+    } catch (e) {
+      debugPrint('Passenger signup phone verification error: $e');
+      if (!mounted) return;
+      setState(() => _isLoading = false);
+      AppMessage.showError(
+        context,
+        '${context.texts.t('couldNotVerifyPhone')}: $e',
+      );
+    }
   }
 
   @override

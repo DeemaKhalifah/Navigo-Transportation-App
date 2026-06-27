@@ -103,31 +103,22 @@ class _PhoneNumberScreenState extends State<PhoneNumberScreen> {
         phoneNumber: fullPhoneNumber,
         verificationCompleted: (PhoneAuthCredential credential) async {
           debugPrint('OTP verificationCompleted for $fullPhoneNumber');
-          try {
-            await FirebaseAuth.instance.signInWithCredential(credential);
-            if (!mounted) return;
-            Navigator.pushReplacement(
-              context,
-              MaterialPageRoute(
-                builder: (_) => OtpVerificationScreen(
-                  phoneNumber: fullPhoneNumber,
-                  verificationId: '',
-                  resendToken: _resendToken,
-                  fullName: widget.fullName,
-                  role: widget.role,
-                  driverData: widget.driverData,
-                  autoCredential: credential,
-                ),
+          if (!mounted) return;
+          setState(() => _isSending = false);
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(
+              builder: (_) => OtpVerificationScreen(
+                phoneNumber: fullPhoneNumber,
+                verificationId: '',
+                resendToken: _resendToken,
+                fullName: widget.fullName,
+                role: widget.role,
+                driverData: widget.driverData,
+                autoCredential: credential,
               ),
-            );
-          } on FirebaseAuthException catch (e) {
-            PhoneAuthHelpers.logFirebaseAuthException(
-              'verificationCompleted signInWithCredential failed',
-              e,
-            );
-            if (!mounted) return;
-            _showPhoneError(e);
-          }
+            ),
+          );
         },
         verificationFailed: (FirebaseAuthException e) {
           PhoneAuthHelpers.logFirebaseAuthException(
@@ -144,6 +135,12 @@ class _PhoneNumberScreenState extends State<PhoneNumberScreen> {
           debugPrint('OTP codeSent verificationId: $verificationId');
           debugPrint('OTP codeSent resendToken: $resendToken');
           setState(() => _isSending = false);
+
+          if (verificationId.trim().isEmpty) {
+            AppMessage.showError(context, context.texts.t('verificationIdMissing'));
+            return;
+          }
+
           _resendToken = resendToken;
 
           Navigator.push(

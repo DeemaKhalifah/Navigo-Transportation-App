@@ -47,5 +47,20 @@
 	<true/>
 	<key>REVERSED_CLIENT_ID</key>
 	<string>com.googleusercontent.apps.1085605678072-itajfoa47p10aruk9mtrr7s57qv22op2</string>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>com.googleusercontent.apps.1085605678072-itajfoa47p10aruk9mtrr7s57qv22op2</string>
+			</array>
+		</dict>
+	</array>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Navigo uses your location to show pickup points, nearby routes, and live trip tracking.</string>
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>Navigo uses your location during trips so passengers and drivers can follow live trip progress.</string>
 </dict>
 </plist>

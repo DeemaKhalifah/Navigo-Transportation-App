@@ -238,6 +238,11 @@ class _DriverSignupScreenState extends State<DriverSignupScreen> {
 
           setState(() => _isLoading = false);
 
+          if (verificationId.trim().isEmpty) {
+            AppMessage.showError(context, context.texts.t('verificationIdMissing'));
+            return;
+          }
+
           Navigator.push(
             context,
             MaterialPageRoute(

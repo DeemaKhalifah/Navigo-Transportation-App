@@ -73,14 +73,33 @@ class _TripDetailesState extends State<TripDetailes> {
       return;
     }
 
+    if (driverId.trim().isEmpty) {
+      AppMessage.showError(context, 'Driver ID is missing.');
+      return;
+    }
+
     setState(() => _isStarting = true);
 
     try {
+      final isOffline = await _liveTripService.isDriverOffline(driverId);
+
+      if (isOffline) {
+        if (!mounted) return;
+        setState(() => _isStarting = false);
+        await _showOfflineStatusDialog();
+        return;
+      }
+
       await _liveTripService.startTrip(
         routeId: safeRouteId,
         tripId: safeTripId,
         driverId: driverId,
       );
+    } on OfflineDriverStartTripException {
+      if (!mounted) return;
+      setState(() => _isStarting = false);
+      await _showOfflineStatusDialog();
+      return;
     } catch (e) {
       if (!mounted) return;
       AppMessage.showError(context, '${context.texts.t('couldNotStart')}: $e');
@@ -105,6 +124,24 @@ class _TripDetailesState extends State<TripDetailes> {
         reverseTransitionDuration: Duration.zero,
       ),
       (route) => false,
+    );
+  }
+
+  Future<void> _showOfflineStatusDialog() {
+    return showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Offline Status'),
+        content: const Text(
+          'You are currently offline. You cannot start a trip while your status is Offline.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('OK'),
+          ),
+        ],
+      ),
     );
   }
 

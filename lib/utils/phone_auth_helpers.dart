@@ -108,6 +108,7 @@ class PhoneAuthHelpers {
     String label,
     FirebaseAuthException error,
   ) {
+    debugPrint('$label platform: $defaultTargetPlatform');
     debugPrint('$label code: ${error.code}');
     debugPrint('$label message: ${error.message}');
     if (error.email != null) debugPrint('$label email: ${error.email}');
@@ -119,9 +120,9 @@ class PhoneAuthHelpers {
 
   static void logPhoneAuthConfigurationReminder() {
     debugPrint(
-      'Firebase Phone Auth reminder: confirm Android SHA-1 and SHA-256 '
-      'fingerprints are registered in Firebase Console and google-services.json '
-      'has been refreshed after changes.',
+      'Firebase Phone Auth reminder: Android needs SHA-1/SHA-256 in Firebase; '
+      'iOS needs matching Bundle ID, APNs key/cert or reCAPTCHA fallback, and '
+      'the reversed client ID URL scheme in Info.plist.',
     );
   }
 }
