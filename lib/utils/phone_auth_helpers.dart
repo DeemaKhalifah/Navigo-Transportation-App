@@ -1,6 +1,12 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 
+// These numbers must match Firebase Console test phone numbers. Used only for sideloaded iOS demo builds.
+final Map<String, String> firebaseTestOtpCodes = {
+  '+970599000000': '123456',
+  '+972599000000': '123456',
+};
+
 class PhoneAuthHelpers {
   const PhoneAuthHelpers._();
 
@@ -90,11 +96,8 @@ class PhoneAuthHelpers {
         'The OTP code is incorrect. Please check it and try again.',
       'invalid-verification-id' =>
         'The verification session is invalid. Please request a new code.',
-      'unknown' =>
-        'Firebase returned an unknown error. Please try again.',
-      _ => error.message?.trim().isNotEmpty == true
-          ? error.message!
-          : fallback,
+      'unknown' => 'Firebase returned an unknown error. Please try again.',
+      _ => error.message?.trim().isNotEmpty == true ? error.message! : fallback,
     };
 
     if (kDebugMode) {
@@ -115,7 +118,8 @@ class PhoneAuthHelpers {
     if (error.phoneNumber != null) {
       debugPrint('$label phoneNumber: ${error.phoneNumber}');
     }
-    if (error.tenantId != null) debugPrint('$label tenantId: ${error.tenantId}');
+    if (error.tenantId != null)
+      debugPrint('$label tenantId: ${error.tenantId}');
   }
 
   static void logPhoneAuthConfigurationReminder() {

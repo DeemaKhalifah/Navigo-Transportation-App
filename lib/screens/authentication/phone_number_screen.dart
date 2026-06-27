@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import '../../localization/localization_x.dart';
 import '../../services/phone_login_storage_service.dart';
@@ -59,21 +60,43 @@ class _PhoneNumberScreenState extends State<PhoneNumberScreen> {
   }
 
   void _showPhoneError(FirebaseAuthException error) {
-    AppMessage.showError(
-      context,
-      PhoneAuthHelpers.userMessageForFirebaseAuthException(error),
-    );
+    _showOtpError(PhoneAuthHelpers.userMessageForFirebaseAuthException(error));
+  }
+
+  void _showOtpError(String message) {
+    if (!mounted) return;
+
+    try {
+      AppMessage.showError(context, message);
+    } catch (e) {
+      debugPrint('Send OTP show error failed: $e');
+    }
+  }
+
+  bool _isValidE164PhoneNumber(String phoneNumber) {
+    return RegExp(r'^\+[1-9]\d{7,14}$').hasMatch(phoneNumber.trim());
   }
 
   Future<void> _sendOtp() async {
+    debugPrint('Send OTP button pressed');
+
+    if (_isSending) {
+      debugPrint('Send OTP ignored because a request is already in progress');
+      return;
+    }
+
     final localPhoneNumber = _phoneDigitsController.text.trim();
+    debugPrint('Send OTP local input: $localPhoneNumber');
+    debugPrint('Send OTP selected country code: $_phonePrefix');
+
     final validationError = PhoneAuthHelpers.validateLocalPhoneNumber(
       countryCode: _phonePrefix,
       localPhoneNumber: localPhoneNumber,
     );
 
     if (validationError != null) {
-      AppMessage.showError(context, validationError);
+      debugPrint('Send OTP local phone validation failed: $validationError');
+      _showOtpError(validationError);
       return;
     }
 
@@ -82,102 +105,173 @@ class _PhoneNumberScreenState extends State<PhoneNumberScreen> {
       localPhoneNumber: localPhoneNumber,
     );
 
-    print('FULL PHONE NUMBER = $fullPhoneNumber');
-    debugPrint('OTP selected country code: $_phonePrefix');
-    debugPrint('OTP local phone number: $localPhoneNumber');
+    debugPrint('Send OTP phone number prepared: $fullPhoneNumber');
+    debugPrint('Send OTP platform: $defaultTargetPlatform');
+
+    if (!_isValidE164PhoneNumber(fullPhoneNumber)) {
+      debugPrint('Send OTP E.164 validation failed: $fullPhoneNumber');
+      _showOtpError(
+        'Phone number must be in E.164 format, for example +970xxxxxxxxx.',
+      );
+      return;
+    }
+
     PhoneAuthHelpers.logPhoneAuthConfigurationReminder();
 
-    if (_rememberMe) {
-      await _phoneLoginStorageService.saveRememberedPhoneNumber(
-        fullPhoneNumber,
-      );
-    } else {
-      await _phoneLoginStorageService.clearRememberedPhoneNumber();
-    }
+    final isIos = defaultTargetPlatform == TargetPlatform.iOS;
+    final isFirebaseTestNumber = firebaseTestOtpCodes.containsKey(
+      fullPhoneNumber,
+    );
+    debugPrint('Send OTP entered phone number: $fullPhoneNumber');
+    debugPrint('Send OTP is Firebase test number: $isFirebaseTestNumber');
 
     if (!mounted) return;
     setState(() => _isSending = true);
 
     try {
+      debugPrint('Send OTP updating remembered phone preference');
+      if (_rememberMe) {
+        await _phoneLoginStorageService.saveRememberedPhoneNumber(
+          fullPhoneNumber,
+        );
+      } else {
+        await _phoneLoginStorageService.clearRememberedPhoneNumber();
+      }
+
+      if (!mounted) return;
+
+      if (isIos) {
+        if (!isFirebaseTestNumber) {
+          debugPrint('Send OTP verifyPhoneNumber skipped: iOS non-test number');
+          setState(() => _isSending = false);
+          _showOtpError(
+            'Real OTP on iOS requires Apple signing/APNs. Please use one of the Firebase test numbers for this IPA build.',
+          );
+          return;
+        }
+
+        debugPrint(
+          'Send OTP verifyPhoneNumber skipped: iOS Firebase test number',
+        );
+        setState(() => _isSending = false);
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => OtpVerificationScreen(
+              phoneNumber: fullPhoneNumber,
+              verificationId: 'ios-demo-test',
+              resendToken: null,
+              fullName: widget.fullName,
+              role: widget.role,
+              driverData: widget.driverData,
+              isDemoTestMode: true,
+            ),
+          ),
+        );
+        return;
+      }
+
+      debugPrint('Send OTP before verifyPhoneNumber');
       await FirebaseAuth.instance.verifyPhoneNumber(
         phoneNumber: fullPhoneNumber,
         verificationCompleted: (PhoneAuthCredential credential) async {
-          debugPrint('OTP verificationCompleted for $fullPhoneNumber');
+          debugPrint('Send OTP verificationCompleted');
           if (!mounted) return;
-          setState(() => _isSending = false);
-          Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(
-              builder: (_) => OtpVerificationScreen(
-                phoneNumber: fullPhoneNumber,
-                verificationId: '',
-                resendToken: _resendToken,
-                fullName: widget.fullName,
-                role: widget.role,
-                driverData: widget.driverData,
-                autoCredential: credential,
+
+          try {
+            setState(() => _isSending = false);
+            Navigator.pushReplacement(
+              context,
+              MaterialPageRoute(
+                builder: (_) => OtpVerificationScreen(
+                  phoneNumber: fullPhoneNumber,
+                  verificationId: '',
+                  resendToken: _resendToken,
+                  fullName: widget.fullName,
+                  role: widget.role,
+                  driverData: widget.driverData,
+                  autoCredential: credential,
+                ),
               ),
-            ),
-          );
+            );
+          } catch (e) {
+            debugPrint('Send OTP verificationCompleted UI handling failed: $e');
+          }
         },
         verificationFailed: (FirebaseAuthException e) {
+          debugPrint('Send OTP verificationFailed');
           PhoneAuthHelpers.logFirebaseAuthException(
             'verifyPhoneNumber verificationFailed',
             e,
           );
           if (!mounted) return;
-          setState(() => _isSending = false);
-          _showPhoneError(e);
+
+          try {
+            setState(() => _isSending = false);
+            _showPhoneError(e);
+          } catch (callbackError) {
+            debugPrint(
+              'Send OTP verificationFailed UI handling failed: $callbackError',
+            );
+          }
         },
         codeSent: (String verificationId, int? resendToken) {
+          debugPrint('Send OTP codeSent');
           if (!mounted) return;
 
-          debugPrint('OTP codeSent verificationId: $verificationId');
-          debugPrint('OTP codeSent resendToken: $resendToken');
-          setState(() => _isSending = false);
+          debugPrint('Send OTP codeSent verificationId: $verificationId');
+          debugPrint('Send OTP codeSent resendToken: $resendToken');
 
-          if (verificationId.trim().isEmpty) {
-            AppMessage.showError(context, context.texts.t('verificationIdMissing'));
-            return;
-          }
+          try {
+            setState(() => _isSending = false);
 
-          _resendToken = resendToken;
+            if (verificationId.trim().isEmpty) {
+              _showOtpError(context.texts.t('verificationIdMissing'));
+              return;
+            }
 
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (_) => OtpVerificationScreen(
-                phoneNumber: fullPhoneNumber,
-                verificationId: verificationId,
-                resendToken: resendToken,
-                fullName: widget.fullName,
-                role: widget.role,
-                driverData: widget.driverData,
+            _resendToken = resendToken;
+
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => OtpVerificationScreen(
+                  phoneNumber: fullPhoneNumber,
+                  verificationId: verificationId,
+                  resendToken: resendToken,
+                  fullName: widget.fullName,
+                  role: widget.role,
+                  driverData: widget.driverData,
+                ),
               ),
-            ),
-          );
+            );
+          } catch (e) {
+            debugPrint('Send OTP codeSent UI handling failed: $e');
+          }
         },
         codeAutoRetrievalTimeout: (String verificationId) {
-          debugPrint(
-            'OTP codeAutoRetrievalTimeout verificationId: $verificationId',
-          );
+          debugPrint('Send OTP timeout verificationId: $verificationId');
           if (!mounted) return;
-          setState(() => _isSending = false);
+
+          try {
+            setState(() => _isSending = false);
+          } catch (e) {
+            debugPrint('Send OTP timeout UI handling failed: $e');
+          }
         },
       );
+      debugPrint('Send OTP verifyPhoneNumber returned');
     } on FirebaseAuthException catch (e) {
+      debugPrint('Send OTP catch block FirebaseAuthException');
       PhoneAuthHelpers.logFirebaseAuthException('verifyPhoneNumber threw', e);
       if (!mounted) return;
       setState(() => _isSending = false);
       _showPhoneError(e);
     } catch (e) {
-      debugPrint('verifyPhoneNumber unexpected error: $e');
+      debugPrint('Send OTP catch block unexpected error: $e');
       if (!mounted) return;
       setState(() => _isSending = false);
-      AppMessage.showError(
-        context,
-        '${context.texts.t('failedToSendOtp')}: $e',
-      );
+      _showOtpError('${context.texts.t('failedToSendOtp')}: $e');
     }
   }
 

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/foundation.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:flutter/services.dart';
@@ -25,6 +26,7 @@ class OtpVerificationScreen extends StatefulWidget {
   final String? role;
   final Map<String, dynamic>? driverData;
   final PhoneAuthCredential? autoCredential;
+  final bool isDemoTestMode;
 
   const OtpVerificationScreen({
     super.key,
@@ -35,6 +37,7 @@ class OtpVerificationScreen extends StatefulWidget {
     this.role,
     this.driverData,
     this.autoCredential,
+    this.isDemoTestMode = false,
   });
 
   @override
@@ -63,9 +66,11 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
 
     debugPrint('OTP screen phone: ${widget.phoneNumber}');
     debugPrint('OTP screen initial verificationId: $_verificationId');
+    debugPrint('OTP screen platform: $defaultTargetPlatform');
+    debugPrint('OTP screen demo/test mode: ${widget.isDemoTestMode}');
 
     final auto = widget.autoCredential;
-    if (auto != null) {
+    if (auto != null && !widget.isDemoTestMode) {
       WidgetsBinding.instance.addPostFrameCallback((_) async {
         if (!mounted) return;
         await _signInAndContinue(autoVerifiedCredential: auto);
@@ -147,10 +152,9 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
 
     final String license = _stringValue(driverInfo['licenseNumber']);
 
-    final String routeId =
-        _stringValue(driverInfo['routeId']).isNotEmpty
-            ? _stringValue(driverInfo['routeId'])
-            : _stringValue(driverInfo['route']);
+    final String routeId = _stringValue(driverInfo['routeId']).isNotEmpty
+        ? _stringValue(driverInfo['routeId'])
+        : _stringValue(driverInfo['route']);
 
     final rawDriverStatus = _stringValue(driverInfo['status']);
     final String driverStatus = rawDriverStatus.isNotEmpty
@@ -405,12 +409,155 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
     }
   }
 
+  Future<void> _continueAfterDemoTestVerification() async {
+    if (!mounted) return;
+
+    final phoneNumber = widget.phoneNumber.trim();
+    debugPrint('Demo/test OTP continue platform: $defaultTargetPlatform');
+    debugPrint('Demo/test OTP continue phone: $phoneNumber');
+
+    setState(() => _isLoading = true);
+
+    try {
+      final users = FirebaseFirestore.instance.collection('users');
+      var userQuery = await users
+          .where('phone', isEqualTo: phoneNumber)
+          .limit(1)
+          .get();
+
+      if (userQuery.docs.isEmpty) {
+        userQuery = await users
+            .where('phoneNumber', isEqualTo: phoneNumber)
+            .limit(1)
+            .get();
+      }
+
+      if (userQuery.docs.isEmpty) {
+        throw Exception(
+          'No demo user was found for this Firebase test phone number.',
+        );
+      }
+
+      final userDoc = userQuery.docs.first;
+      final userData = userDoc.data();
+      final uid = _stringValue(userData['userId']).isNotEmpty
+          ? _stringValue(userData['userId'])
+          : userDoc.id;
+      final role = _stringValue(widget.role).isNotEmpty
+          ? _stringValue(widget.role)
+          : _stringValue(userData['role']);
+
+      if (!mounted) return;
+
+      if (role == 'passenger') {
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (_) => const PassengerHomeScreen()),
+        );
+        return;
+      }
+
+      if (role == 'driver') {
+        var driverDoc = await FirebaseFirestore.instance
+            .collection('drivers')
+            .doc(uid)
+            .get();
+
+        if (!driverDoc.exists) {
+          final driverQuery = await FirebaseFirestore.instance
+              .collection('drivers')
+              .where('userId', isEqualTo: uid)
+              .limit(1)
+              .get();
+          if (driverQuery.docs.isNotEmpty) {
+            driverDoc = driverQuery.docs.first;
+          }
+        }
+
+        final driverData = driverDoc.data() ?? {};
+        final firstName = _stringValue(userData['firstName']);
+        final lastName = _stringValue(userData['lastName']);
+        final displayName = '$firstName $lastName'.trim();
+        if (displayName.isNotEmpty) {
+          await LocalStorageService.saveDriverDisplayName(displayName);
+        }
+        await LocalStorageService.saveDriverStatus(
+          DriverStatus.normalize(driverData['status']?.toString()),
+        );
+
+        if (!mounted) return;
+
+        final isApproved = driverData['isApproved'] == true;
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (_) => isApproved
+                ? const DriverHomeScreen()
+                : const SignupApprovalScreen(),
+          ),
+        );
+        return;
+      }
+
+      throw Exception('Demo user role was not found.');
+    } catch (e) {
+      debugPrint('Demo/test OTP continue failed: $e');
+      if (!mounted) return;
+      AppMessage.showError(context, '${context.texts.t('errorLabel')}: $e');
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    }
+  }
+
+  Future<void> _continueDemoTestOtp(String otp) async {
+    if (!mounted) return;
+
+    final phoneNumber = widget.phoneNumber.trim();
+    final isIos = defaultTargetPlatform == TargetPlatform.iOS;
+    final expectedOtp = firebaseTestOtpCodes[phoneNumber];
+
+    debugPrint('Demo/test OTP platform: $defaultTargetPlatform');
+    debugPrint('Demo/test OTP entered phone number: $phoneNumber');
+    debugPrint('Demo/test OTP is Firebase test number: ${expectedOtp != null}');
+
+    if (!isIos) {
+      debugPrint('Demo/test OTP failed: platform is not iOS');
+      AppMessage.showError(context, 'Demo OTP mode is only available on iOS.');
+      return;
+    }
+
+    if (expectedOtp == null) {
+      debugPrint('Demo/test OTP failed: phone missing from test map');
+      AppMessage.showError(
+        context,
+        'This phone number is not configured as a Firebase test number.',
+      );
+      return;
+    }
+
+    if (otp != expectedOtp) {
+      debugPrint('Demo/test OTP failed: code did not match');
+      AppMessage.showError(context, context.texts.t('otpIncorrect'));
+      return;
+    }
+
+    debugPrint('Demo/test OTP matched');
+    await _continueAfterDemoTestVerification();
+  }
+
   Future<void> _onContinue() async {
     final texts = context.texts;
     final otp = _otpControllers.map((e) => e.text).join().trim();
 
     if (otp.length != 6) {
       AppMessage.showError(context, texts.t('validSixDigitOtp'));
+      return;
+    }
+
+    if (widget.isDemoTestMode) {
+      await _continueDemoTestOtp(otp);
       return;
     }
 
@@ -450,6 +597,16 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
 
   Future<void> _resendCode() async {
     if (_isLoading) return;
+
+    if (widget.isDemoTestMode) {
+      debugPrint('Demo/test OTP resend skipped');
+      if (!mounted) return;
+      AppMessage.showInfo(
+        context,
+        'Use the fixed OTP code configured for this Firebase test number.',
+      );
+      return;
+    }
 
     if (!mounted) return;
     setState(() => _isLoading = true);
@@ -496,7 +653,10 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
 
           if (verificationId.trim().isEmpty) {
             setState(() => _isLoading = false);
-            AppMessage.showError(context, context.texts.t('verificationIdMissing'));
+            AppMessage.showError(
+              context,
+              context.texts.t('verificationIdMissing'),
+            );
             return;
           }
 
