@@ -192,8 +192,8 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
                                   padding: const EdgeInsets.all(6),
                                   decoration:
                                       NavigoDecorations.iconCircleDecoration(
-                                    NavigoColors.accentGreen,
-                                  ),
+                                        NavigoColors.accentGreen,
+                                      ),
                                   child: const Icon(
                                     Icons.camera_alt,
                                     size: 16,
@@ -282,11 +282,11 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
                                   : _goOnline,
                               style: NavigoDecorations.kPrimaryButtonLargeStyle
                                   .copyWith(
-                                backgroundColor:
-                                    const WidgetStatePropertyAll(
-                                  NavigoColors.accentGreen,
-                                ),
-                              ),
+                                    backgroundColor:
+                                        const WidgetStatePropertyAll(
+                                          NavigoColors.accentGreen,
+                                        ),
+                                  ),
                               child: controller.statusBusy
                                   ? const SizedBox(
                                       width: 18,
@@ -310,11 +310,11 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
                                   : _goOffline,
                               style: NavigoDecorations.kPrimaryButtonLargeStyle
                                   .copyWith(
-                                backgroundColor:
-                                    const WidgetStatePropertyAll(
-                                  NavigoColors.accentRed,
-                                ),
-                              ),
+                                    backgroundColor:
+                                        const WidgetStatePropertyAll(
+                                          NavigoColors.accentRed,
+                                        ),
+                                  ),
                               child: Text(context.texts.t('goOffline')),
                             ),
                           ),
@@ -331,9 +331,27 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
                         ),
                       ),
                       const SizedBox(height: 10),
-                      const Align(
+                      Align(
                         alignment: AlignmentDirectional.centerStart,
-                        child: LanguageToggleSwitch(),
+                        child: Row(
+                          children: [
+                            const Icon(
+                              Icons.language,
+                              color: NavigoColors.textDark,
+                            ),
+                            const SizedBox(width: 16),
+                            Expanded(
+                              child: Text(
+                                context.texts.t('language'),
+                                style: NavigoTextStyles.bodyMedium.copyWith(
+                                  fontWeight: FontWeight.w500,
+                                  color: NavigoColors.textDark,
+                                ),
+                              ),
+                            ),
+                            const LanguageToggleSwitch(),
+                          ],
+                        ),
                       ),
                       const SizedBox(height: 8),
                       _settingsItem(

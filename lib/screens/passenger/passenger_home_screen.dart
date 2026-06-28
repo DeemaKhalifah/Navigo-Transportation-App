@@ -619,7 +619,9 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> {
 
   Future<void> _loadCarMarker() async {
     try {
-      final ByteData data = await rootBundle.load('assets/images/logo.png');
+      final ByteData data = await rootBundle.load(
+        'assets/images/Logowithoutbg.png',
+      );
       final ui.Codec codec = await ui.instantiateImageCodec(
         data.buffer.asUint8List(),
         targetWidth: 80,
@@ -1276,8 +1278,7 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> {
                                                           false;
                                                     });
                                                     unawaited(
-                                                      LocalStorageService
-                                                          .clearSelectedLine(),
+                                                      LocalStorageService.clearSelectedLine(),
                                                     );
                                                   },
                                                 )
@@ -1446,7 +1447,7 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> {
             minChildSize: 0.10,
             maxChildSize: isLandscape ? 0.33 : 0.22,
             snap: true,
-            snapSizes: isLandscape ? const [0.40,0.33] :const[0.15,0.22],
+            snapSizes: isLandscape ? const [0.40, 0.33] : const [0.15, 0.22],
             builder: (context, scrollController) {
               return Container(
                 margin: EdgeInsets.symmetric(horizontal: pagePadding * 0.5),

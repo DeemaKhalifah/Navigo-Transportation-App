@@ -514,9 +514,28 @@ class _ManagerProfileState extends State<ManagerProfile> {
                               ),
                             ),
                             const SizedBox(height: 10),
-                            const Align(
-                              alignment: Alignment.centerLeft,
-                              child: LanguageToggleSwitch(),
+                            Align(
+                              alignment: AlignmentDirectional.centerStart,
+                              child: Row(
+                                children: [
+                                  const Icon(
+                                    Icons.language,
+                                    color: NavigoColors.textDark,
+                                  ),
+                                  const SizedBox(width: 16),
+                                  Expanded(
+                                    child: Text(
+                                      context.texts.t('language'),
+                                      style: NavigoTextStyles.bodyMedium
+                                          .copyWith(
+                                            fontWeight: FontWeight.w500,
+                                            color: NavigoColors.textDark,
+                                          ),
+                                    ),
+                                  ),
+                                  const LanguageToggleSwitch(),
+                                ],
+                              ),
                             ),
                             const SizedBox(height: 8),
                             _settingsItem(
