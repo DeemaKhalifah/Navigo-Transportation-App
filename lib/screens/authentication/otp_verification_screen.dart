@@ -58,6 +58,7 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
 
   bool _isLoading = false;
   late bool _isDemoTestMode;
+  bool _navigatedAway = false;
 
   @override
   void initState() {
@@ -114,11 +115,6 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
     return int.tryParse(_stringValue(value));
   }
 
-  String _demoUidForPhone(String phoneNumber) {
-    final digits = phoneNumber.replaceAll(RegExp(r'\D'), '');
-    return 'ios_demo_$digits';
-  }
-
   ({String firstName, String lastName}) _namePartsFromWidget() {
     final fullName = widget.fullName?.trim() ?? '';
     if (fullName.isEmpty) return (firstName: '', lastName: '');
@@ -127,6 +123,36 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
     return (
       firstName: names.isNotEmpty ? names.first : '',
       lastName: names.length > 1 ? names.sublist(1).join(' ') : '',
+    );
+  }
+
+  void _showOtpError(String message) {
+    if (!mounted) return;
+
+    try {
+      AppMessage.showError(context, message);
+    } catch (e) {
+      debugPrint('OTP show error failed: $e');
+    }
+  }
+
+  void _showOtpInfo(String message) {
+    if (!mounted) return;
+
+    try {
+      AppMessage.showInfo(context, message);
+    } catch (e) {
+      debugPrint('OTP show info failed: $e');
+    }
+  }
+
+  void _pushReplacement(Widget screen) {
+    if (!mounted) return;
+
+    _navigatedAway = true;
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(builder: (_) => screen),
     );
   }
 
@@ -257,15 +283,9 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
     if (!mounted) return;
 
     if (approved) {
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (_) => const DriverHomeScreen()),
-      );
+      _pushReplacement(const DriverHomeScreen());
     } else {
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (_) => const SignupApprovalScreen()),
-      );
+      _pushReplacement(const SignupApprovalScreen());
     }
   }
 
@@ -348,10 +368,7 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
         await _capturePassengerLoginLocation();
 
         if (!mounted) return;
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(builder: (_) => const PassengerHomeScreen()),
-        );
+        _pushReplacement(const PassengerHomeScreen());
         return;
       }
 
@@ -376,10 +393,7 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
       if (role == 'passenger') {
         await _capturePassengerLoginLocation();
         if (!mounted) return;
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(builder: (_) => const PassengerHomeScreen()),
-        );
+        _pushReplacement(const PassengerHomeScreen());
       } else if (role == 'driver') {
         final driverDoc = await FirebaseFirestore.instance
             .collection('drivers')
@@ -394,15 +408,9 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
         if (!mounted) return;
 
         if (isApproved) {
-          Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(builder: (_) => const DriverHomeScreen()),
-          );
+          _pushReplacement(const DriverHomeScreen());
         } else {
-          Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(builder: (_) => const SignupApprovalScreen()),
-          );
+          _pushReplacement(const SignupApprovalScreen());
         }
       } else {
         AppMessage.showError(context, texts.t('userRoleNotFound'));
@@ -421,7 +429,7 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
       if (!mounted) return;
       AppMessage.showError(context, '${texts.t('errorLabel')}: $e');
     } finally {
-      if (mounted) {
+      if (mounted && !_navigatedAway) {
         setState(() => _isLoading = false);
       }
     }
@@ -437,6 +445,21 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
     setState(() => _isLoading = true);
 
     try {
+      final auth = FirebaseAuth.instance;
+      var authUser = auth.currentUser;
+
+      if (authUser == null) {
+        debugPrint('Demo/test OTP signing in anonymously');
+        authUser = (await auth.signInAnonymously()).user;
+      }
+
+      if (authUser == null) {
+        throw Exception('Could not start demo Firebase session.');
+      }
+
+      final sessionUid = authUser.uid;
+      debugPrint('Demo/test OTP session uid: $sessionUid');
+
       final users = FirebaseFirestore.instance.collection('users');
       var userQuery = await users
           .where('phone', isEqualTo: phoneNumber)
@@ -450,100 +473,95 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
             .get();
       }
 
-      if (userQuery.docs.isEmpty) {
-        final role = _stringValue(widget.role);
+      final existingUserDoc = userQuery.docs.isEmpty
+          ? null
+          : userQuery.docs.first;
+      final existingUserData = existingUserDoc?.data() ?? {};
+      final existingUid = existingUserDoc == null
+          ? ''
+          : (_stringValue(existingUserData['userId']).isNotEmpty
+                ? _stringValue(existingUserData['userId'])
+                : existingUserDoc.id);
 
-        if (role.isEmpty) {
-          throw Exception(
-            'No demo user was found for this Firebase test phone number.',
-          );
-        }
-
-        final uid = _demoUidForPhone(phoneNumber);
-        final nameParts = _namePartsFromWidget();
-        final userData = <String, dynamic>{
-          'userId': uid,
-          'phone': phoneNumber,
-          'isVerified': true,
-          'isOnline': false,
-          'role': role,
-        };
-
-        if (nameParts.firstName.isNotEmpty) {
-          userData['firstName'] = nameParts.firstName;
-        }
-
-        if (nameParts.lastName.isNotEmpty) {
-          userData['lastName'] = nameParts.lastName;
-        }
-
-        await users.doc(uid).set(userData, SetOptions(merge: true));
-
-        if (role == 'passenger') {
-          await FirebaseFirestore.instance
-              .collection('passengers')
-              .doc(uid)
-              .set({
-                'passengerId': uid,
-                'fullName': [
-                  nameParts.firstName,
-                  nameParts.lastName,
-                ].where((part) => part.trim().isNotEmpty).join(' '),
-                'phoneNumber': phoneNumber,
-                'latitude': null,
-                'longitude': null,
-                'lastLocationUpdate': null,
-              }, SetOptions(merge: true));
-
-          if (!mounted) return;
-          Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(builder: (_) => const PassengerHomeScreen()),
-          );
-          return;
-        }
-
-        if (role == 'driver') {
-          await _handleDriverFlow(
-            uid: uid,
-            firstName: nameParts.firstName,
-            lastName: nameParts.lastName,
-          );
-          return;
-        }
-
-        throw Exception('Demo user role was not found.');
-      }
-
-      final userDoc = userQuery.docs.first;
-      final userData = userDoc.data();
-      final uid = _stringValue(userData['userId']).isNotEmpty
-          ? _stringValue(userData['userId'])
-          : userDoc.id;
       final role = _stringValue(widget.role).isNotEmpty
           ? _stringValue(widget.role)
-          : _stringValue(userData['role']);
+          : _stringValue(existingUserData['role']);
 
-      if (!mounted) return;
+      if (role.isEmpty) {
+        throw Exception(
+          'No demo user role was found for this Firebase test phone number.',
+        );
+      }
+
+      final nameParts = _namePartsFromWidget();
+      final firstName = nameParts.firstName.isNotEmpty
+          ? nameParts.firstName
+          : _stringValue(existingUserData['firstName']);
+      final lastName = nameParts.lastName.isNotEmpty
+          ? nameParts.lastName
+          : _stringValue(existingUserData['lastName']);
+
+      final userData = <String, dynamic>{
+        'userId': sessionUid,
+        'phone': phoneNumber,
+        'isVerified': true,
+        'isOnline': false,
+        'role': role,
+      };
+
+      if (firstName.isNotEmpty) {
+        userData['firstName'] = firstName;
+      }
+
+      if (lastName.isNotEmpty) {
+        userData['lastName'] = lastName;
+      }
+
+      await users.doc(sessionUid).set(userData, SetOptions(merge: true));
 
       if (role == 'passenger') {
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(builder: (_) => const PassengerHomeScreen()),
-        );
+        await FirebaseFirestore.instance
+            .collection('passengers')
+            .doc(sessionUid)
+            .set({
+              'passengerId': sessionUid,
+              'fullName': [
+                firstName,
+                lastName,
+              ].where((part) => part.trim().isNotEmpty).join(' '),
+              'phoneNumber': phoneNumber,
+              'latitude': null,
+              'longitude': null,
+              'lastLocationUpdate': null,
+            }, SetOptions(merge: true));
+
+        if (!mounted) return;
+        _pushReplacement(const PassengerHomeScreen());
         return;
       }
 
       if (role == 'driver') {
-        var driverDoc = await FirebaseFirestore.instance
-            .collection('drivers')
-            .doc(uid)
-            .get();
+        if (_stringValue(widget.role) == 'driver' &&
+            widget.driverData != null) {
+          await _handleDriverFlow(
+            uid: sessionUid,
+            firstName: firstName,
+            lastName: lastName,
+          );
+          return;
+        }
 
-        if (!driverDoc.exists) {
-          final driverQuery = await FirebaseFirestore.instance
-              .collection('drivers')
-              .where('userId', isEqualTo: uid)
+        final drivers = FirebaseFirestore.instance.collection('drivers');
+        DocumentSnapshot<Map<String, dynamic>>? driverDoc;
+
+        if (existingUid.isNotEmpty) {
+          final byExistingUid = await drivers.doc(existingUid).get();
+          if (byExistingUid.exists) driverDoc = byExistingUid;
+        }
+
+        if (driverDoc == null && existingUid.isNotEmpty) {
+          final driverQuery = await drivers
+              .where('userId', isEqualTo: existingUid)
               .limit(1)
               .get();
           if (driverQuery.docs.isNotEmpty) {
@@ -551,9 +569,30 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
           }
         }
 
-        final driverData = driverDoc.data() ?? {};
-        final firstName = _stringValue(userData['firstName']);
-        final lastName = _stringValue(userData['lastName']);
+        if (driverDoc == null) {
+          final byPhone = await drivers
+              .where('phone', isEqualTo: phoneNumber)
+              .limit(1)
+              .get();
+          if (byPhone.docs.isNotEmpty) {
+            driverDoc = byPhone.docs.first;
+          }
+        }
+
+        final driverData = driverDoc?.data() ?? {};
+        await drivers.doc(sessionUid).set({
+          ...driverData,
+          'userId': sessionUid,
+          'firstName': firstName,
+          'lastName': lastName,
+          'phone': phoneNumber,
+          'role': 'driver',
+          'isVerified': true,
+          'isOnline': driverData['isOnline'] == true,
+          'status': DriverStatus.normalize(driverData['status']?.toString()),
+          'updatedAt': FieldValue.serverTimestamp(),
+        }, SetOptions(merge: true));
+
         final displayName = '$firstName $lastName'.trim();
         if (displayName.isNotEmpty) {
           await LocalStorageService.saveDriverDisplayName(displayName);
@@ -565,24 +604,28 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
         if (!mounted) return;
 
         final isApproved = driverData['isApproved'] == true;
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(
-            builder: (_) => isApproved
-                ? const DriverHomeScreen()
-                : const SignupApprovalScreen(),
-          ),
+        _pushReplacement(
+          isApproved ? const DriverHomeScreen() : const SignupApprovalScreen(),
         );
         return;
       }
 
       throw Exception('Demo user role was not found.');
+    } on FirebaseAuthException catch (e) {
+      PhoneAuthHelpers.logFirebaseAuthException(
+        'Demo/test OTP anonymous session failed',
+        e,
+      );
+      if (!mounted) return;
+      _showOtpError(
+        'Could not start the iOS demo session. Enable Anonymous sign-in in Firebase Authentication, then try again.',
+      );
     } catch (e) {
       debugPrint('Demo/test OTP continue failed: $e');
       if (!mounted) return;
-      AppMessage.showError(context, '${context.texts.t('errorLabel')}: $e');
+      _showOtpError('${context.texts.t('errorLabel')}: $e');
     } finally {
-      if (mounted) {
+      if (mounted && !_navigatedAway) {
         setState(() => _isLoading = false);
       }
     }
@@ -601,14 +644,13 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
 
     if (!isIos) {
       debugPrint('Demo/test OTP failed: platform is not iOS');
-      AppMessage.showError(context, 'Demo OTP mode is only available on iOS.');
+      _showOtpError('Demo OTP mode is only available on iOS.');
       return;
     }
 
     if (expectedOtp == null) {
       debugPrint('Demo/test OTP failed: phone missing from test map');
-      AppMessage.showError(
-        context,
+      _showOtpError(
         'This phone number is not configured as a Firebase test number.',
       );
       return;
@@ -616,7 +658,7 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
 
     if (otp != expectedOtp) {
       debugPrint('Demo/test OTP failed: code did not match');
-      AppMessage.showError(context, context.texts.t('otpIncorrect'));
+      _showOtpError(context.texts.t('otpIncorrect'));
       return;
     }
 
@@ -666,7 +708,7 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
       if (!mounted) return;
       AppMessage.showError(context, '${texts.t('errorLabel')}: $e');
     } finally {
-      if (mounted) {
+      if (mounted && !_navigatedAway) {
         setState(() => _isLoading = false);
       }
     }
@@ -678,8 +720,7 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
     if (_isDemoTestMode) {
       debugPrint('Demo/test OTP resend skipped');
       if (!mounted) return;
-      AppMessage.showInfo(
-        context,
+      _showOtpInfo(
         'Use the fixed OTP code configured for this Firebase test number.',
       );
       return;
@@ -697,7 +738,6 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
         return;
       }
 
-      print('FULL PHONE NUMBER = ${widget.phoneNumber}');
       debugPrint('OTP resend phoneNumber: ${widget.phoneNumber}');
       PhoneAuthHelpers.logPhoneAuthConfigurationReminder();
 
