@@ -616,12 +616,18 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
         'Demo/test OTP anonymous session failed',
         e,
       );
+      if (FirebaseAuth.instance.currentUser?.isAnonymous == true) {
+        await FirebaseAuth.instance.signOut();
+      }
       if (!mounted) return;
       _showOtpError(
         'Could not start the iOS demo session. Enable Anonymous sign-in in Firebase Authentication, then try again.',
       );
     } catch (e) {
       debugPrint('Demo/test OTP continue failed: $e');
+      if (FirebaseAuth.instance.currentUser?.isAnonymous == true) {
+        await FirebaseAuth.instance.signOut();
+      }
       if (!mounted) return;
       _showOtpError('${context.texts.t('errorLabel')}: $e');
     } finally {

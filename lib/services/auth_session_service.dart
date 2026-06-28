@@ -17,11 +17,9 @@ class AuthSessionService {
   final FirebaseAuth _auth;
   final FirebaseFirestore _db;
 
-  AuthSessionService({
-    FirebaseAuth? auth,
-    FirebaseFirestore? firestore,
-  }) : _auth = auth ?? FirebaseAuth.instance,
-       _db = firestore ?? FirebaseFirestore.instance;
+  AuthSessionService({FirebaseAuth? auth, FirebaseFirestore? firestore})
+    : _auth = auth ?? FirebaseAuth.instance,
+      _db = firestore ?? FirebaseFirestore.instance;
 
   Future<DocumentSnapshot<Map<String, dynamic>>> _driverDocForUser(
     String uid,
@@ -48,6 +46,11 @@ class AuthSessionService {
 
     final userDoc = await _db.collection('users').doc(user.uid).get();
     final role = _normalizeRole(userDoc.data()?['role']?.toString());
+
+    if (role.isEmpty && user.isAnonymous) {
+      await _auth.signOut();
+      return AppSessionDestination.phoneLogin;
+    }
 
     if (role == 'passenger') {
       return AppSessionDestination.passengerHome;
