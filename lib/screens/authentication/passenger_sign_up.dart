@@ -1,4 +1,5 @@
 import 'package:flutter/gestures.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -68,9 +69,52 @@ class _PassengerSignupScreenState extends State<PassengerSignupScreen> {
     }
 
     debugPrint('Passenger signup phoneNumber: $formattedPhone');
+    debugPrint('Passenger signup platform: $defaultTargetPlatform');
     PhoneAuthHelpers.logPhoneAuthConfigurationReminder();
 
     try {
+      final isIos = defaultTargetPlatform == TargetPlatform.iOS;
+      final isFirebaseTestNumber = firebaseTestOtpCodes.containsKey(
+        formattedPhone,
+      );
+      debugPrint(
+        'Passenger signup is Firebase test number: $isFirebaseTestNumber',
+      );
+
+      if (isIos) {
+        if (!isFirebaseTestNumber) {
+          debugPrint(
+            'Passenger signup verifyPhoneNumber skipped: iOS non-test number',
+          );
+          if (!mounted) return;
+          setState(() => _isLoading = false);
+          AppMessage.showError(
+            context,
+            PhoneAuthHelpers.iosSideloadedOtpMessage,
+          );
+          return;
+        }
+
+        debugPrint(
+          'Passenger signup verifyPhoneNumber skipped: iOS Firebase test number',
+        );
+        if (!mounted) return;
+        setState(() => _isLoading = false);
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => OtpVerificationScreen(
+              phoneNumber: formattedPhone,
+              verificationId: 'ios-demo-test',
+              fullName: name,
+              role: 'passenger',
+              isDemoTestMode: true,
+            ),
+          ),
+        );
+        return;
+      }
+
       await FirebaseAuth.instance.verifyPhoneNumber(
         phoneNumber: formattedPhone,
         timeout: const Duration(seconds: 60),
@@ -104,13 +148,18 @@ class _PassengerSignupScreenState extends State<PassengerSignupScreen> {
           );
         },
         codeSent: (String verificationId, int? resendToken) {
-          debugPrint('Passenger signup codeSent verificationId: $verificationId');
+          debugPrint(
+            'Passenger signup codeSent verificationId: $verificationId',
+          );
           debugPrint('Passenger signup codeSent resendToken: $resendToken');
           if (!mounted) return;
           setState(() => _isLoading = false);
 
           if (verificationId.trim().isEmpty) {
-            AppMessage.showError(context, context.texts.t('verificationIdMissing'));
+            AppMessage.showError(
+              context,
+              context.texts.t('verificationIdMissing'),
+            );
             return;
           }
 

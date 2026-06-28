@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
@@ -169,6 +170,7 @@ class _DriverSignupScreenState extends State<DriverSignupScreen> {
     print('FULL PHONE NUMBER = $fullPhoneNumber');
     debugPrint('Driver signup selected country code: $_phonePrefix');
     debugPrint('Driver signup local phone number: $localPhoneNumber');
+    debugPrint('Driver signup platform: $defaultTargetPlatform');
     PhoneAuthHelpers.logPhoneAuthConfigurationReminder();
 
     setState(() => _isLoading = true);
@@ -186,6 +188,56 @@ class _DriverSignupScreenState extends State<DriverSignupScreen> {
         setState(() => _isLoading = false);
 
         AppMessage.showError(context, context.texts.t('phoneAlreadyUsed'));
+        return;
+      }
+
+      final isIos = defaultTargetPlatform == TargetPlatform.iOS;
+      final isFirebaseTestNumber = firebaseTestOtpCodes.containsKey(
+        fullPhoneNumber,
+      );
+      debugPrint(
+        'Driver signup is Firebase test number: $isFirebaseTestNumber',
+      );
+
+      if (isIos) {
+        if (!isFirebaseTestNumber) {
+          debugPrint(
+            'Driver signup verifyPhoneNumber skipped: iOS non-test number',
+          );
+          if (!mounted) return;
+          setState(() => _isLoading = false);
+          AppMessage.showError(
+            context,
+            PhoneAuthHelpers.iosSideloadedOtpMessage,
+          );
+          return;
+        }
+
+        debugPrint(
+          'Driver signup verifyPhoneNumber skipped: iOS Firebase test number',
+        );
+        if (!mounted) return;
+        setState(() => _isLoading = false);
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => OtpVerificationScreen(
+              phoneNumber: fullPhoneNumber,
+              verificationId: 'ios-demo-test',
+              fullName: name,
+              role: 'driver',
+              driverData: {
+                'routeId': _selectedRouteId,
+                'plateNumber': _carNumberController.text.trim(),
+                'vehicleType': selectedVehicle['vehicleType'],
+                'capacity': selectedVehicle['capacity'],
+                'vehicleClass': selectedVehicle['vehicleClass'],
+                'licenseNumber': _licenseController.text.trim(),
+              },
+              isDemoTestMode: true,
+            ),
+          ),
+        );
         return;
       }
 
@@ -239,7 +291,10 @@ class _DriverSignupScreenState extends State<DriverSignupScreen> {
           setState(() => _isLoading = false);
 
           if (verificationId.trim().isEmpty) {
-            AppMessage.showError(context, context.texts.t('verificationIdMissing'));
+            AppMessage.showError(
+              context,
+              context.texts.t('verificationIdMissing'),
+            );
             return;
           }
 

@@ -3298,7 +3298,6 @@ class _LtrText extends StatelessWidget {
 
   //  const _LtrText(this.value, {this.style});
   const _LtrText(this.value, {this.style});
-
   @override
   Widget build(BuildContext context) {
     return Directionality(

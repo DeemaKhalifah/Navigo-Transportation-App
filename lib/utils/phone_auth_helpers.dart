@@ -3,12 +3,15 @@ import 'package:flutter/foundation.dart';
 
 // These numbers must match Firebase Console test phone numbers. Used only for sideloaded iOS demo builds.
 final Map<String, String> firebaseTestOtpCodes = {
-  '+970599000000': '123456',
-  '+972599000000': '123456',
+  '+970599999999': '123456',
+  '+970593333333': '123456',
 };
 
 class PhoneAuthHelpers {
   const PhoneAuthHelpers._();
+
+  static const iosSideloadedOtpMessage =
+      'Please use one of the Firebase test phone numbers configured for this iOS IPA build.';
 
   static const Map<String, int> localPhoneLengthsByCountryCode = {
     '+970': 9,
@@ -118,8 +121,9 @@ class PhoneAuthHelpers {
     if (error.phoneNumber != null) {
       debugPrint('$label phoneNumber: ${error.phoneNumber}');
     }
-    if (error.tenantId != null)
+    if (error.tenantId != null) {
       debugPrint('$label tenantId: ${error.tenantId}');
+    }
   }
 
   static void logPhoneAuthConfigurationReminder() {

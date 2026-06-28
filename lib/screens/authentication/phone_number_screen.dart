@@ -144,9 +144,7 @@ class _PhoneNumberScreenState extends State<PhoneNumberScreen> {
         if (!isFirebaseTestNumber) {
           debugPrint('Send OTP verifyPhoneNumber skipped: iOS non-test number');
           setState(() => _isSending = false);
-          _showOtpError(
-            'Real OTP on iOS requires Apple signing/APNs. Please use one of the Firebase test numbers for this IPA build.',
-          );
+          _showOtpError(PhoneAuthHelpers.iosSideloadedOtpMessage);
           return;
         }
 

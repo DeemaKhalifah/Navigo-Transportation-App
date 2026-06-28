@@ -57,20 +57,22 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
   final List<FocusNode> _focusNodes = List.generate(6, (_) => FocusNode());
 
   bool _isLoading = false;
+  late bool _isDemoTestMode;
 
   @override
   void initState() {
     super.initState();
     _verificationId = widget.verificationId;
     _resendToken = widget.resendToken;
+    _isDemoTestMode = widget.isDemoTestMode;
 
     debugPrint('OTP screen phone: ${widget.phoneNumber}');
     debugPrint('OTP screen initial verificationId: $_verificationId');
     debugPrint('OTP screen platform: $defaultTargetPlatform');
-    debugPrint('OTP screen demo/test mode: ${widget.isDemoTestMode}');
+    debugPrint('OTP screen demo/test mode: $_isDemoTestMode');
 
     final auto = widget.autoCredential;
-    if (auto != null && !widget.isDemoTestMode) {
+    if (auto != null && !_isDemoTestMode) {
       WidgetsBinding.instance.addPostFrameCallback((_) async {
         if (!mounted) return;
         await _signInAndContinue(autoVerifiedCredential: auto);
@@ -110,6 +112,22 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
     if (value is int) return value;
     if (value is num) return value.toInt();
     return int.tryParse(_stringValue(value));
+  }
+
+  String _demoUidForPhone(String phoneNumber) {
+    final digits = phoneNumber.replaceAll(RegExp(r'\D'), '');
+    return 'ios_demo_$digits';
+  }
+
+  ({String firstName, String lastName}) _namePartsFromWidget() {
+    final fullName = widget.fullName?.trim() ?? '';
+    if (fullName.isEmpty) return (firstName: '', lastName: '');
+
+    final names = fullName.split(RegExp(r'\s+'));
+    return (
+      firstName: names.isNotEmpty ? names.first : '',
+      lastName: names.length > 1 ? names.sublist(1).join(' ') : '',
+    );
   }
 
   @override
@@ -433,9 +451,68 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
       }
 
       if (userQuery.docs.isEmpty) {
-        throw Exception(
-          'No demo user was found for this Firebase test phone number.',
-        );
+        final role = _stringValue(widget.role);
+
+        if (role.isEmpty) {
+          throw Exception(
+            'No demo user was found for this Firebase test phone number.',
+          );
+        }
+
+        final uid = _demoUidForPhone(phoneNumber);
+        final nameParts = _namePartsFromWidget();
+        final userData = <String, dynamic>{
+          'userId': uid,
+          'phone': phoneNumber,
+          'isVerified': true,
+          'isOnline': false,
+          'role': role,
+        };
+
+        if (nameParts.firstName.isNotEmpty) {
+          userData['firstName'] = nameParts.firstName;
+        }
+
+        if (nameParts.lastName.isNotEmpty) {
+          userData['lastName'] = nameParts.lastName;
+        }
+
+        await users.doc(uid).set(userData, SetOptions(merge: true));
+
+        if (role == 'passenger') {
+          await FirebaseFirestore.instance
+              .collection('passengers')
+              .doc(uid)
+              .set({
+                'passengerId': uid,
+                'fullName': [
+                  nameParts.firstName,
+                  nameParts.lastName,
+                ].where((part) => part.trim().isNotEmpty).join(' '),
+                'phoneNumber': phoneNumber,
+                'latitude': null,
+                'longitude': null,
+                'lastLocationUpdate': null,
+              }, SetOptions(merge: true));
+
+          if (!mounted) return;
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(builder: (_) => const PassengerHomeScreen()),
+          );
+          return;
+        }
+
+        if (role == 'driver') {
+          await _handleDriverFlow(
+            uid: uid,
+            firstName: nameParts.firstName,
+            lastName: nameParts.lastName,
+          );
+          return;
+        }
+
+        throw Exception('Demo user role was not found.');
       }
 
       final userDoc = userQuery.docs.first;
@@ -556,7 +633,7 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
       return;
     }
 
-    if (widget.isDemoTestMode) {
+    if (_isDemoTestMode) {
       await _continueDemoTestOtp(otp);
       return;
     }
@@ -598,7 +675,7 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
   Future<void> _resendCode() async {
     if (_isLoading) return;
 
-    if (widget.isDemoTestMode) {
+    if (_isDemoTestMode) {
       debugPrint('Demo/test OTP resend skipped');
       if (!mounted) return;
       AppMessage.showInfo(
@@ -623,6 +700,43 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
       print('FULL PHONE NUMBER = ${widget.phoneNumber}');
       debugPrint('OTP resend phoneNumber: ${widget.phoneNumber}');
       PhoneAuthHelpers.logPhoneAuthConfigurationReminder();
+
+      final isIos = defaultTargetPlatform == TargetPlatform.iOS;
+      final isFirebaseTestNumber = firebaseTestOtpCodes.containsKey(
+        widget.phoneNumber.trim(),
+      );
+      debugPrint('OTP resend platform: $defaultTargetPlatform');
+      debugPrint('OTP resend is Firebase test number: $isFirebaseTestNumber');
+
+      if (isIos) {
+        if (!mounted) return;
+        setState(() => _isLoading = false);
+
+        if (!isFirebaseTestNumber) {
+          debugPrint(
+            'OTP resend verifyPhoneNumber skipped: iOS non-test number',
+          );
+          AppMessage.showError(
+            context,
+            PhoneAuthHelpers.iosSideloadedOtpMessage,
+          );
+          return;
+        }
+
+        debugPrint(
+          'OTP resend verifyPhoneNumber skipped: iOS Firebase test number',
+        );
+        setState(() {
+          _isDemoTestMode = true;
+          _verificationId = 'ios-demo-test';
+          _resendToken = null;
+        });
+        AppMessage.showInfo(
+          context,
+          'Use the fixed OTP code configured for this Firebase test number.',
+        );
+        return;
+      }
 
       await FirebaseAuth.instance.verifyPhoneNumber(
         phoneNumber: widget.phoneNumber,
