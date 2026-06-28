@@ -47,7 +47,10 @@ class AuthSessionService {
     final userDoc = await _db.collection('users').doc(user.uid).get();
     final role = _normalizeRole(userDoc.data()?['role']?.toString());
 
-    if (role.isEmpty && user.isAnonymous) {
+    final isIosDemoUser =
+        user.isAnonymous || (user.email ?? '').startsWith('ios-demo-');
+
+    if (role.isEmpty && isIosDemoUser) {
       await _auth.signOut();
       return AppSessionDestination.phoneLogin;
     }

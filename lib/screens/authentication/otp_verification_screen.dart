@@ -126,6 +126,53 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
     );
   }
 
+  String _demoEmailForPhone(String phoneNumber) {
+    final digits = phoneNumber.replaceAll(RegExp(r'\D'), '');
+    return 'ios-demo-$digits@navigo.test';
+  }
+
+  String get _demoPassword => 'NavigoIosDemo123!';
+
+  Future<User> _signInDemoFirebaseUser(String phoneNumber) async {
+    final auth = FirebaseAuth.instance;
+    final currentUser = auth.currentUser;
+
+    if (currentUser != null) {
+      await auth.signOut();
+    }
+
+    final email = _demoEmailForPhone(phoneNumber);
+    debugPrint('Demo/test OTP signing in with demo email: $email');
+
+    try {
+      final credential = await auth.signInWithEmailAndPassword(
+        email: email,
+        password: _demoPassword,
+      );
+      final user = credential.user;
+      if (user == null) {
+        throw Exception('Demo Firebase user was not returned after sign in.');
+      }
+      return user;
+    } on FirebaseAuthException catch (e) {
+      if (e.code != 'user-not-found' &&
+          e.code != 'invalid-credential' &&
+          e.code != 'INVALID_LOGIN_CREDENTIALS') {
+        rethrow;
+      }
+    }
+
+    final created = await auth.createUserWithEmailAndPassword(
+      email: email,
+      password: _demoPassword,
+    );
+    final user = created.user;
+    if (user == null) {
+      throw Exception('Demo Firebase user was not returned after creation.');
+    }
+    return user;
+  }
+
   void _showOtpError(String message) {
     if (!mounted) return;
 
@@ -445,19 +492,8 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
     setState(() => _isLoading = true);
 
     try {
-      final auth = FirebaseAuth.instance;
-      var authUser = auth.currentUser;
-
-      if (authUser == null) {
-        debugPrint('Demo/test OTP signing in anonymously');
-        authUser = (await auth.signInAnonymously()).user;
-      }
-
-      if (authUser == null) {
-        throw Exception('Could not start demo Firebase session.');
-      }
-
-      final sessionUid = authUser.uid;
+      final demoUser = await _signInDemoFirebaseUser(phoneNumber);
+      final sessionUid = demoUser.uid;
       debugPrint('Demo/test OTP session uid: $sessionUid');
 
       final users = FirebaseFirestore.instance.collection('users');
@@ -613,21 +649,17 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
       throw Exception('Demo user role was not found.');
     } on FirebaseAuthException catch (e) {
       PhoneAuthHelpers.logFirebaseAuthException(
-        'Demo/test OTP anonymous session failed',
+        'Demo/test OTP demo Firebase session failed',
         e,
       );
-      if (FirebaseAuth.instance.currentUser?.isAnonymous == true) {
-        await FirebaseAuth.instance.signOut();
-      }
+      await FirebaseAuth.instance.signOut();
       if (!mounted) return;
       _showOtpError(
-        'Could not start the iOS demo session. Enable Anonymous sign-in in Firebase Authentication, then try again.',
+        'Could not start the iOS demo session. Enable Email/Password sign-in in Firebase Authentication, then try again.',
       );
     } catch (e) {
       debugPrint('Demo/test OTP continue failed: $e');
-      if (FirebaseAuth.instance.currentUser?.isAnonymous == true) {
-        await FirebaseAuth.instance.signOut();
-      }
+      await FirebaseAuth.instance.signOut();
       if (!mounted) return;
       _showOtpError('${context.texts.t('errorLabel')}: $e');
     } finally {
