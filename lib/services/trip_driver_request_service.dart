@@ -1,7 +1,10 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
+import '../models/driver_status.dart';
+import '../models/schedule_slot.dart';
 import '../models/trip_driver_request.dart';
+import '../models/trip_status.dart';
 import 'route_slot_booking_service.dart';
 
 class TripDriverRequestService {
@@ -52,22 +55,32 @@ class TripDriverRequestService {
     }
 
     final ref = _db.collection(_collection).doc();
-    final request = TripDriverRequest(
-      requestId: ref.id,
-      passengerId: passengerId,
-      driverId: safeDriver,
-      routeId: safeRoute,
-      slotId: safeSlot,
-      seatsRequested: seatsRequested,
-      lineLabel: lineLabel.trim(),
-      startPoint: startPoint.trim(),
-      endPoint: endPoint.trim(),
-      pickupDescription: pickupDescription.trim(),
-      status: TripDriverRequest.pending,
-      createdAt: DateTime.now(),
-    );
+    await _db.runTransaction((tx) async {
+      await _assertTripStillAvailable(
+        tx,
+        driverId: safeDriver,
+        routeId: safeRoute,
+        slotId: safeSlot,
+        seatsRequested: seatsRequested,
+      );
 
-    await ref.set(request.toMap());
+      final request = TripDriverRequest(
+        requestId: ref.id,
+        passengerId: passengerId,
+        driverId: safeDriver,
+        routeId: safeRoute,
+        slotId: safeSlot,
+        seatsRequested: seatsRequested,
+        lineLabel: lineLabel.trim(),
+        startPoint: startPoint.trim(),
+        endPoint: endPoint.trim(),
+        pickupDescription: pickupDescription.trim(),
+        status: TripDriverRequest.pending,
+        createdAt: DateTime.now(),
+      );
+
+      tx.set(ref, request.toMap());
+    });
     await _createDriverRequestNotification(
       driverId: safeDriver,
       routeId: safeRoute,
@@ -76,6 +89,107 @@ class TripDriverRequestService {
       seatsRequested: seatsRequested,
     );
     return ref.id;
+  }
+
+  Future<void> _assertTripStillAvailable(
+    Transaction tx, {
+    required String driverId,
+    required String routeId,
+    required String slotId,
+    required int seatsRequested,
+  }) async {
+    final routeRef = _db.collection('route').doc(routeId);
+    final driverRef = _db.collection('drivers').doc(driverId);
+
+    final routeSnap = await tx.get(routeRef);
+    final driverSnap = await tx.get(driverRef);
+
+    if (!routeSnap.exists || routeSnap.data() == null) {
+      throw Exception('This trip is no longer available.');
+    }
+    if (!driverSnap.exists || driverSnap.data() == null) {
+      throw Exception('This trip is no longer available.');
+    }
+
+    final driverData = driverSnap.data()!;
+    final isApproved = driverData['isApproved'] == true;
+    final driverStatus = DriverStatus.normalize(
+      driverData['status']?.toString(),
+    );
+    if (!isApproved || driverStatus != DriverStatus.onTrip) {
+      throw Exception('This trip is no longer available.');
+    }
+
+    final currentRouteId = (driverData['currentRouteId'] ?? '').toString().trim();
+    if (currentRouteId.isNotEmpty && currentRouteId != routeId) {
+      throw Exception('This trip is no longer available.');
+    }
+
+    final currentTripId = (driverData['currentTripId'] ?? '').toString().trim();
+    if (currentTripId.isNotEmpty && currentTripId != slotId) {
+      throw Exception('This trip is no longer available.');
+    }
+
+    if (!_hasDriverLocation(driverData)) {
+      throw Exception('This trip is no longer available.');
+    }
+
+    final routeData = routeSnap.data()!;
+    final rawSlots = routeData['scheduleSlots'];
+    if (rawSlots is! List) {
+      throw Exception('This trip is no longer available.');
+    }
+
+    Map<String, dynamic>? slotMap;
+    for (final rawSlot in rawSlots) {
+      if (rawSlot is! Map) continue;
+      final candidate = Map<String, dynamic>.from(rawSlot);
+      if ((candidate['slotId'] ?? '').toString().trim() == slotId) {
+        slotMap = candidate;
+        break;
+      }
+    }
+
+    if (slotMap == null) {
+      throw Exception('This trip is no longer available.');
+    }
+
+    final slot = ScheduleSlot.fromMap(slotId, slotMap);
+    final status = TripStatus.normalize(slot.status);
+    final assignedDriver = slot.driverId.trim();
+    if (status != TripStatus.onTrip || assignedDriver != driverId) {
+      throw Exception('This trip is no longer available.');
+    }
+
+    if (slot.arrivalAt.isBefore(DateTime.now())) {
+      throw Exception('This trip is no longer available.');
+    }
+
+    final availableSeats = slot.capacity - slot.passengersIds.length;
+    if (availableSeats < 1) {
+      throw Exception('This trip is no longer available.');
+    }
+    if (seatsRequested > availableSeats) {
+      throw Exception('Not enough seats on this trip (only $availableSeats left).');
+    }
+  }
+
+  bool _hasDriverLocation(Map<String, dynamic> driverData) {
+    final lat = (driverData['latitude'] as num?)?.toDouble();
+    final lng = (driverData['longitude'] as num?)?.toDouble();
+    if (lat != null && lng != null) return true;
+
+    final location = driverData['location'];
+    if (location is GeoPoint) return true;
+    if (location is! Map) return false;
+
+    final locLat =
+        (location['lat'] as num?)?.toDouble() ??
+        (location['latitude'] as num?)?.toDouble();
+    final locLng =
+        (location['lng'] as num?)?.toDouble() ??
+        (location['longitude'] as num?)?.toDouble();
+    return locLat != null && locLng != null;
   }
 
   Stream<List<TripDriverRequest>> watchPendingForDriver(String driverId) {

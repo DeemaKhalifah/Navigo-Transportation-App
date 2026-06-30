@@ -1,7 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../models/schedule_slot.dart';
-import '../models/trip_status.dart';
 
 class RouteSlotBookingService {
   RouteSlotBookingService({FirebaseFirestore? firestore})
@@ -81,7 +80,7 @@ class RouteSlotBookingService {
 
       tx.update(subSlotRef, {
         'passengersIds': updated,
-        'status': TripStatus.scheduled,
+        'status': current.status,
       });
       return;
     }
@@ -126,7 +125,7 @@ class RouteSlotBookingService {
     }
 
     currentMap['passengersIds'] = updated;
-    currentMap['status'] = TripStatus.scheduled;
+    currentMap['status'] = current.status;
     scheduleSlots[index] = currentMap;
 
     tx.update(routeRef, {'scheduleSlots': scheduleSlots});

@@ -817,7 +817,10 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> {
     if (!mounted) return;
 
     if (filteredDrivers.isEmpty) {
-      AppMessage.showInfo(context, context.texts.t('noVehiclesFound'));
+      setState(() {
+        _markers.removeWhere((m) => m.markerId.value != "current_location");
+      });
+      AppMessage.showInfo(context, 'No active trips are available right now.');
       return;
     }
 
@@ -1009,7 +1012,15 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> {
                       height: 52,
                       child: ElevatedButton(
                         onPressed: () async {
+                          final rootContext = this.context;
                           final nav = Navigator.of(context);
+                          final requestSentToText = rootContext.texts.t(
+                            'requestSentTo',
+                          );
+                          final driverAcceptDeclineText = rootContext.texts.t(
+                            'driverAcceptDecline',
+                          );
+                          final driverName = driver['name'] as String;
                           nav.pop();
                           try {
                             await _tripRequestService.createRequest(
@@ -1026,16 +1037,16 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> {
                               endPoint: driver['to'] as String? ?? '',
                               pickupDescription: _selectedLocation ?? '',
                             );
-                            if (!this.context.mounted) return;
+                            if (!mounted) return;
                             AppMessage.showSuccess(
-                              this.context,
-                              '${context.texts.t('requestSentTo')} ${driver['name']}. '
-                              '${context.texts.t('driverAcceptDecline')}',
+                              rootContext,
+                              '$requestSentToText $driverName. '
+                              '$driverAcceptDeclineText',
                             );
                           } catch (e) {
-                            if (!this.context.mounted) return;
+                            if (!mounted) return;
                             AppMessage.showError(
-                              this.context,
+                              rootContext,
                               e.toString().replaceFirst('Exception: ', ''),
                             );
                           }

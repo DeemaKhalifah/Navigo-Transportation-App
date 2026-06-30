@@ -4,6 +4,7 @@ import 'package:google_maps_flutter/google_maps_flutter.dart';
 
 import '../models/route.dart';
 import '../models/schedule_slot.dart';
+import '../models/driver_status.dart';
 import '../models/trip_status.dart';
 
 class PassengerTripRepository {
@@ -84,7 +85,7 @@ class PassengerTripRepository {
     });
   }
 
-  static ScheduleSlot? selectOfferSlotForDriver(
+  static ScheduleSlot? selectActiveTripSlotForDriver(
     RouteModel route,
     String driverDocId,
   ) {
@@ -95,10 +96,8 @@ class PassengerTripRepository {
       if (slot.driverId.trim() != driverDocId.trim()) continue;
 
       final status = TripStatus.normalize(slot.status);
-
-      if (status != TripStatus.onTrip && status != TripStatus.scheduled) {
-        continue;
-      }
+      if (status != TripStatus.onTrip) continue;
+      if (slot.arrivalAt.isBefore(now)) continue;
 
       final availableSeats = slot.capacity - slot.passengersIds.length;
       if (availableSeats < 1) continue;
@@ -109,13 +108,6 @@ class PassengerTripRepository {
     if (candidates.isEmpty) return null;
 
     candidates.sort((a, b) => a.departureAt.compareTo(b.departureAt));
-
-    for (final slot in candidates) {
-      if (!slot.departureAt.isBefore(now.subtract(const Duration(hours: 2)))) {
-        return slot;
-      }
-    }
-
     return candidates.first;
   }
 
@@ -150,6 +142,10 @@ class PassengerTripRepository {
       final route = routesById[routeId];
 
       if (route == null) continue;
+      final driverStatus = DriverStatus.normalize(
+        driverData['status']?.toString(),
+      );
+      if (driverStatus != DriverStatus.onTrip) continue;
 
       final userId = (driverData['userId'] ?? driverDoc.id).toString();
       final userSnap = await _db.collection(_usersCollection).doc(userId).get();
@@ -162,7 +158,7 @@ class PassengerTripRepository {
       final location = await _resolveDriverLocation(driverDoc.id);
       if (location == null) continue;
 
-      final offerSlot = selectOfferSlotForDriver(route, driverDoc.id);
+      final offerSlot = selectActiveTripSlotForDriver(route, driverDoc.id);
       if (offerSlot == null) continue;
 
       final availableSeats =
