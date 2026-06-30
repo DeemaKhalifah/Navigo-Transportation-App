@@ -3817,65 +3817,76 @@ class _CreateRouteManagerDialogState extends State<_CreateRouteManagerDialog> {
                         _emailError ?? _validateEmail(value, context),
                   ),
                   const SizedBox(height: 14),
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      SizedBox(
-                        width: 150,
-                        child: DropdownButtonFormField<String>(
-                          initialValue: _selectedPhonePrefix,
-                          decoration: NavigoDecorations.kInputDecoration
-                              .copyWith(
-                                labelText: texts.t('code'),
-                                prefixIcon: const Icon(Icons.phone_rounded),
-                                fillColor: Colors.white,
+                  Directionality(
+                    textDirection: TextDirection.ltr,
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        SizedBox(
+                          width: 150,
+                          child: DropdownButtonFormField<String>(
+                            initialValue: _selectedPhonePrefix,
+                            decoration: NavigoDecorations.kInputDecoration
+                                .copyWith(
+                                  labelText: texts.t('code'),
+                                  prefixIcon: const Icon(Icons.phone_rounded),
+                                  fillColor: Colors.white,
+                                ),
+                            items: const [
+                              DropdownMenuItem(
+                                value: '+970',
+                                child: Text(
+                                  '+970',
+                                  textDirection: TextDirection.ltr,
+                                ),
                               ),
-                          items: const [
-                            DropdownMenuItem(
-                              value: '+970',
-                              child: Text('+970'),
-                            ),
-                            DropdownMenuItem(
-                              value: '+972',
-                              child: Text('+972'),
-                            ),
-                          ],
-                          onChanged: _isSaving
-                              ? null
-                              : (value) {
-                                  if (value == null) return;
-                                  setState(() => _selectedPhonePrefix = value);
-                                },
-                        ),
-                      ),
-                      const SizedBox(width: 14),
-                      Expanded(
-                        child: TextFormField(
-                          controller: _phoneController,
-                          keyboardType: TextInputType.phone,
-                          textDirection: TextDirection.ltr,
-                          textAlign: TextAlign.left,
-                          onChanged: (_) {
-                            if (_phoneError != null) {
-                              setState(() => _phoneError = null);
-                            }
-                          },
-                          inputFormatters: [
-                            FilteringTextInputFormatter.digitsOnly,
-                            LengthLimitingTextInputFormatter(9),
-                          ],
-                          decoration: NavigoDecorations.kInputDecoration
-                              .copyWith(
-                                labelText: texts.t('phoneNumber'),
-                                hintText: texts.t('nineDigits'),
-                                fillColor: Colors.white,
+                              DropdownMenuItem(
+                                value: '+972',
+                                child: Text(
+                                  '+972',
+                                  textDirection: TextDirection.ltr,
+                                ),
                               ),
-                          validator: (value) =>
-                              _phoneError ??
-                              _validatePhoneDigits(value, context),
+                            ],
+                            onChanged: _isSaving
+                                ? null
+                                : (value) {
+                                    if (value == null) return;
+                                    setState(
+                                      () => _selectedPhonePrefix = value,
+                                    );
+                                  },
+                          ),
                         ),
-                      ),
-                    ],
+                        const SizedBox(width: 14),
+                        Expanded(
+                          child: TextFormField(
+                            controller: _phoneController,
+                            keyboardType: TextInputType.phone,
+                            textDirection: TextDirection.ltr,
+                            textAlign: TextAlign.left,
+                            onChanged: (_) {
+                              if (_phoneError != null) {
+                                setState(() => _phoneError = null);
+                              }
+                            },
+                            inputFormatters: [
+                              FilteringTextInputFormatter.digitsOnly,
+                              LengthLimitingTextInputFormatter(9),
+                            ],
+                            decoration: NavigoDecorations.kInputDecoration
+                                .copyWith(
+                                  labelText: texts.t('phoneNumber'),
+                                  hintText: texts.t('nineDigits'),
+                                  fillColor: Colors.white,
+                                ),
+                            validator: (value) =>
+                                _phoneError ??
+                                _validatePhoneDigits(value, context),
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                   const SizedBox(height: 8),
                   Text(texts.t('phoneRule'), style: NavigoTextStyles.bodySmall),
@@ -4240,65 +4251,76 @@ class _EditRouteManagerDialogState extends State<_EditRouteManagerDialog> {
                         _emailError ?? _validateEmail(value, context),
                   ),
                   const SizedBox(height: 14),
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      SizedBox(
-                        width: 150,
-                        child: DropdownButtonFormField<String>(
-                          initialValue: _selectedPhonePrefix,
-                          decoration: NavigoDecorations.kInputDecoration
-                              .copyWith(
-                                labelText: texts.t('code'),
-                                prefixIcon: const Icon(Icons.phone_rounded),
-                                fillColor: Colors.white,
+                  Directionality(
+                    textDirection: TextDirection.ltr,
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        SizedBox(
+                          width: 150,
+                          child: DropdownButtonFormField<String>(
+                            initialValue: _selectedPhonePrefix,
+                            decoration: NavigoDecorations.kInputDecoration
+                                .copyWith(
+                                  labelText: texts.t('code'),
+                                  prefixIcon: const Icon(Icons.phone_rounded),
+                                  fillColor: Colors.white,
+                                ),
+                            items: const [
+                              DropdownMenuItem(
+                                value: '+970',
+                                child: Text(
+                                  '+970',
+                                  textDirection: TextDirection.ltr,
+                                ),
                               ),
-                          items: const [
-                            DropdownMenuItem(
-                              value: '+970',
-                              child: Text('+970'),
-                            ),
-                            DropdownMenuItem(
-                              value: '+972',
-                              child: Text('+972'),
-                            ),
-                          ],
-                          onChanged: _isSaving
-                              ? null
-                              : (value) {
-                                  if (value == null) return;
-                                  setState(() => _selectedPhonePrefix = value);
-                                },
-                        ),
-                      ),
-                      const SizedBox(width: 14),
-                      Expanded(
-                        child: TextFormField(
-                          controller: _phoneController,
-                          keyboardType: TextInputType.phone,
-                          textDirection: TextDirection.ltr,
-                          textAlign: TextAlign.left,
-                          onChanged: (_) {
-                            if (_phoneError != null) {
-                              setState(() => _phoneError = null);
-                            }
-                          },
-                          inputFormatters: [
-                            FilteringTextInputFormatter.digitsOnly,
-                            LengthLimitingTextInputFormatter(9),
-                          ],
-                          decoration: NavigoDecorations.kInputDecoration
-                              .copyWith(
-                                labelText: texts.t('phoneNumber'),
-                                hintText: texts.t('nineDigits'),
-                                fillColor: Colors.white,
+                              DropdownMenuItem(
+                                value: '+972',
+                                child: Text(
+                                  '+972',
+                                  textDirection: TextDirection.ltr,
+                                ),
                               ),
-                          validator: (value) =>
-                              _phoneError ??
-                              _validatePhoneDigits(value, context),
+                            ],
+                            onChanged: _isSaving
+                                ? null
+                                : (value) {
+                                    if (value == null) return;
+                                    setState(
+                                      () => _selectedPhonePrefix = value,
+                                    );
+                                  },
+                          ),
                         ),
-                      ),
-                    ],
+                        const SizedBox(width: 14),
+                        Expanded(
+                          child: TextFormField(
+                            controller: _phoneController,
+                            keyboardType: TextInputType.phone,
+                            textDirection: TextDirection.ltr,
+                            textAlign: TextAlign.left,
+                            onChanged: (_) {
+                              if (_phoneError != null) {
+                                setState(() => _phoneError = null);
+                              }
+                            },
+                            inputFormatters: [
+                              FilteringTextInputFormatter.digitsOnly,
+                              LengthLimitingTextInputFormatter(9),
+                            ],
+                            decoration: NavigoDecorations.kInputDecoration
+                                .copyWith(
+                                  labelText: texts.t('phoneNumber'),
+                                  hintText: texts.t('nineDigits'),
+                                  fillColor: Colors.white,
+                                ),
+                            validator: (value) =>
+                                _phoneError ??
+                                _validatePhoneDigits(value, context),
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                   const SizedBox(height: 8),
                   Text(texts.t('phoneRule'), style: NavigoTextStyles.bodySmall),

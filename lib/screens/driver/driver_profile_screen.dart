@@ -217,6 +217,7 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
                         controller.phoneController,
                         controller.isEditing,
                         Icons.phone,
+                        forceLtr: true,
                       ),
                       const SizedBox(height: 20),
                       if (controller.isEditing)
@@ -387,8 +388,9 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
     String label,
     TextEditingController fieldController,
     bool enabled,
-    IconData icon,
-  ) {
+    IconData icon, {
+    bool forceLtr = false,
+  }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -397,6 +399,9 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
         TextField(
           controller: fieldController,
           enabled: enabled,
+          keyboardType: forceLtr ? TextInputType.phone : TextInputType.text,
+          textDirection: forceLtr ? TextDirection.ltr : null,
+          textAlign: forceLtr ? TextAlign.left : TextAlign.start,
           style: NavigoTextStyles.bodyMedium.copyWith(
             color: NavigoColors.textDark,
             fontWeight: FontWeight.w500,

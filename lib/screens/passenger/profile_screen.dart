@@ -219,6 +219,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         _controller.phoneController,
                         _controller.isEditing,
                         Icons.phone,
+                        forceLtr: true,
                       ),
 
                       const SizedBox(height: 20),
@@ -310,8 +311,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
     String label,
     TextEditingController controller,
     bool enabled,
-    IconData icon,
-  ) {
+    IconData icon, {
+    bool forceLtr = false,
+  }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -323,6 +325,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
         TextField(
           controller: controller,
           enabled: enabled,
+          keyboardType: forceLtr ? TextInputType.phone : TextInputType.text,
+          textDirection: forceLtr ? TextDirection.ltr : null,
+          textAlign: forceLtr ? TextAlign.left : TextAlign.start,
           style: NavigoTextStyles.bodyMedium.copyWith(
             color: NavigoColors.textDark,
             fontWeight: FontWeight.w500,

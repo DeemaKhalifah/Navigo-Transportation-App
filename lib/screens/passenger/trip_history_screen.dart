@@ -351,7 +351,7 @@ class _TripHistoryDetailsSheetState extends State<_TripHistoryDetailsSheet> {
     }
   }
 
-  Widget _row(String label, String value) {
+  Widget _row(String label, String value, {bool forceValueLtr = false}) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 6),
       child: Row(
@@ -362,11 +362,17 @@ class _TripHistoryDetailsSheetState extends State<_TripHistoryDetailsSheet> {
             child: Text(label, style: NavigoTextStyles.label),
           ),
           Expanded(
-            child: Text(
-              value,
-              style: NavigoTextStyles.bodyMedium.copyWith(
-                color: NavigoColors.textDark,
-                fontWeight: FontWeight.w600,
+            child: Directionality(
+              textDirection: forceValueLtr
+                  ? TextDirection.ltr
+                  : Directionality.of(context),
+              child: Text(
+                value,
+                textAlign: forceValueLtr ? TextAlign.left : TextAlign.start,
+                style: NavigoTextStyles.bodyMedium.copyWith(
+                  color: NavigoColors.textDark,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
             ),
           ),
@@ -483,6 +489,7 @@ class _TripHistoryDetailsSheetState extends State<_TripHistoryDetailsSheet> {
           _row(
             context.texts.t('driverPhone'),
             _loadingDriverInfo ? '...' : _driverPhone,
+            forceValueLtr: true,
           ),
 
           const SizedBox(height: 20),

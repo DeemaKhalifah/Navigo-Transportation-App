@@ -338,78 +338,87 @@ class _PhoneNumberScreenState extends State<PhoneNumberScreen> {
                                 style: NavigoTextStyles.label,
                               ),
                               const SizedBox(height: 8),
-                              Row(
-                                children: [
-                                  SizedBox(
-                                    width: 110,
-                                    child: DropdownButtonFormField<String>(
-                                      initialValue: _phonePrefix,
-                                      style: const TextStyle(
-                                        color: Colors.grey,
+                              Directionality(
+                                textDirection: TextDirection.ltr,
+                                child: Row(
+                                  children: [
+                                    SizedBox(
+                                      width: 110,
+                                      child: DropdownButtonFormField<String>(
+                                        initialValue: _phonePrefix,
+                                        style: const TextStyle(
+                                          color: Colors.grey,
+                                        ),
+                                        items: const [
+                                          DropdownMenuItem(
+                                            value: '+970',
+                                            child: Text(
+                                              '+970',
+                                              textDirection: TextDirection.ltr,
+                                              style: TextStyle(
+                                                color: Colors.grey,
+                                              ),
+                                            ),
+                                          ),
+                                          DropdownMenuItem(
+                                            value: '+972',
+                                            child: Text(
+                                              '+972',
+                                              textDirection: TextDirection.ltr,
+                                              style: TextStyle(
+                                                color: Colors.grey,
+                                              ),
+                                            ),
+                                          ),
+                                        ],
+                                        onChanged: (v) {
+                                          if (v == null) return;
+                                          setState(() => _phonePrefix = v);
+                                        },
+                                        decoration: NavigoDecorations
+                                            .kInputDecoration
+                                            .copyWith(
+                                              contentPadding:
+                                                  const EdgeInsets.symmetric(
+                                                    horizontal: 12,
+                                                    vertical: 14,
+                                                  ),
+                                            ),
                                       ),
-                                      items: const [
-                                        DropdownMenuItem(
-                                          value: '+970',
-                                          child: Text(
-                                            '+970',
-                                            style: TextStyle(
-                                              color: Colors.grey,
-                                            ),
-                                          ),
-                                        ),
-                                        DropdownMenuItem(
-                                          value: '+972',
-                                          child: Text(
-                                            '+972',
-                                            style: TextStyle(
-                                              color: Colors.grey,
-                                            ),
-                                          ),
-                                        ),
-                                      ],
-                                      onChanged: (v) {
-                                        if (v == null) return;
-                                        setState(() => _phonePrefix = v);
-                                      },
-                                      decoration: NavigoDecorations
-                                          .kInputDecoration
-                                          .copyWith(
-                                            contentPadding:
-                                                const EdgeInsets.symmetric(
-                                                  horizontal: 12,
-                                                  vertical: 14,
-                                                ),
-                                          ),
                                     ),
-                                  ),
-                                  const SizedBox(width: 10),
-                                  Expanded(
-                                    child: TextField(
-                                      controller: _phoneDigitsController,
-                                      keyboardType: TextInputType.phone,
-                                      style: NavigoTextStyles.fieldText,
-                                      inputFormatters: [
-                                        FilteringTextInputFormatter.digitsOnly,
-                                        LengthLimitingTextInputFormatter(9),
-                                      ],
-                                      decoration: NavigoDecorations
-                                          .kInputDecoration
-                                          .copyWith(
-                                            hintText: "590000000",
-                                            prefixIcon: const Icon(
-                                              Icons.phone_outlined,
-                                              color: NavigoColors.accentGreen,
+                                    const SizedBox(width: 10),
+                                    Expanded(
+                                      child: TextField(
+                                        controller: _phoneDigitsController,
+                                        keyboardType: TextInputType.phone,
+                                        textDirection: TextDirection.ltr,
+                                        textAlign: TextAlign.left,
+                                        style: NavigoTextStyles.fieldText,
+                                        inputFormatters: [
+                                          FilteringTextInputFormatter
+                                              .digitsOnly,
+                                          LengthLimitingTextInputFormatter(9),
+                                        ],
+                                        decoration: NavigoDecorations
+                                            .kInputDecoration
+                                            .copyWith(
+                                              hintText: "590000000",
+                                              prefixIcon: const Icon(
+                                                Icons.phone_outlined,
+                                                color:
+                                                    NavigoColors.accentGreen,
+                                              ),
+                                              suffixIcon: IconButton(
+                                                icon: const Icon(Icons.clear),
+                                                onPressed: () =>
+                                                    _phoneDigitsController
+                                                        .clear(),
+                                              ),
                                             ),
-                                            suffixIcon: IconButton(
-                                              icon: const Icon(Icons.clear),
-                                              onPressed: () =>
-                                                  _phoneDigitsController
-                                                      .clear(),
-                                            ),
-                                          ),
+                                      ),
                                     ),
-                                  ),
-                                ],
+                                  ],
+                                ),
                               ),
                               const SizedBox(height: 8),
                               CheckboxListTile(

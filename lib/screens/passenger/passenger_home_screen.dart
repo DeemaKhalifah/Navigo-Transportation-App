@@ -936,6 +936,7 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> {
                       Icons.phone,
                       context.texts.t('phone'),
                       driver['phone'] as String,
+                      forceValueLtr: true,
                     ),
                     const SizedBox(height: 18),
                     Row(
@@ -1068,7 +1069,12 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> {
     );
   }
 
-  Widget _tripInfoRow(IconData icon, String title, String value) {
+  Widget _tripInfoRow(
+    IconData icon,
+    String title,
+    String value, {
+    bool forceValueLtr = false,
+  }) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: Row(
@@ -1077,19 +1083,35 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> {
           Icon(icon, size: 19, color: NavigoColors.accentGreen),
           const SizedBox(width: 10),
           Expanded(
-            child: RichText(
-              text: TextSpan(
-                style: const TextStyle(
-                  fontSize: 15,
-                  color: NavigoColors.textDark,
-                ),
+            child: Text.rich(
+              TextSpan(
                 children: [
                   TextSpan(
                     text: "$title: ",
                     style: const TextStyle(fontWeight: FontWeight.w700),
                   ),
-                  TextSpan(text: value),
+                  if (forceValueLtr)
+                    WidgetSpan(
+                      alignment: PlaceholderAlignment.baseline,
+                      baseline: TextBaseline.alphabetic,
+                      child: Directionality(
+                        textDirection: TextDirection.ltr,
+                        child: Text(
+                          value,
+                          style: const TextStyle(
+                            fontSize: 15,
+                            color: NavigoColors.textDark,
+                          ),
+                        ),
+                      ),
+                    )
+                  else
+                    TextSpan(text: value),
                 ],
+              ),
+              style: const TextStyle(
+                fontSize: 15,
+                color: NavigoColors.textDark,
               ),
             ),
           ),

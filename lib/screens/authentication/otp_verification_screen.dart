@@ -891,6 +891,7 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
         controller: _otpControllers[index],
         focusNode: _focusNodes[index],
         keyboardType: TextInputType.number,
+        textDirection: TextDirection.ltr,
         textAlign: TextAlign.center,
         textAlignVertical: TextAlignVertical.center,
         maxLength: 1,
@@ -962,23 +963,40 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
                             style: NavigoTextStyles.titleLarge,
                           ),
                           const SizedBox(height: 10),
-                          Text(
-                            '${context.texts.t('enterSixDigitCodeSentTo')} ${widget.phoneNumber}',
-                            textAlign: TextAlign.center,
-                            style: NavigoTextStyles.bodySmall,
+                          Wrap(
+                            alignment: WrapAlignment.center,
+                            crossAxisAlignment: WrapCrossAlignment.center,
+                            children: [
+                              Text(
+                                '${context.texts.t('enterSixDigitCodeSentTo')} ',
+                                textAlign: TextAlign.center,
+                                style: NavigoTextStyles.bodySmall,
+                              ),
+                              Directionality(
+                                textDirection: TextDirection.ltr,
+                                child: Text(
+                                  widget.phoneNumber,
+                                  textAlign: TextAlign.center,
+                                  style: NavigoTextStyles.bodySmall,
+                                ),
+                              ),
+                            ],
                           ),
                           const SizedBox(height: 28),
-                          Row(
-                            children: List.generate(6, (index) {
-                              return Expanded(
-                                child: Padding(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 4,
+                          Directionality(
+                            textDirection: TextDirection.ltr,
+                            child: Row(
+                              children: List.generate(6, (index) {
+                                return Expanded(
+                                  child: Padding(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 4,
+                                    ),
+                                    child: _buildOtpTextField(index),
                                   ),
-                                  child: _buildOtpTextField(index),
-                                ),
-                              );
-                            }),
+                                );
+                              }),
+                            ),
                           ),
                           const SizedBox(height: 20),
                           Row(

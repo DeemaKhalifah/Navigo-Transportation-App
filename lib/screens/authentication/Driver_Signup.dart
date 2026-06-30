@@ -404,81 +404,95 @@ class _DriverSignupScreenState extends State<DriverSignupScreen> {
                             const SizedBox(height: 16),
 
                             _label(context.texts.t('phoneNumber')),
-                            Row(
-                              children: [
-                                SizedBox(
-                                  width: 110,
-                                  child: DropdownButtonFormField<String>(
-                                    initialValue: _phonePrefix,
-                                    style: const TextStyle(color: Colors.grey),
-                                    items: const [
-                                      DropdownMenuItem(
-                                        value: '+970',
-                                        child: Text(
-                                          '+970',
-                                          style: TextStyle(color: Colors.grey),
-                                        ),
+                            Directionality(
+                              textDirection: TextDirection.ltr,
+                              child: Row(
+                                children: [
+                                  SizedBox(
+                                    width: 110,
+                                    child: DropdownButtonFormField<String>(
+                                      initialValue: _phonePrefix,
+                                      style: const TextStyle(
+                                        color: Colors.grey,
                                       ),
-                                      DropdownMenuItem(
-                                        value: '+972',
-                                        child: Text(
-                                          '+972',
-                                          style: TextStyle(color: Colors.grey),
+                                      items: const [
+                                        DropdownMenuItem(
+                                          value: '+970',
+                                          child: Text(
+                                            '+970',
+                                            textDirection: TextDirection.ltr,
+                                            style: TextStyle(
+                                              color: Colors.grey,
+                                            ),
+                                          ),
                                         ),
-                                      ),
-                                    ],
-                                    onChanged: (v) {
-                                      if (v == null) return;
-                                      setState(() => _phonePrefix = v);
-                                    },
-                                    decoration: NavigoDecorations
-                                        .kInputDecoration
-                                        .copyWith(
-                                          contentPadding:
-                                              const EdgeInsets.symmetric(
-                                                horizontal: 12,
-                                                vertical: 14,
-                                              ),
+                                        DropdownMenuItem(
+                                          value: '+972',
+                                          child: Text(
+                                            '+972',
+                                            textDirection: TextDirection.ltr,
+                                            style: TextStyle(
+                                              color: Colors.grey,
+                                            ),
+                                          ),
                                         ),
-                                  ),
-                                ),
-                                const SizedBox(width: 10),
-                                Expanded(
-                                  child: TextFormField(
-                                    controller: _phoneDigitsController,
-                                    keyboardType: TextInputType.phone,
-                                    style: const TextStyle(
-                                      color: Colors.black,
-                                      fontSize: 16,
+                                      ],
+                                      onChanged: (v) {
+                                        if (v == null) return;
+                                        setState(() => _phonePrefix = v);
+                                      },
+                                      decoration: NavigoDecorations
+                                          .kInputDecoration
+                                          .copyWith(
+                                            contentPadding:
+                                                const EdgeInsets.symmetric(
+                                                  horizontal: 12,
+                                                  vertical: 14,
+                                                ),
+                                          ),
                                     ),
-                                    inputFormatters: [
-                                      FilteringTextInputFormatter.digitsOnly,
-                                      LengthLimitingTextInputFormatter(9),
-                                    ],
-                                    validator: (_) =>
-                                        AppFormValidators.localPhoneNumber(
-                                          context,
-                                          countryCode: _phonePrefix,
-                                          localPhoneNumber:
-                                              _phoneDigitsController.text,
-                                        ),
-                                    decoration: NavigoDecorations
-                                        .kInputDecoration
-                                        .copyWith(
-                                          hintText: '590000000',
-                                          prefixIcon: const Icon(
-                                            Icons.phone_outlined,
-                                            color: Colors.green,
-                                          ),
-                                          suffixIcon: IconButton(
-                                            icon: const Icon(Icons.clear),
-                                            onPressed: () =>
-                                                _phoneDigitsController.clear(),
-                                          ),
-                                        ),
                                   ),
-                                ),
-                              ],
+                                  const SizedBox(width: 10),
+                                  Expanded(
+                                    child: TextFormField(
+                                      controller: _phoneDigitsController,
+                                      keyboardType: TextInputType.phone,
+                                      textDirection: TextDirection.ltr,
+                                      textAlign: TextAlign.left,
+                                      style: const TextStyle(
+                                        color: Colors.black,
+                                        fontSize: 16,
+                                      ),
+                                      inputFormatters: [
+                                        FilteringTextInputFormatter.digitsOnly,
+                                        LengthLimitingTextInputFormatter(9),
+                                      ],
+                                      validator: (_) =>
+                                          AppFormValidators.localPhoneNumber(
+                                            context,
+                                            countryCode: _phonePrefix,
+                                            localPhoneNumber:
+                                                _phoneDigitsController.text,
+                                          ),
+                                      decoration: NavigoDecorations
+                                          .kInputDecoration
+                                          .copyWith(
+                                            hintText: '590000000',
+                                            prefixIcon: const Icon(
+                                              Icons.phone_outlined,
+                                              color: Colors.green,
+                                            ),
+                                            suffixIcon: IconButton(
+                                              icon: const Icon(Icons.clear),
+                                              onPressed: () =>
+                                                  _phoneDigitsController
+                                                      .clear(),
+                                            ),
+                                          ),
+                                    ),
+                                  ),
+                                ],
+                              ),
                             ),
                             const SizedBox(height: 16),
 
