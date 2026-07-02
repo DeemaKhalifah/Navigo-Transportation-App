@@ -17,6 +17,8 @@ class AddScheduleSlotScreen extends StatefulWidget {
     required this.routeId,
     this.existingSlot,
     this.waitingTripGroupId,
+    this.waitingTripRequestIds = const [],
+    this.waitingPickupLocations = const [],
     this.initialDepartureAt,
     this.initialCapacity,
     this.initialVehicleType,
@@ -25,6 +27,8 @@ class AddScheduleSlotScreen extends StatefulWidget {
   final String routeId;
   final ScheduleSlot? existingSlot;
   final String? waitingTripGroupId;
+  final List<String> waitingTripRequestIds;
+  final List<String> waitingPickupLocations;
   final DateTime? initialDepartureAt;
   final int? initialCapacity;
   final String? initialVehicleType;
@@ -44,9 +48,6 @@ class _AddScheduleSlotScreenState extends State<AddScheduleSlotScreen> {
   String _selectedType = 'bus';
 
   final TextEditingController _frequencyController = TextEditingController();
-  final TextEditingController _tripLengthController = TextEditingController(
-    text: '60',
-  );
 
   String? _capacity;
 
@@ -81,11 +82,6 @@ class _AddScheduleSlotScreenState extends State<AddScheduleSlotScreen> {
 
         if (e.frequencyMinutes != null && e.frequencyMinutes! > 0) {
           _frequencyController.text = e.frequencyMinutes!.toString();
-
-          final mins = e.arrivalAt.difference(e.departureAt).inMinutes;
-          if (mins > 0) {
-            _tripLengthController.text = mins.toString();
-          }
         }
       }
 
@@ -114,7 +110,6 @@ class _AddScheduleSlotScreenState extends State<AddScheduleSlotScreen> {
   @override
   void dispose() {
     _frequencyController.dispose();
-    _tripLengthController.dispose();
     super.dispose();
   }
 
@@ -198,7 +193,6 @@ class _AddScheduleSlotScreenState extends State<AddScheduleSlotScreen> {
     required int capacity,
     required double? price,
     required int? frequencyMinutes,
-    required int tripLengthMinutes,
   }) {
     if (widget.isEditing && widget.existingSlot != null) {
       final e = widget.existingSlot!;
@@ -271,24 +265,25 @@ class _AddScheduleSlotScreenState extends State<AddScheduleSlotScreen> {
     }
 
     final firstDep = _combine(_selectedDate!, _fromTime!);
-    final lastStart = _combine(_selectedDate!, _toTime!);
+    final repeatEnd = _combine(_selectedDate!, _toTime!);
 
-    if (lastStart.isBefore(firstDep)) {
+    if (!repeatEnd.isAfter(firstDep)) {
       return [];
     }
 
-    final tripLen = Duration(minutes: tripLengthMinutes);
+    final tripLen = Duration(minutes: freq);
     final out = <ScheduleSlot>[];
 
     var dep = firstDep;
+    var arr = dep.add(tripLen);
 
-    while (!dep.isAfter(lastStart)) {
+    while (arr.isBefore(repeatEnd) || arr.isAtSameMomentAs(repeatEnd)) {
       out.add(
         ScheduleSlot(
           slotId: '',
           routeId: widget.routeId,
           departureAt: dep,
-          arrivalAt: dep.add(tripLen),
+          arrivalAt: arr,
           price: price,
           capacity: capacity,
           vehicleType: _selectedType,
@@ -296,7 +291,8 @@ class _AddScheduleSlotScreenState extends State<AddScheduleSlotScreen> {
         ),
       );
 
-      dep = dep.add(Duration(minutes: freq));
+      dep = arr;
+      arr = dep.add(tripLen);
     }
 
     return out;
@@ -330,21 +326,7 @@ class _AddScheduleSlotScreenState extends State<AddScheduleSlotScreen> {
       }
     }
 
-    int tripLengthMinutes = 60;
-
-    if (_selectedType == 'bus' &&
-        frequencyMinutes != null &&
-        frequencyMinutes > 0) {
-      final t = int.tryParse(_tripLengthController.text.trim());
-
-      if (t == null || t <= 0) {
-        AppMessage.showError(context, context.texts.t('enterTripLength'));
-        return;
-      }
-
-      tripLengthMinutes = t;
-    } else if (_selectedType == 'bus' &&
-        (frequencyMinutes == null || frequencyMinutes <= 0)) {
+    if (_selectedType == 'bus') {
       final dep = _combine(_selectedDate!, _fromTime!);
       final arr = _combine(_selectedDate!, _toTime!);
 
@@ -358,7 +340,6 @@ class _AddScheduleSlotScreenState extends State<AddScheduleSlotScreen> {
       capacity: cap,
       price: _routePrice,
       frequencyMinutes: frequencyMinutes,
-      tripLengthMinutes: tripLengthMinutes,
     );
 
     if (slots.isEmpty) {
@@ -564,19 +545,6 @@ class _AddScheduleSlotScreenState extends State<AddScheduleSlotScreen> {
                               icon: Icons.access_time_filled,
                               onTap: () => _pickTime(isFrom: false),
                             ),
-                            const SizedBox(height: NavigoSizes.itemGap),
-                            Text(
-                              context.texts.t('tripLengthMinutes'),
-                              style: NavigoTextStyles.label,
-                            ),
-                            const SizedBox(height: 6),
-                            TextField(
-                              controller: _tripLengthController,
-                              keyboardType: TextInputType.number,
-                              style: NavigoTextStyles.fieldText,
-                              decoration: NavigoDecorations.kInputDecoration,
-                              onChanged: (_) => setState(() {}),
-                            ),
                           ],
 
                           if (!isMicro) ...[
@@ -691,6 +659,11 @@ class _AddScheduleSlotScreenState extends State<AddScheduleSlotScreen> {
                             : Text(
                                 widget.isEditing
                                     ? context.texts.t('saveChanges')
+                                    : (widget.waitingTripGroupId
+                                              ?.trim()
+                                              .isNotEmpty ??
+                                          false)
+                                    ? 'تأكيد إنشاء الرحلة'
                                     : context.texts.t('saveTrip'),
                                 style: NavigoTextStyles.button,
                               ),

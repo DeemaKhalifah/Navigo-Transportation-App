@@ -15,7 +15,7 @@ class WaitingTripRequestService {
   final FirebaseAuth _auth;
 
   static const int _managerNotifyPassengerThreshold = 4;
-  static const int _timeWindowMinutes = 15;
+  static const int _timeWindowMinutes = 30;
 
   Stream<List<WaitingTripGroup>> watchPendingGroupsForRoute(String routeId) {
     final safeRouteId = routeId.trim();
@@ -325,7 +325,7 @@ class WaitingTripRequestService {
 
     final batch = _db.batch();
     batch.set(groupRef, {
-      'status': 'assigned',
+      'status': 'confirmed',
       'tripId': tripId,
       'requestIds': requestIds,
       'requestedSeatCount': totalRequestedSeats,
@@ -334,7 +334,7 @@ class WaitingTripRequestService {
 
     for (final doc in snap.docs) {
       batch.set(doc.reference, {
-        'status': 'assigned',
+        'status': 'confirmed',
         'tripId': tripId,
         'updatedAt': FieldValue.serverTimestamp(),
       }, SetOptions(merge: true));
@@ -345,7 +345,7 @@ class WaitingTripRequestService {
       batch.set(notificationRef, {
         'notificationId': notificationRef.id,
         'userId': passengerId,
-        'title': 'تم إنشاء رحلة جديدة',
+        'title': 'تم إنشاء رحلتك',
         'message': _passengerTripCreatedMessage(
           routeLabel: routeLabel,
           departureAt: departureAt,
@@ -354,8 +354,6 @@ class WaitingTripRequestService {
           routeLabel: routeLabel,
           departureAt: departureAt,
         ),
-        'titleKey': 'waitingTripCreatedTitle',
-        'messageKey': 'waitingTripCreatedMessage',
         'type': 'waiting_trip_created',
         'routeId': routeId,
         'tripId': tripId,
@@ -423,7 +421,9 @@ class WaitingTripRequestService {
 
     final status = (groupSnap.data()?['status'] ?? '').toString();
     final existingTripId = (groupSnap.data()?['tripId'] ?? '').toString();
-    if ((status == 'trip_created' || status == 'assigned') &&
+    if ((status == 'trip_created' ||
+            status == 'assigned' ||
+            status == 'confirmed') &&
         existingTripId.trim().isNotEmpty) {
       return existingTripId.trim();
     }
@@ -555,7 +555,7 @@ class WaitingTripRequestService {
   }) {
     final date = departureAt == null ? '' : _displayDate(departureAt);
     final time = departureAt == null ? '' : _displayTime(departureAt);
-    return 'تم إنشاء رحلة لمسار $routeLabel بتاريخ $date الساعة $time. يمكنك الآن متابعة تفاصيل الرحلة.';
+    return 'تم إنشاء رحلة لمسار $routeLabel بتاريخ $date الساعة $time. تم حجز مقعدك بنجاح ويمكنك الآن متابعة تفاصيل الرحلة.';
   }
 
   String _tripVehicleType(String value, int requestedSeats) {

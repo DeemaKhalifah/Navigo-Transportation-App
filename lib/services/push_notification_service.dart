@@ -169,7 +169,7 @@ class PushNotificationService {
 
   void _handleNotificationTap(RemoteMessage message) {
     final type = (message.data['type'] ?? '').toString().trim();
-    if (type == 'trip_started') {
+    if (type == 'trip_started' || type == 'waiting_trip_created') {
       _openTripStartedDestination();
       return;
     }

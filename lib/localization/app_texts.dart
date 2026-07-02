@@ -350,7 +350,7 @@ class AppTexts {
       'leaveEmptySingleTrip': 'Leave empty for a single trip',
       'tripLengthMinutes': 'Trip length (minutes)',
       'firstDeparture': 'First departure',
-      'lastDeparture': 'Last departure (start time)',
+      'lastDeparture': 'End time',
       // Notification compose
       'sendNotification': 'Send notification',
       'messageDrivers': 'Message drivers on your route',
@@ -396,9 +396,9 @@ class AppTexts {
       'waitingListSelectSeat': 'Please select at least 1 seat.',
       'waitingListFutureDateTime': 'Please choose a future date and time.',
       'waitingListRouteNotFound': 'Route not found for this line.',
-      'waitingTripCreatedTitle': 'New trip created',
+      'waitingTripCreatedTitle': 'Your trip was created',
       'waitingTripCreatedMessage':
-          'A new trip was created for your requested date and time.',
+          'A trip was created for your requested route and time. Your seat was booked successfully and you can now follow the trip details.',
       'waitingTripManagerTitle': 'Waiting list trip request',
       'waitingTripManagerMessage':
           'Passengers are waiting for a trip at the requested date and time.',
@@ -762,7 +762,7 @@ class AppTexts {
       'leaveEmptySingleTrip': 'اتركه فارغاً لرحلة واحدة',
       'tripLengthMinutes': 'مدة الرحلة (دقائق)',
       'firstDeparture': 'أول مغادرة',
-      'lastDeparture': 'آخر مغادرة (وقت البدء)',
+      'lastDeparture': 'وقت النهاية',
       'sendNotification': 'إرسال إشعار',
       'messageDrivers': 'إرسال رسالة للسائقين على مسارك',
       'writeNotificationMsg': 'اكتب رسالة الإشعار...',
