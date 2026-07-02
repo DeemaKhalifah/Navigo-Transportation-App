@@ -282,6 +282,9 @@ class AppTexts {
       'addTrip': 'Add trip',
       'assign1': 'Assign 1',
       'driverQueue': 'Driver queue',
+      'refreshQueue': 'Refresh queue',
+      'driverQueueHelp':
+          'Queue is automatic: online and available drivers are appended. New trips are assigned to eligible drivers in FIFO order.',
       'clearQueue': 'Clear queue',
       'queueAllAvailable': 'Queue all available',
       'queueEmpty': 'Queue is empty.',
@@ -297,6 +300,8 @@ class AppTexts {
       'tripRemoved': 'Trip removed',
       'tripUpdated': 'Trip updated',
       'unassigned': 'Unassigned',
+      'totalSeats': 'Total Seats',
+      'everyMinutes': 'every {minutes} min',
       // Assign driver
       'assignments': 'Assignments',
       'driverStatusSubtitle':
@@ -693,6 +698,9 @@ class AppTexts {
       'addTrip': 'إضافة رحلة',
       'assign1': 'تعيين 1',
       'driverQueue': 'قائمة السائقين',
+      'refreshQueue': 'تحديث قائمة السائقين',
+      'driverQueueHelp':
+          'قائمة السائقين تلقائية: تتم إضافة السائقين المتصلين والمتاحين. يتم تعيين الرحلات الجديدة للسائقين المؤهلين حسب ترتيب القائمة.',
       'clearQueue': 'مسح القائمة',
       'queueAllAvailable': 'إضافة جميع المتاحين',
       'queueEmpty': 'القائمة فارغة.',
@@ -708,6 +716,8 @@ class AppTexts {
       'clearFilters': 'مسح عوامل التصفية',
       'waitingDriver': 'بانتظار السائق',
       'unassigned': 'غير معين',
+      'totalSeats': 'إجمالي المقاعد',
+      'everyMinutes': 'كل {minutes} دقيقة',
       'assignments': 'التعيينات',
       'driverStatusSubtitle':
           'القائمة تلقائية (متصل + متاح). يتم تعيين الرحلات الجديدة حسب ترتيب القائمة.',

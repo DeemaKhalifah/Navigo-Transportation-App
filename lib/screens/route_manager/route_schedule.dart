@@ -137,7 +137,7 @@ class _RouteScheduleState extends State<RouteSchedule> {
     }
 
     final b = TimeOfDay.fromDateTime(s.arrivalAt);
-    return '${a.format(context)} – ${b.format(context)}';
+    return '${a.format(context)} - ${b.format(context)}';
   }
 
   Future<String> _driverLabelFuture(String driverDocId) {
@@ -164,7 +164,9 @@ class _RouteScheduleState extends State<RouteSchedule> {
     final last = m?['lastName'] ?? '';
     final n = '$first $last'.trim();
 
-    return n.isEmpty ? 'Driver ${driverDocId.substring(0, 6)}…' : n;
+    return n.isEmpty
+        ? '${context.texts.t('driver')} ${driverDocId.substring(0, 6)}...'
+        : n;
   }
 
   Future<void> _autoAssignNow() async {
@@ -273,7 +275,7 @@ class _RouteScheduleState extends State<RouteSchedule> {
                               )
                             : const Icon(Icons.refresh),
                         color: NavigoColors.accentGreen,
-                        tooltip: 'Refresh queue',
+                        tooltip: context.texts.t('refreshQueue'),
                       ),
                       IconButton(
                         onPressed: () => Navigator.pop(ctx),
@@ -544,8 +546,7 @@ class _RouteScheduleState extends State<RouteSchedule> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          'Queue is automatic: online + available drivers are appended. '
-          'New trips are assigned to eligible drivers in FIFO order.',
+          context.texts.t('driverQueueHelp'),
           style: NavigoTextStyles.bodySmall.copyWith(fontSize: 11),
         ),
         const SizedBox(height: 10),
@@ -628,8 +629,8 @@ class _RouteScheduleState extends State<RouteSchedule> {
               TextButton(
                 onPressed: () => Navigator.pop(ctx, true),
                 child: Text(
-                  'Delete',
-                  style: TextStyle(color: NavigoColors.accentRed),
+                  context.texts.t('delete'),
+                  style: const TextStyle(color: NavigoColors.accentRed),
                 ),
               ),
             ],
@@ -649,7 +650,7 @@ class _RouteScheduleState extends State<RouteSchedule> {
         } catch (e) {
           if (!mounted) return;
 
-          AppMessage.showError(context, 'Could not delete: $e');
+          AppMessage.showError(context, '${context.texts.t('couldNotSave')}: $e');
         }
       },
       background: Container(
@@ -659,14 +660,14 @@ class _RouteScheduleState extends State<RouteSchedule> {
         ),
         alignment: Alignment.centerRight,
         padding: const EdgeInsets.only(right: 24),
-        child: const Column(
+        child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.delete_outline, color: Colors.white, size: 28),
-            SizedBox(height: 4),
+            const Icon(Icons.delete_outline, color: Colors.white, size: 28),
+            const SizedBox(height: 4),
             Text(
-              'Delete',
-              style: TextStyle(
+              context.texts.t('delete'),
+              style: const TextStyle(
                 color: Colors.white,
                 fontSize: 12,
                 fontWeight: FontWeight.w600,
@@ -749,9 +750,9 @@ class _RouteScheduleState extends State<RouteSchedule> {
                   ),
                   const SizedBox(height: 6),
                   Text(
-                    '${slot.capacity} seats'
+                    '${context.texts.t('totalSeats')}: ${slot.capacity}'
                     '${_slotPriceLabel(slot)}'
-                    '${slot.frequencyMinutes != null && slot.frequencyMinutes! > 0 ? ' · every ${slot.frequencyMinutes} min' : ''}',
+                    '${slot.frequencyMinutes != null && slot.frequencyMinutes! > 0 ? ' • ${context.texts.t('everyMinutes').replaceAll('{minutes}', slot.frequencyMinutes.toString())}' : ''}',
                     style: NavigoTextStyles.bodySmall,
                   ),
                   const SizedBox(height: 4),
@@ -760,10 +761,12 @@ class _RouteScheduleState extends State<RouteSchedule> {
                     builder: (context, snap) {
                       final t =
                           snap.data ??
-                          (slot.driverId.isEmpty ? 'Unassigned' : 'Driver…');
+                          (slot.driverId.isEmpty
+                              ? context.texts.t('unassigned')
+                              : '${context.texts.t('driver')}...');
 
                       return Text(
-                        'Driver: $t',
+                        '${context.texts.t('driver')}: $t',
                         style: NavigoTextStyles.bodySmall.copyWith(
                           fontSize: 12,
                           color: NavigoColors.textMuted,
@@ -807,18 +810,20 @@ class _RouteScheduleState extends State<RouteSchedule> {
     }
 
     if (_routeId == null) {
-      return Scaffold(
-        backgroundColor: NavigoColors.backgroundLight,
-        bottomNavigationBar: const RouteManagerNavBar(currentIndex: 0),
-        body: SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.all(24),
-            child: Center(
-              child: Text(
-                'No route is linked to this account. Set `routeId` on '
-                '`users/{uid}` or on `route_manager/{uid}`.',
-                textAlign: TextAlign.center,
-                style: NavigoTextStyles.bodyMedium,
+      return Directionality(
+        textDirection: TextDirection.rtl,
+        child: Scaffold(
+          backgroundColor: NavigoColors.backgroundLight,
+          bottomNavigationBar: const RouteManagerNavBar(currentIndex: 0),
+          body: SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: Center(
+                child: Text(
+                  context.texts.t('noRouteLinkedAccount'),
+                  textAlign: TextAlign.center,
+                  style: NavigoTextStyles.bodyMedium,
+                ),
               ),
             ),
           ),
@@ -826,10 +831,12 @@ class _RouteScheduleState extends State<RouteSchedule> {
       );
     }
 
-    return Scaffold(
-      backgroundColor: NavigoColors.backgroundLight,
-      bottomNavigationBar: const RouteManagerNavBar(currentIndex: 0),
-      body: SafeArea(
+    return Directionality(
+      textDirection: TextDirection.rtl,
+      child: Scaffold(
+        backgroundColor: NavigoColors.backgroundLight,
+        bottomNavigationBar: const RouteManagerNavBar(currentIndex: 0),
+        body: SafeArea(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -952,7 +959,7 @@ class _RouteScheduleState extends State<RouteSchedule> {
                   if (snapshot.hasError) {
                     return Center(
                       child: Text(
-                        'Error: ${snapshot.error}',
+                        '${context.texts.t('failedToLoadTripsDriver')}: ${snapshot.error}',
                         style: NavigoTextStyles.bodySmall,
                       ),
                     );
@@ -1000,7 +1007,7 @@ class _RouteScheduleState extends State<RouteSchedule> {
                       onPressed: () => _openSlotEditor(),
                       style: NavigoDecorations.kPrimaryButtonLargeStyle,
                       child: Text(
-                        context.texts.t('addTrip'),
+                        context.texts.t('createTrip'),
                         style: NavigoTextStyles.button,
                       ),
                     ),
@@ -1010,6 +1017,7 @@ class _RouteScheduleState extends State<RouteSchedule> {
               ),
             ),
           ],
+        ),
         ),
       ),
     );

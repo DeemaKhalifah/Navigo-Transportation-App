@@ -5,7 +5,7 @@ import '../../models/waiting_trip_request.dart';
 import '../../services/route_manager_route_id.dart';
 import '../../services/waiting_trip_request_service.dart';
 import '../../theme/app_theme.dart';
-import '../../widgets/app_message.dart';
+import 'add_schedule_slot_screen.dart';
 import 'route_manager_notification_compose.dart';
 import 'route_manager_nav_bar.dart';
 
@@ -21,7 +21,6 @@ class _WaitingListScreenState extends State<WaitingListScreen> {
 
   String? _routeId;
   bool _loading = true;
-  final Set<String> _creatingGroupIds = <String>{};
 
   @override
   void initState() {
@@ -38,122 +37,113 @@ class _WaitingListScreenState extends State<WaitingListScreen> {
     });
   }
 
-  String _formatDate(DateTime date) {
-    return '${date.day}/${date.month}/${date.year}';
-  }
+  void _openCreateTrip() {
+    final routeId = _routeId;
+    if (routeId == null || routeId.trim().isEmpty) return;
 
-  String _formatTime(DateTime date) {
-    return '${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}';
-  }
-
-  Future<void> _makeTrip(WaitingTripGroup group) async {
-    if (_creatingGroupIds.contains(group.groupId)) return;
-
-    setState(() => _creatingGroupIds.add(group.groupId));
-    try {
-      await _service.makeTripForGroup(group);
-      if (!mounted) return;
-      AppMessage.showSuccess(context, context.texts.t('waitingTripMade'));
-    } catch (e) {
-      if (!mounted) return;
-      AppMessage.showError(context, _errorText(e));
-    } finally {
-      if (mounted) {
-        setState(() => _creatingGroupIds.remove(group.groupId));
-      }
-    }
-  }
-
-  String _errorText(Object error) {
-    if (error is WaitingTripRequestException) {
-      return context.texts.t(error.messageKey);
-    }
-    final raw = error.toString().replaceFirst('Exception: ', '').trim();
-    return raw.isEmpty ? context.texts.t('failedToLoadNotifications') : raw;
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => AddScheduleSlotScreen(routeId: routeId),
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     final routeId = _routeId;
 
-    return Scaffold(
-      backgroundColor: NavigoColors.backgroundLight,
-      bottomNavigationBar: const RouteManagerNavBar(currentIndex: 2),
-      body: SafeArea(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+    return Directionality(
+      textDirection: TextDirection.rtl,
+      child: Scaffold(
+        backgroundColor: NavigoColors.backgroundLight,
+        bottomNavigationBar: Column(
+          mainAxisSize: MainAxisSize.min,
           children: [
-            NavigoDecorations.topBar3(
-              onBack: () => Navigator.pop(context),
-              onNotification: () => Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => const RouteManagerNotificationCompose(),
+            if (routeId != null && routeId.trim().isNotEmpty)
+              _BottomCreateTripButton(onPressed: _openCreateTrip),
+            const RouteManagerNavBar(currentIndex: 2),
+          ],
+        ),
+        body: SafeArea(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              NavigoDecorations.topBar3(
+                onBack: () => Navigator.pop(context),
+                onNotification: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => const RouteManagerNotificationCompose(),
+                  ),
                 ),
               ),
-            ),
-            _buildHeader(context),
-            const SizedBox(height: 16),
-            Expanded(
-              child: _loading
-                  ? _StatePanel(
-                      icon: Icons.groups_2_outlined,
-                      message: context.texts.t('loading'),
-                      showLoader: true,
-                    )
-                  : routeId == null || routeId.trim().isEmpty
-                  ? _StatePanel(
-                      icon: Icons.route_outlined,
-                      message: context.texts.t('noRouteLinkedAccount'),
-                    )
-                  : StreamBuilder<List<WaitingTripGroup>>(
-                      stream: _service.watchPendingGroupsForRoute(routeId),
-                      builder: (context, snapshot) {
-                        if (snapshot.connectionState ==
-                            ConnectionState.waiting) {
-                          return _StatePanel(
-                            icon: Icons.groups_2_outlined,
-                            message: context.texts.t('loading'),
-                            showLoader: true,
-                          );
-                        }
-                        if (snapshot.hasError) {
-                          return _StatePanel(
-                            icon: Icons.error_outline,
-                            message: snapshot.error.toString(),
-                          );
-                        }
+              _buildHeader(context),
+              const SizedBox(height: 16),
+              Expanded(
+                child: _loading
+                    ? _StatePanel(
+                        icon: Icons.groups_2_outlined,
+                        message: context.texts.t('loading'),
+                        showLoader: true,
+                      )
+                    : (routeId == null || routeId.trim().isEmpty)
+                        ? _StatePanel(
+                            icon: Icons.route_outlined,
+                            message: context.texts.t('noRouteLinkedAccount'),
+                          )
+                        : StreamBuilder<List<WaitingTripGroup>>(
+                            stream: _service.watchPendingGroupsForRoute(routeId),
+                            builder: (context, snapshot) {
+                              if (snapshot.connectionState ==
+                                  ConnectionState.waiting) {
+                                return _StatePanel(
+                                  icon: Icons.groups_2_outlined,
+                                  message: context.texts.t('loading'),
+                                  showLoader: true,
+                                );
+                              }
+                              if (snapshot.hasError) {
+                                return _StatePanel(
+                                  icon: Icons.error_outline,
+                                  message: snapshot.error.toString(),
+                                );
+                              }
 
-                        final groups = snapshot.data ?? const [];
-                        if (groups.isEmpty) {
-                          return _StatePanel(
-                            icon: Icons.event_available_outlined,
-                            message: context.texts.t('noWaitingListRequests'),
-                          );
-                        }
+                              final groups = snapshot.data ?? const [];
+                              if (groups.isEmpty) {
+                                return _StatePanel(
+                                  icon: Icons.event_available_outlined,
+                                  message: context.texts.t(
+                                    'noWaitingListRequests',
+                                  ),
+                                );
+                              }
 
-                        return ListView.separated(
-                          padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
-                          itemCount: groups.length,
-                          separatorBuilder: (_, _) =>
-                              const SizedBox(height: 12),
-                          itemBuilder: (context, index) {
-                            final group = groups[index];
-                            return _WaitingGroupCard(
-                              group: group,
-                              date: _formatDate(group.departureAt),
-                              time: _formatTime(group.departureAt),
-                              isCreating: _creatingGroupIds.contains(
-                                group.groupId,
-                              ),
-                              onMakeTrip: () => _makeTrip(group),
-                            );
-                          },
-                        );
-                      },
-                    ),
-            ),
-          ],
+                              return ListView.separated(
+                                padding: const EdgeInsets.fromLTRB(
+                                  20,
+                                  0,
+                                  20,
+                                  20,
+                                ),
+                                itemCount: groups.length,
+                                separatorBuilder: (_, _) =>
+                                    const SizedBox(height: 12),
+                                itemBuilder: (context, index) {
+                                  final group = groups[index];
+                                  return _WaitingGroupCard(
+                                    group: group,
+                                    requestsStream: _service
+                                        .watchRequestsForGroup(group.groupId),
+                                  );
+                                },
+                              );
+                            },
+                          ),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -185,17 +175,68 @@ class _WaitingListScreenState extends State<WaitingListScreen> {
 class _WaitingGroupCard extends StatelessWidget {
   const _WaitingGroupCard({
     required this.group,
-    required this.date,
-    required this.time,
-    required this.isCreating,
-    required this.onMakeTrip,
+    required this.requestsStream,
   });
 
   final WaitingTripGroup group;
+  final Stream<List<WaitingTripRequest>> requestsStream;
+
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<List<WaitingTripRequest>>(
+      stream: requestsStream,
+      builder: (context, snapshot) {
+        final requests = snapshot.data ?? const [];
+
+        if (requests.isEmpty) {
+          return _WaitingRequestInfoCard(
+            passengerName: context.texts.t('unknownUser'),
+            date: _formatDate(group.departureAt),
+            time: _formatTime(group.departureAt),
+            seats: group.requestedSeatCount,
+          );
+        }
+
+        return Column(
+          children: [
+            for (var i = 0; i < requests.length; i++) ...[
+              _WaitingRequestInfoCard(
+                passengerName: requests[i].passengerName.trim().isEmpty
+                    ? context.texts.t('unknownUser')
+                    : requests[i].passengerName.trim(),
+                date: _formatDate(requests[i].departureAt),
+                time: _formatTime(requests[i].departureAt),
+                seats: requests[i].seatsRequested,
+              ),
+              if (i != requests.length - 1) const SizedBox(height: 12),
+            ],
+          ],
+        );
+      },
+    );
+  }
+
+  String _formatDate(DateTime date) {
+    return '${date.day}/${date.month}/${date.year}';
+  }
+
+  String _formatTime(DateTime date) {
+    return '${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}';
+  }
+}
+
+class _WaitingRequestInfoCard extends StatelessWidget {
+  const _WaitingRequestInfoCard({
+    required this.passengerName,
+    required this.date,
+    required this.time,
+    required this.seats,
+  });
+
+  final String passengerName;
   final String date;
   final String time;
-  final bool isCreating;
-  final VoidCallback onMakeTrip;
+  final int seats;
 
   @override
   Widget build(BuildContext context) {
@@ -205,97 +246,75 @@ class _WaitingGroupCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              Container(
-                width: 42,
-                height: 42,
-                decoration: NavigoDecorations.surfaceDecoration(
-                  color: NavigoColors.surfaceWhite,
-                  radius: NavigoSizes.inputRadius,
-                ),
-                child: const Icon(
-                  Icons.groups_2_outlined,
-                  color: NavigoColors.primaryOrange,
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Text(
-                  group.lineLabel.isEmpty ? group.routeId : group.lineLabel,
-                  style: NavigoTextStyles.titleSmall,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-            ],
+          _detailRow(
+            Icons.person_outline,
+            context.texts.t('passenger'),
+            passengerName,
           ),
-          const SizedBox(height: 14),
-          Text(_promptText(context), style: NavigoTextStyles.bodyMedium),
-          const SizedBox(height: 12),
-          Wrap(
-            spacing: NavigoSizes.itemGap - 4,
-            runSpacing: NavigoSizes.itemGap - 4,
-            children: [
-              _chip(Icons.calendar_today_outlined, date),
-              _chip(Icons.access_time, time),
-              _chip(
-                Icons.event_seat_outlined,
-                '${group.requestedSeatCount} ${context.texts.t('numberOfSeats')}',
-              ),
-            ],
+          const SizedBox(height: 10),
+          _detailRow(
+            Icons.calendar_today_outlined,
+            context.texts.t('date'),
+            date,
           ),
-          const SizedBox(height: 14),
-          SizedBox(
-            width: double.infinity,
-            height: NavigoSizes.buttonHeight,
-            child: ElevatedButton.icon(
-              onPressed: isCreating ? null : onMakeTrip,
-              style: NavigoDecorations.kPrimaryButtonLargeStyle,
-              icon: isCreating
-                  ? const SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: Colors.white,
-                      ),
-                    )
-                  : const Icon(Icons.add_road, color: Colors.white),
-              label: Text(
-                context.texts.t('makeTrip'),
-                style: NavigoTextStyles.button,
-              ),
-            ),
+          const SizedBox(height: 10),
+          _detailRow(Icons.access_time, context.texts.t('time'), time),
+          const SizedBox(height: 10),
+          _detailRow(
+            Icons.event_seat_outlined,
+            context.texts.t('numberOfSeats'),
+            seats.toString(),
           ),
         ],
       ),
     );
   }
 
-  String _promptText(BuildContext context) {
-    return context.texts
-        .t('waitingListManagerPrompt')
-        .replaceAll('{passengers}', group.passengerCount.toString())
-        .replaceAll('{date}', date)
-        .replaceAll('{time}', time);
+  Widget _detailRow(IconData icon, String label, String value) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(icon, size: 18, color: NavigoColors.accentGreen),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(
+            '$label: $value',
+            style: NavigoTextStyles.bodySmall.copyWith(
+              color: NavigoColors.textDark,
+            ),
+          ),
+        ),
+      ],
+    );
   }
+}
 
-  Widget _chip(IconData icon, String text) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
-      decoration: NavigoDecorations.surfaceDecoration(
-        color: NavigoColors.inputFill,
-        radius: 999,
-        bordered: false,
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 15, color: NavigoColors.accentGreen),
-          const SizedBox(width: 5),
-          Text(text, style: NavigoTextStyles.bodySmall),
-        ],
+class _BottomCreateTripButton extends StatelessWidget {
+  const _BottomCreateTripButton({required this.onPressed});
+
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      top: false,
+      bottom: false,
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.fromLTRB(20, 12, 20, 10),
+        color: NavigoColors.backgroundLight,
+        child: SizedBox(
+          height: NavigoSizes.buttonHeight,
+          child: ElevatedButton.icon(
+            onPressed: onPressed,
+            style: NavigoDecorations.kPrimaryButtonLargeStyle,
+            icon: const Icon(Icons.add_road, color: Colors.white),
+            label: Text(
+              context.texts.t('createTrip'),
+              style: NavigoTextStyles.button,
+            ),
+          ),
+        ),
       ),
     );
   }

@@ -27,10 +27,38 @@ class WaitingTripRequestService {
         .where('status', whereIn: ['pending', 'manager_notified'])
         .snapshots()
         .map((snapshot) {
+          final now = DateTime.now();
+          final today = DateTime(now.year, now.month, now.day);
+          final yesterday = today.subtract(const Duration(days: 1));
           final groups = snapshot.docs
               .map((doc) => WaitingTripGroup.fromMap(doc.id, doc.data()))
+              .where((group) {
+                final day = DateTime(
+                  group.departureAt.year,
+                  group.departureAt.month,
+                  group.departureAt.day,
+                );
+                return day == today || day == yesterday;
+              })
               .toList();
-          groups.sort((a, b) => a.departureAt.compareTo(b.departureAt));
+          groups.sort((a, b) {
+            final aDay = DateTime(
+              a.departureAt.year,
+              a.departureAt.month,
+              a.departureAt.day,
+            );
+            final bDay = DateTime(
+              b.departureAt.year,
+              b.departureAt.month,
+              b.departureAt.day,
+            );
+            final dayOrder = bDay.compareTo(aDay);
+            if (dayOrder != 0) return dayOrder;
+
+            final aDistance = a.departureAt.difference(now).abs();
+            final bDistance = b.departureAt.difference(now).abs();
+            return aDistance.compareTo(bDistance);
+          });
           return groups;
         });
   }
@@ -42,7 +70,7 @@ class WaitingTripRequestService {
     return _db
         .collection('waitingTripRequests')
         .where('groupId', isEqualTo: safeGroupId)
-        .where('status', isEqualTo: 'pending')
+        .where('status', whereIn: ['pending', 'waiting'])
         .snapshots()
         .map((snapshot) {
           final requests = snapshot.docs
@@ -137,7 +165,7 @@ class WaitingTripRequestService {
         seatsRequested: seatsRequested,
         vehicleType: normalizedVehicle,
         pickupLocationDescription: (pickupLocationDescription ?? '').trim(),
-        status: 'pending',
+        status: 'waiting',
       );
 
       tx.set(requestRef, {
@@ -259,22 +287,54 @@ class WaitingTripRequestService {
       groupData['passengerIds'] ?? const [],
     ).where((id) => id.trim().isNotEmpty).toSet().toList();
     final routeId = (groupData['routeId'] ?? '').toString();
-
-    final batch = _db.batch();
-    batch.set(groupRef, {
-      'status': 'trip_created',
-      'tripId': tripId,
-      'updatedAt': FieldValue.serverTimestamp(),
-    }, SetOptions(merge: true));
+    final routeLabel = (groupData['lineLabel'] ?? routeId).toString();
+    final departureAt = _parseDate(groupData['departureAt']);
 
     final snap = await _db
         .collection('waitingTripRequests')
         .where('groupId', isEqualTo: groupId)
-        .where('status', isEqualTo: 'pending')
+        .where('status', whereIn: ['pending', 'waiting'])
         .get();
+
+    final requests = snap.docs
+        .map((doc) => WaitingTripRequest.fromMap(doc.id, doc.data()))
+        .toList();
+    final requestIds = requests.map((request) => request.requestId).toList();
+    final totalRequestedSeats = requests.fold<int>(
+      0,
+      (sum, request) => sum + request.seatsRequested,
+    );
+    final passengerBookings = requests
+        .map(
+          (request) => {
+            'passengerId': request.passengerId,
+            'pickupLocationDescription': request.pickupLocationDescription,
+          },
+        )
+        .toList();
+
+    await _attachWaitingGroupToSlot(
+      routeId: routeId,
+      tripId: tripId,
+      groupId: groupId,
+      requestIds: requestIds,
+      passengerBookings: passengerBookings,
+      passengerCount: passengerIds.length,
+      requestedSeatCount: totalRequestedSeats,
+    );
+
+    final batch = _db.batch();
+    batch.set(groupRef, {
+      'status': 'assigned',
+      'tripId': tripId,
+      'requestIds': requestIds,
+      'requestedSeatCount': totalRequestedSeats,
+      'updatedAt': FieldValue.serverTimestamp(),
+    }, SetOptions(merge: true));
+
     for (final doc in snap.docs) {
       batch.set(doc.reference, {
-        'status': 'trip_created',
+        'status': 'assigned',
         'tripId': tripId,
         'updatedAt': FieldValue.serverTimestamp(),
       }, SetOptions(merge: true));
@@ -285,9 +345,15 @@ class WaitingTripRequestService {
       batch.set(notificationRef, {
         'notificationId': notificationRef.id,
         'userId': passengerId,
-        'title': 'New trip created',
-        'message': 'A new trip was created for your requested date and time.',
-        'body': 'A new trip was created for your requested date and time.',
+        'title': 'تم إنشاء رحلة جديدة',
+        'message': _passengerTripCreatedMessage(
+          routeLabel: routeLabel,
+          departureAt: departureAt,
+        ),
+        'body': _passengerTripCreatedMessage(
+          routeLabel: routeLabel,
+          departureAt: departureAt,
+        ),
         'titleKey': 'waitingTripCreatedTitle',
         'messageKey': 'waitingTripCreatedMessage',
         'type': 'waiting_trip_created',
@@ -302,6 +368,50 @@ class WaitingTripRequestService {
     await batch.commit();
   }
 
+  Future<void> _attachWaitingGroupToSlot({
+    required String routeId,
+    required String tripId,
+    required String groupId,
+    required List<String> requestIds,
+    required List<Map<String, dynamic>> passengerBookings,
+    required int passengerCount,
+    required int requestedSeatCount,
+  }) async {
+    final routeRef = _db.collection('route').doc(routeId);
+
+    await _db.runTransaction((tx) async {
+      final snap = await tx.get(routeRef);
+      if (!snap.exists) return;
+
+      final rawSlots = snap.data()?['scheduleSlots'];
+      if (rawSlots is! List) return;
+
+      final slots = rawSlots
+          .whereType<Map>()
+          .map(
+            (slot) => Map<String, dynamic>.from(
+              slot.map((key, value) => MapEntry(key.toString(), value)),
+            ),
+          )
+          .toList();
+      final index = slots.indexWhere(
+        (slot) => (slot['slotId'] ?? '').toString() == tripId,
+      );
+      if (index < 0) return;
+
+      slots[index] = {
+        ...slots[index],
+        'waitingTripGroupId': groupId,
+        'waitingTripRequestIds': requestIds,
+        'waitingTripPassengerCount': passengerCount,
+        'waitingTripRequestedSeatCount': requestedSeatCount,
+        'passengersIds': passengerBookings,
+      };
+
+      tx.update(routeRef, {'scheduleSlots': slots});
+    });
+  }
+
   Future<String> makeTripForGroup(WaitingTripGroup group) async {
     final groupRef = _db.collection('waitingTripGroups').doc(group.groupId);
     final routeRef = _db.collection('route').doc(group.routeId);
@@ -313,7 +423,8 @@ class WaitingTripRequestService {
 
     final status = (groupSnap.data()?['status'] ?? '').toString();
     final existingTripId = (groupSnap.data()?['tripId'] ?? '').toString();
-    if (status == 'trip_created' && existingTripId.trim().isNotEmpty) {
+    if ((status == 'trip_created' || status == 'assigned') &&
+        existingTripId.trim().isNotEmpty) {
       return existingTripId.trim();
     }
 
@@ -436,6 +547,15 @@ class WaitingTripRequestService {
         'Date: ${_displayDate(departureAt)}\n'
         'Time: ${_displayTime(departureAt)}\n'
         'Seats: $requestedSeatCount';
+  }
+
+  String _passengerTripCreatedMessage({
+    required String routeLabel,
+    required DateTime? departureAt,
+  }) {
+    final date = departureAt == null ? '' : _displayDate(departureAt);
+    final time = departureAt == null ? '' : _displayTime(departureAt);
+    return 'تم إنشاء رحلة لمسار $routeLabel بتاريخ $date الساعة $time. يمكنك الآن متابعة تفاصيل الرحلة.';
   }
 
   String _tripVehicleType(String value, int requestedSeats) {

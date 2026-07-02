@@ -623,21 +623,22 @@ class _AddScheduleSlotScreenState extends State<AddScheduleSlotScreen> {
                           const SizedBox(height: 6),
                           Builder(
                             builder: (context) {
+                              final seatsLabel = context.texts.t('seats');
                               final capacityItems = _selectedType == 'bus'
-                                  ? const [
+                                  ? [
                                       DropdownMenuItem(
                                         value: '45',
-                                        child: Text('45 seats'),
+                                        child: Text('45 $seatsLabel'),
                                       ),
                                       DropdownMenuItem(
                                         value: '14',
-                                        child: Text('14 seats'),
+                                        child: Text('14 $seatsLabel'),
                                       ),
                                     ]
-                                  : const [
+                                  : [
                                       DropdownMenuItem(
                                         value: '7',
-                                        child: Text('7 seats'),
+                                        child: Text('7 $seatsLabel'),
                                       ),
                                     ];
 
