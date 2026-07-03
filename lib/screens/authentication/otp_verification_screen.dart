@@ -109,6 +109,18 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
     return value?.toString().trim() ?? '';
   }
 
+  String _normalizeRole(String? role) {
+    final value = (role ?? '').trim().toLowerCase();
+    if (value == 'route_manager' ||
+        value == 'route_manger' ||
+        value == 'route manager' ||
+        value == 'routemanager' ||
+        value == 'manager') {
+      return 'route_manager';
+    }
+    return value;
+  }
+
   int? _intValue(dynamic value) {
     if (value is int) return value;
     if (value is num) return value.toInt();
@@ -196,6 +208,7 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
   void _pushReplacement(Widget screen) {
     if (!mounted) return;
 
+    debugPrint('Navigating to screen');
     _navigatedAway = true;
     Navigator.pushReplacement(
       context,
@@ -254,6 +267,7 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
 
     final bool isApproved = driverInfo['isApproved'] == true;
 
+    debugPrint('Saving user to Firestore');
     if (vehicleId.isEmpty) {
       final vehicleRef = fs.collection('vehicles').doc();
       vehicleId = vehicleRef.id;
@@ -317,6 +331,7 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
         'updatedAt': FieldValue.serverTimestamp(),
       }, SetOptions(merge: true));
     }
+    debugPrint('Firestore save success');
 
     final driverDoc = await fs.collection('drivers').doc(uid).get();
     final bool approved = driverDoc.data()?['isApproved'] == true;
@@ -343,16 +358,24 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
     if (!mounted) return;
 
     final texts = context.texts;
+    final phoneNumber = widget.phoneNumber.trim();
+    final requestedRole = _normalizeRole(widget.role);
     setState(() => _isLoading = true);
 
     try {
+      debugPrint('OTP verification started');
       final userCredential = await FirebaseAuth.instance.signInWithCredential(
         autoVerifiedCredential,
       );
+      debugPrint('OTP verification success');
 
       final user = userCredential.user;
       if (user == null) {
         throw Exception(texts.t('userNotFoundVerification'));
+      }
+
+      if (phoneNumber.isEmpty) {
+        throw Exception('Phone number is missing.');
       }
 
       final uid = user.uid;
@@ -364,15 +387,16 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
       String firstName = '';
       String lastName = '';
 
-      if (widget.fullName != null && widget.fullName!.trim().isNotEmpty) {
-        final names = widget.fullName!.trim().split(RegExp(r'\s+'));
+      final fullName = widget.fullName?.trim() ?? '';
+      if (fullName.isNotEmpty) {
+        final names = fullName.split(RegExp(r'\s+'));
         firstName = names.isNotEmpty ? names.first : '';
         lastName = names.length > 1 ? names.sublist(1).join(' ') : '';
       }
 
       final Map<String, dynamic> userData = {
         'userId': uid,
-        'phone': widget.phoneNumber,
+        'phone': phoneNumber,
         'image': existingImage,
         'isVerified': true,
         'isOnline': false,
@@ -386,10 +410,11 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
         userData['lastName'] = lastName;
       }
 
-      if (widget.role != null && widget.role!.trim().isNotEmpty) {
-        userData['role'] = widget.role!.trim();
+      if (requestedRole.isNotEmpty) {
+        userData['role'] = requestedRole;
       }
 
+      debugPrint('Saving user to Firestore');
       await userRef.set(userData, SetOptions(merge: true));
 
       await userRef.update({
@@ -398,19 +423,22 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
         'location': FieldValue.delete(),
         'lastLocationUpdate': FieldValue.delete(),
       });
+      debugPrint('Firestore save success');
 
-      if (widget.role == 'passenger') {
+      if (requestedRole == 'passenger') {
+        debugPrint('Saving user to Firestore');
         await FirebaseFirestore.instance.collection('passengers').doc(uid).set({
           'passengerId': uid,
           'fullName': [
             firstName,
             lastName,
           ].where((part) => part.trim().isNotEmpty).join(' '),
-          'phoneNumber': widget.phoneNumber,
+          'phoneNumber': phoneNumber,
           'latitude': null,
           'longitude': null,
           'lastLocationUpdate': null,
         }, SetOptions(merge: true));
+        debugPrint('Firestore save success');
 
         await _capturePassengerLoginLocation();
 
@@ -419,7 +447,7 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
         return;
       }
 
-      if (widget.role == 'driver') {
+      if (requestedRole == 'driver') {
         await _handleDriverFlow(
           uid: uid,
           firstName: firstName,
@@ -428,12 +456,13 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
         return;
       }
 
+      debugPrint('Reading user role');
       final userDoc = await FirebaseFirestore.instance
           .collection('users')
           .doc(uid)
           .get();
 
-      final role = (userDoc.data()?['role'] ?? '').toString();
+      final role = _normalizeRole(userDoc.data()?['role']?.toString());
 
       if (!mounted) return;
 
@@ -464,6 +493,7 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
       }
     } on FirebaseAuthException catch (e) {
       PhoneAuthHelpers.logFirebaseAuthException('OTP sign-in exception', e);
+      debugPrint('OTP flow error: $e');
       final message = PhoneAuthHelpers.userMessageForFirebaseAuthException(
         e,
         fallback: texts.t('verificationFailed'),
@@ -472,7 +502,7 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
       if (!mounted) return;
       AppMessage.showError(context, message);
     } catch (e) {
-      debugPrint('OTP verification error: $e');
+      debugPrint('OTP flow error: $e');
       if (!mounted) return;
       AppMessage.showError(context, '${texts.t('errorLabel')}: $e');
     } finally {
@@ -492,9 +522,15 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
     setState(() => _isLoading = true);
 
     try {
+      debugPrint('OTP verification started');
       final demoUser = await _signInDemoFirebaseUser(phoneNumber);
+      debugPrint('OTP verification success');
       final sessionUid = demoUser.uid;
       debugPrint('Demo/test OTP session uid: $sessionUid');
+
+      if (phoneNumber.isEmpty) {
+        throw Exception('Phone number is missing.');
+      }
 
       final users = FirebaseFirestore.instance.collection('users');
       var userQuery = await users
@@ -519,14 +555,17 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
                 ? _stringValue(existingUserData['userId'])
                 : existingUserDoc.id);
 
-      final role = _stringValue(widget.role).isNotEmpty
-          ? _stringValue(widget.role)
-          : _stringValue(existingUserData['role']);
+      debugPrint('Reading user role');
+      final widgetRole = _normalizeRole(widget.role);
+      final role = widgetRole.isNotEmpty
+          ? widgetRole
+          : _normalizeRole(existingUserData['role']?.toString());
 
       if (role.isEmpty) {
-        throw Exception(
-          'No demo user role was found for this Firebase test phone number.',
-        );
+        debugPrint('OTP flow error: User role not found');
+        if (!mounted) return;
+        _showOtpError(context.texts.t('userRoleNotFound'));
+        return;
       }
 
       final nameParts = _namePartsFromWidget();
@@ -553,9 +592,12 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
         userData['lastName'] = lastName;
       }
 
+      debugPrint('Saving user to Firestore');
       await users.doc(sessionUid).set(userData, SetOptions(merge: true));
+      debugPrint('Firestore save success');
 
       if (role == 'passenger') {
+        debugPrint('Saving user to Firestore');
         await FirebaseFirestore.instance
             .collection('passengers')
             .doc(sessionUid)
@@ -570,6 +612,7 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
               'longitude': null,
               'lastLocationUpdate': null,
             }, SetOptions(merge: true));
+        debugPrint('Firestore save success');
 
         if (!mounted) return;
         _pushReplacement(const PassengerHomeScreen());
@@ -577,8 +620,7 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
       }
 
       if (role == 'driver') {
-        if (_stringValue(widget.role) == 'driver' &&
-            widget.driverData != null) {
+        if (widgetRole == 'driver' && widget.driverData != null) {
           await _handleDriverFlow(
             uid: sessionUid,
             firstName: firstName,
@@ -616,6 +658,7 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
         }
 
         final driverData = driverDoc?.data() ?? {};
+        debugPrint('Saving user to Firestore');
         await drivers.doc(sessionUid).set({
           ...driverData,
           'userId': sessionUid,
@@ -628,6 +671,7 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
           'status': DriverStatus.normalize(driverData['status']?.toString()),
           'updatedAt': FieldValue.serverTimestamp(),
         }, SetOptions(merge: true));
+        debugPrint('Firestore save success');
 
         final displayName = '$firstName $lastName'.trim();
         if (displayName.isNotEmpty) {
@@ -652,13 +696,14 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
         'Demo/test OTP demo Firebase session failed',
         e,
       );
+      debugPrint('OTP flow error: $e');
       await FirebaseAuth.instance.signOut();
       if (!mounted) return;
       _showOtpError(
         'Could not start the iOS demo session. Enable Email/Password sign-in in Firebase Authentication, then try again.',
       );
     } catch (e) {
-      debugPrint('Demo/test OTP continue failed: $e');
+      debugPrint('OTP flow error: $e');
       await FirebaseAuth.instance.signOut();
       if (!mounted) return;
       _showOtpError('${context.texts.t('errorLabel')}: $e');
@@ -714,7 +759,13 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
     }
 
     if (_isDemoTestMode) {
-      await _continueDemoTestOtp(otp);
+      try {
+        await _continueDemoTestOtp(otp);
+      } catch (e) {
+        debugPrint('OTP flow error: $e');
+        if (!mounted) return;
+        AppMessage.showError(context, '${texts.t('errorLabel')}: $e');
+      }
       return;
     }
 
@@ -734,6 +785,7 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
       await _signInAndContinue(autoVerifiedCredential: credential, otp: otp);
     } on FirebaseAuthException catch (e) {
       PhoneAuthHelpers.logFirebaseAuthException('OTP continue exception', e);
+      debugPrint('OTP flow error: $e');
       final message = PhoneAuthHelpers.userMessageForFirebaseAuthException(
         e,
         fallback: texts.t('verificationFailed'),
@@ -742,7 +794,7 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
       if (!mounted) return;
       AppMessage.showError(context, message);
     } catch (e) {
-      debugPrint('OTP verification error: $e');
+      debugPrint('OTP flow error: $e');
       if (!mounted) return;
       AppMessage.showError(context, '${texts.t('errorLabel')}: $e');
     } finally {
@@ -912,7 +964,7 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
           enabledBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(12),
             borderSide: BorderSide(
-              color: NavigoColors.primaryOrange.withOpacity(0.3),
+              color: NavigoColors.primaryOrange.withValues(alpha: 0.3),
               width: 1.2,
             ),
           ),
