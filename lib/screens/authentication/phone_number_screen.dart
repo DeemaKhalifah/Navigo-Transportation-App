@@ -198,6 +198,9 @@ class _PhoneNumberScreenState extends State<PhoneNumberScreen> {
         },
         verificationFailed: (FirebaseAuthException e) {
           debugPrint('Send OTP verificationFailed');
+          debugPrint('OTP ERROR CODE: ${e.code}');
+          debugPrint('OTP ERROR MESSAGE: ${e.message}');
+          debugPrint('OTP ERROR PLUGIN: ${e.plugin}');
           PhoneAuthHelpers.logFirebaseAuthException(
             'verifyPhoneNumber verificationFailed',
             e,

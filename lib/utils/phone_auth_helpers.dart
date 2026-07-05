@@ -76,6 +76,10 @@ class PhoneAuthHelpers {
     FirebaseAuthException error, {
     String fallback = 'Failed to send OTP. Please try again.',
   }) {
+    final firebaseMessage = error.message?.trim();
+    final firebaseDetails =
+        '${error.code}: ${firebaseMessage?.isNotEmpty == true ? firebaseMessage : 'No error message'}';
+
     final baseMessage = switch (error.code) {
       'invalid-phone-number' =>
         'The phone number is invalid. Check the country code and local number.',
@@ -99,15 +103,15 @@ class PhoneAuthHelpers {
         'The OTP code is incorrect. Please check it and try again.',
       'invalid-verification-id' =>
         'The verification session is invalid. Please request a new code.',
-      'unknown' => 'Firebase returned an unknown error. Please try again.',
-      _ => error.message?.trim().isNotEmpty == true ? error.message! : fallback,
+      'unknown' => firebaseDetails,
+      _ => firebaseMessage?.isNotEmpty == true ? firebaseMessage! : fallback,
     };
 
-    if (kDebugMode) {
-      return '$baseMessage\nFirebase error code: ${error.code}';
+    if (baseMessage == firebaseDetails) {
+      return firebaseDetails;
     }
 
-    return baseMessage;
+    return '$baseMessage\nFirebase error: $firebaseDetails';
   }
 
   static void logFirebaseAuthException(
@@ -115,8 +119,10 @@ class PhoneAuthHelpers {
     FirebaseAuthException error,
   ) {
     debugPrint('$label platform: $defaultTargetPlatform');
+    debugPrint('$label plugin: ${error.plugin}');
     debugPrint('$label code: ${error.code}');
     debugPrint('$label message: ${error.message}');
+    debugPrint('$label stackTrace: ${error.stackTrace}');
     if (error.email != null) debugPrint('$label email: ${error.email}');
     if (error.phoneNumber != null) {
       debugPrint('$label phoneNumber: ${error.phoneNumber}');

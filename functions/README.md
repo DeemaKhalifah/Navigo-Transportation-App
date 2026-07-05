@@ -42,6 +42,31 @@ To deploy every function:
 firebase deploy --only functions
 ```
 
+### Google Maps secret
+
+`fetchRoutePolyline` reads the Google Maps key from a Firebase Functions secret.
+Configure it before deploying or calling that function:
+
+```sh
+firebase functions:secrets:set GOOGLE_MAPS_API_KEY
+firebase deploy --only functions:fetchRoutePolyline
+```
+
+Do not put the key in source code, logs, API responses, or committed config
+files.
+
+## Driver approval callables
+
+`approveDriverAccount` and `rejectDriverAccount` are callable HTTPS Cloud
+Functions used by the admin panel.
+
+### Security
+
+- The caller must be signed in with Firebase Authentication.
+- The caller must have a Firestore profile at `users/{uid}`.
+- `users/{uid}.role` must be exactly `admin`.
+- Non-admin callers receive `permission-denied`.
+
 To view function logs:
 
 ```sh

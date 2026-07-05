@@ -43,3 +43,10 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# Android release signing and local API-key configuration
+android/key.properties
+android/maps.properties
+admin_panel/android/maps.properties
+*.jks
+*.keystore

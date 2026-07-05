@@ -12,7 +12,20 @@
           "package_name": "com.birzeit.navigo"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "1085605678072-a54m3tuu167fdvh10icfklrbds1phmho.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.birzeit.navigo",
+            "certificate_hash": "d845a341816720b1b72fac1c068119cc83cfcbcf"
+          }
+        },
+        {
+          "client_id": "1085605678072-ov80hfil0fuq3m0a1u1769r6e10bm6hp.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
           "current_key": "AIzaSyCYq1-adwyvioIvSHrmCVVZ8IOwh5wiPso"
@@ -20,7 +33,55 @@
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "1085605678072-ov80hfil0fuq3m0a1u1769r6e10bm6hp.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "1085605678072-7i3q1qk99g28fbf6hujh7r197abaqv61.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.example.adminPanel"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1085605678072:android:7cb1f54261033b635f640d",
+        "android_client_info": {
+          "package_name": "com.example.admin_panel"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "1085605678072-ov80hfil0fuq3m0a1u1769r6e10bm6hp.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCYq1-adwyvioIvSHrmCVVZ8IOwh5wiPso"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "1085605678072-ov80hfil0fuq3m0a1u1769r6e10bm6hp.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "1085605678072-7i3q1qk99g28fbf6hujh7r197abaqv61.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.example.adminPanel"
+              }
+            }
+          ]
         }
       }
     }

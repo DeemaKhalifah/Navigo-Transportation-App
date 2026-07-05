@@ -1,4 +1,4 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
+﻿import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/foundation.dart';
 
@@ -781,79 +781,33 @@ class AdminDashboardService {
   }
 
   Future<void> approveDriver(AdminApprovalItem item) async {
-    final now = FieldValue.serverTimestamp();
-    final batch = _db.batch();
-    final notificationRef = _db.collection('notifications').doc();
-
-    batch.set(_db.collection('drivers').doc(item.id), {
-      'isApproved': true,
-      'approvalStatus': 'approved',
-      'approvedAt': now,
-      'rejectedAt': FieldValue.delete(),
-      'rejectionReason': FieldValue.delete(),
-      'updatedAt': now,
-    }, SetOptions(merge: true));
-
-    final userId = item.userId.trim();
-    if (userId.isNotEmpty) {
-      batch.set(_db.collection('users').doc(userId), {
-        'driverIsApproved': true,
-        'driverApprovalStatus': 'approved',
-        'driverApprovedAt': now,
-        'driverRejectedAt': FieldValue.delete(),
-        'driverRejectionReason': FieldValue.delete(),
-        'updatedAt': now,
-      }, SetOptions(merge: true));
-
-      const title = 'Driver request accepted / تم قبول طلب السائق';
-      const message =
-          'Your driver account has been approved. You can now start accepting trips.\n'
-          'تمت الموافقة على حساب السائق الخاص بك. يمكنك الآن قبول الرحلات.';
-      batch.set(notificationRef, {
-        'notificationId': notificationRef.id,
-        'userId': userId,
-        'title': title,
-        'message': message,
-        'body': message,
-        'titleKey': 'driverApprovalNotificationTitle',
-        'messageKey': 'driverApprovalNotificationMessage',
-        'type': 'driver_approved',
+    try {
+      final callable = _functions.httpsCallable(
+        'approveDriverAccount',
+        options: HttpsCallableOptions(timeout: const Duration(seconds: 30)),
+      );
+      await callable.call<Map<String, dynamic>>({
         'driverId': item.id,
-        'tripId': '',
-        'routeId': '',
-        'senderRole': 'admin',
-        'isRead': false,
-        'timestamp': now,
+        'userId': item.userId.trim(),
       });
+    } on FirebaseFunctionsException catch (e) {
+      throw StateError(e.message ?? 'Could not approve driver');
     }
-
-    await batch.commit();
   }
 
   Future<void> rejectDriver(AdminApprovalItem item) async {
-    final now = FieldValue.serverTimestamp();
-    final batch = _db.batch();
-
-    batch.set(_db.collection('drivers').doc(item.id), {
-      'isApproved': false,
-      'approvalStatus': 'rejected',
-      'rejectedAt': now,
-      'approvedAt': FieldValue.delete(),
-      'updatedAt': now,
-    }, SetOptions(merge: true));
-
-    final userId = item.userId.trim();
-    if (userId.isNotEmpty) {
-      batch.set(_db.collection('users').doc(userId), {
-        'driverIsApproved': false,
-        'driverApprovalStatus': 'rejected',
-        'driverRejectedAt': now,
-        'driverApprovedAt': FieldValue.delete(),
-        'updatedAt': now,
-      }, SetOptions(merge: true));
+    try {
+      final callable = _functions.httpsCallable(
+        'rejectDriverAccount',
+        options: HttpsCallableOptions(timeout: const Duration(seconds: 30)),
+      );
+      await callable.call<Map<String, dynamic>>({
+        'driverId': item.id,
+        'userId': item.userId.trim(),
+      });
+    } on FirebaseFunctionsException catch (e) {
+      throw StateError(e.message ?? 'Could not reject driver');
     }
-
-    await batch.commit();
   }
 
   String _readString(dynamic value) {

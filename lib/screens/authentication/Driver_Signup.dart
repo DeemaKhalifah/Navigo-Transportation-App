@@ -270,6 +270,9 @@ class _DriverSignupScreenState extends State<DriverSignupScreen> {
           );
         },
         verificationFailed: (FirebaseAuthException e) {
+          debugPrint('OTP ERROR CODE: ${e.code}');
+          debugPrint('OTP ERROR MESSAGE: ${e.message}');
+          debugPrint('OTP ERROR PLUGIN: ${e.plugin}');
           PhoneAuthHelpers.logFirebaseAuthException(
             'Driver signup verificationFailed',
             e,

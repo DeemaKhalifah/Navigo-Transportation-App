@@ -876,6 +876,9 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
           await _signInAndContinue(autoVerifiedCredential: credential);
         },
         verificationFailed: (FirebaseAuthException e) {
+          debugPrint('OTP ERROR CODE: ${e.code}');
+          debugPrint('OTP ERROR MESSAGE: ${e.message}');
+          debugPrint('OTP ERROR PLUGIN: ${e.plugin}');
           PhoneAuthHelpers.logFirebaseAuthException(
             'OTP resend verificationFailed',
             e,

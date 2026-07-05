@@ -2,13 +2,53 @@ rules_version = '2';
 
 service firebase.storage {
   match /b/{bucket}/o {
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return isSignedIn()
+        && firestore.exists(/databases/(default)/documents/users/$(request.auth.uid))
+        && firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+
+    function isImage() {
+      return request.resource != null
+        && request.resource.contentType.matches('image/.*');
+    }
+
+    function isReportAttachment() {
+      return request.resource != null
+        && request.resource.contentType.matches(
+          '(image/.*|application/pdf|text/plain)'
+        );
+    }
+
     match /profile_images/{uid}/profile.jpg {
-      allow read: if request.auth != null;
-      allow create, update: if request.auth != null
+      allow read: if isSignedIn();
+      allow create, update: if isSignedIn()
         && request.auth.uid == uid
         && request.resource.size < 5 * 1024 * 1024
-        && request.resource.contentType.matches('image/.*');
-      allow delete: if request.auth != null && request.auth.uid == uid;
+        && isImage();
+      allow delete: if isSignedIn() && (request.auth.uid == uid || isAdmin());
+    }
+
+    match /report_attachments/{uid}/{fileName} {
+      allow read: if isAdmin() || (isSignedIn() && request.auth.uid == uid);
+      allow create, update: if isSignedIn()
+        && request.auth.uid == uid
+        && request.resource.size < 10 * 1024 * 1024
+        && isReportAttachment();
+      allow delete: if isSignedIn() && (request.auth.uid == uid || isAdmin());
+    }
+
+    match /driver_documents/{uid}/{fileName} {
+      allow read: if isAdmin() || (isSignedIn() && request.auth.uid == uid);
+      allow create, update: if isSignedIn()
+        && request.auth.uid == uid
+        && request.resource.size < 10 * 1024 * 1024
+        && isReportAttachment();
+      allow delete: if isSignedIn() && (request.auth.uid == uid || isAdmin());
     }
 
     match /{allPaths=**} {

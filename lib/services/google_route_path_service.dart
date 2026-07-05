@@ -19,13 +19,8 @@ class GoogleRoutePathService {
   final http.Client _client;
   static final Map<String, RoutePathInfo> _memoryCache = {};
   static final Map<String, Future<RoutePathInfo>> _inflight = {};
-  static const String _androidManifestMapsApiKey =
-      'AIzaSyBJL6teACIpsbYRXHpeynNht5qbL0-BTjw';
 
-  static const String _apiKey = String.fromEnvironment(
-    'GOOGLE_MAPS_API_KEY',
-    defaultValue: _androidManifestMapsApiKey,
-  );
+  static const String _apiKey = String.fromEnvironment('GOOGLE_MAPS_API_KEY');
 
   static String _coordsKey(LatLng start, LatLng end) =>
       '${start.latitude.toStringAsFixed(6)},${start.longitude.toStringAsFixed(6)}->${end.latitude.toStringAsFixed(6)},${end.longitude.toStringAsFixed(6)}';
@@ -216,7 +211,10 @@ class GoogleRoutePathService {
   }) async {
     if (_apiKey.trim().isEmpty) {
       throw Exception(
-        'Missing GOOGLE_MAPS_API_KEY. Pass it with --dart-define=GOOGLE_MAPS_API_KEY=YOUR_KEY',
+        'Missing GOOGLE_MAPS_API_KEY. Run with '
+        'flutter run --dart-define=GOOGLE_MAPS_API_KEY=YOUR_KEY '
+        'or build with '
+        'flutter build apk --release --dart-define=GOOGLE_MAPS_API_KEY=YOUR_KEY.',
       );
     }
     debugPrint(

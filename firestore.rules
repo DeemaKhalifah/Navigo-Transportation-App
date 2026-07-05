@@ -1,0 +1,324 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function userPath(uid) {
+      return /databases/$(database)/documents/users/$(uid);
+    }
+
+    function currentUser() {
+      return get(userPath(request.auth.uid)).data;
+    }
+
+    function currentRole() {
+      return isSignedIn() && exists(userPath(request.auth.uid))
+        ? currentUser().role
+        : null;
+    }
+
+    function isAdmin() {
+      return currentRole() == 'admin';
+    }
+
+    function isRouteManager() {
+      return currentRole() in ['route_manager', 'route_manger', 'routeManager'];
+    }
+
+    function isDriver() {
+      return currentRole() == 'driver';
+    }
+
+    function isPassenger() {
+      return currentRole() == 'passenger';
+    }
+
+    function managerPath(uid) {
+      return /databases/$(database)/documents/route_manger/$(uid);
+    }
+
+    function managerRouteId() {
+      return isRouteManager() && exists(managerPath(request.auth.uid))
+        ? get(managerPath(request.auth.uid)).data.routeId
+        : currentUser().routeId;
+    }
+
+    function isOwner(uid) {
+      return isSignedIn() && request.auth.uid == uid;
+    }
+
+    function routeMatchesManager(routeId) {
+      return isRouteManager() && managerRouteId() == routeId;
+    }
+
+    function routeDataMatchesManager(data) {
+      return isRouteManager() &&
+        (managerRouteId() == data.routeId || managerRouteId() == data.id);
+    }
+
+    function userPrivilegedFields() {
+      return [
+        'uid',
+        'userId',
+        'role',
+        'isApproved',
+        'approvalStatus',
+        'approvedAt',
+        'approvedBy',
+        'rejectedAt',
+        'rejectedBy',
+        'rejectionReason',
+        'driverIsApproved',
+        'driverApprovalStatus',
+        'driverApprovedAt',
+        'driverApprovedBy',
+        'driverRejectedAt',
+        'driverRejectedBy',
+        'driverRejectionReason',
+        'createdBy'
+      ];
+    }
+
+    function driverApprovalFields() {
+      return [
+        'isApproved',
+        'approvalStatus',
+        'approvedAt',
+        'approvedBy',
+        'rejectedAt',
+        'rejectedBy',
+        'rejectionReason'
+      ];
+    }
+
+    function affectedOnly(fields) {
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(fields);
+    }
+
+    function affectsAny(fields) {
+      return request.resource.data.diff(resource.data).affectedKeys().hasAny(fields);
+    }
+
+    function driverOwner(data, driverId) {
+      return isSignedIn() &&
+        (driverId == request.auth.uid ||
+          data.userId == request.auth.uid ||
+          data.uid == request.auth.uid);
+    }
+
+    function routeWriteFields() {
+      return [
+        'scheduleSlots',
+        'driverQueueIds',
+        'updatedAt',
+        'polyline',
+        'routePolyline',
+        'distanceMeters',
+        'distanceText',
+        'etaMinutes',
+        'etaText',
+        'polylineProvider',
+        'routePathProvider',
+        'routeModule'
+      ];
+    }
+
+    match /users/{uid} {
+      allow read: if isSignedIn();
+      allow create: if isOwner(uid)
+        && (!request.resource.data.keys().hasAny(['role']) ||
+          request.resource.data.role in ['passenger', 'driver'])
+        && (!request.resource.data.keys().hasAny(['userId']) ||
+          request.resource.data.userId == uid)
+        && !request.resource.data.keys().hasAny([
+          'isApproved',
+          'approvalStatus',
+          'approvedAt',
+          'approvedBy',
+          'rejectedAt',
+          'rejectedBy',
+          'rejectionReason',
+          'driverIsApproved',
+          'driverApprovalStatus',
+          'driverApprovedAt',
+          'driverApprovedBy',
+          'driverRejectedAt',
+          'driverRejectedBy',
+          'driverRejectionReason',
+          'createdBy'
+        ]);
+      allow update: if isAdmin()
+        || (isOwner(uid) && !affectsAny(userPrivilegedFields()));
+      allow delete: if isAdmin();
+
+      match /fcmTokens/{tokenId} {
+        allow read, create, update, delete: if isOwner(uid) || isAdmin();
+      }
+    }
+
+    match /passengers/{uid} {
+      allow read: if isSignedIn();
+      allow create, update: if isAdmin() || isOwner(uid);
+      allow delete: if isAdmin();
+
+      match /fcmTokens/{tokenId} {
+        allow read, create, update, delete: if isOwner(uid) || isAdmin();
+      }
+    }
+
+    match /drivers/{driverId} {
+      allow read: if isSignedIn();
+      allow create: if isAdmin()
+        || (isSignedIn()
+          && driverOwner(request.resource.data, driverId)
+          && !(request.resource.data.isApproved == true));
+      allow update: if isAdmin()
+        || (driverOwner(resource.data, driverId)
+          && !affectsAny(driverApprovalFields()))
+        || (routeDataMatchesManager(resource.data)
+          && !affectsAny(driverApprovalFields()));
+      allow delete: if isAdmin();
+
+      match /fcmTokens/{tokenId} {
+        allow read, create, update, delete: if driverOwner(get(/databases/$(database)/documents/drivers/$(driverId)).data, driverId)
+          || isAdmin();
+      }
+    }
+
+    match /vehicles/{vehicleId} {
+      allow read: if isSignedIn();
+      allow create: if isAdmin()
+        || (isDriver() && request.resource.data.driverId == request.auth.uid);
+      allow update: if isAdmin()
+        || (isDriver() && resource.data.driverId == request.auth.uid);
+      allow delete: if isAdmin();
+    }
+
+    match /route/{routeId} {
+      allow read: if isSignedIn();
+      allow create, delete: if isAdmin();
+      allow update: if isAdmin()
+        || routeMatchesManager(routeId)
+        || routeDataMatchesManager(resource.data)
+        || (isSignedIn() && affectedOnly(routeWriteFields()));
+
+      match /scheduleSlots/{slotId} {
+        allow read: if isSignedIn();
+        allow create, update, delete: if isAdmin()
+          || routeMatchesManager(routeId)
+          || isDriver()
+          || isPassenger();
+      }
+    }
+
+    match /route_manger/{uid} {
+      allow read: if isAdmin() || isOwner(uid) || isRouteManager();
+      allow create, update, delete: if isAdmin();
+    }
+
+    match /route_manager/{uid} {
+      allow read: if isAdmin() || isOwner(uid) || isRouteManager();
+      allow create, update, delete: if isAdmin();
+    }
+
+    match /routeManagers/{uid} {
+      allow read: if isAdmin() || isOwner(uid) || isRouteManager();
+      allow create, update, delete: if isAdmin();
+    }
+
+    match /tripDriverRequests/{requestId} {
+      allow read: if isAdmin()
+        || routeDataMatchesManager(resource.data)
+        || resource.data.passengerId == request.auth.uid
+        || resource.data.driverId == request.auth.uid;
+      allow create: if isPassenger()
+        && request.resource.data.passengerId == request.auth.uid
+        && request.resource.data.status == 'pending';
+      allow update: if isAdmin()
+        || routeDataMatchesManager(resource.data)
+        || (isDriver()
+          && resource.data.driverId == request.auth.uid
+          && resource.data.status == 'pending'
+          && request.resource.data.status in ['accepted', 'declined'])
+        || (isPassenger()
+          && resource.data.passengerId == request.auth.uid
+          && affectedOnly(['status', 'updatedAt']));
+      allow delete: if isAdmin();
+    }
+
+    match /waitingTripRequests/{requestId} {
+      allow read: if isAdmin()
+        || routeDataMatchesManager(resource.data)
+        || resource.data.passengerId == request.auth.uid;
+      allow create: if isPassenger()
+        && request.resource.data.passengerId == request.auth.uid;
+      allow update: if isAdmin()
+        || routeDataMatchesManager(resource.data)
+        || (isPassenger() && resource.data.passengerId == request.auth.uid);
+      allow delete: if isAdmin();
+    }
+
+    match /waitingTripGroups/{groupId} {
+      allow read: if isAdmin()
+        || routeDataMatchesManager(resource.data)
+        || (isPassenger() && request.auth.uid in resource.data.passengerIds);
+      allow create: if isPassenger()
+        && request.auth.uid in request.resource.data.passengerIds;
+      allow update: if isAdmin()
+        || routeDataMatchesManager(resource.data)
+        || (isPassenger() && request.auth.uid in resource.data.passengerIds);
+      allow delete: if isAdmin();
+    }
+
+    match /supportReports/{reportId} {
+      allow read: if isAdmin()
+        || routeDataMatchesManager(resource.data)
+        || resource.data.senderId == request.auth.uid;
+      allow create: if isSignedIn()
+        && request.resource.data.senderId == request.auth.uid
+        && request.resource.data.senderRole in ['passenger', 'driver'];
+      allow update: if isAdmin() || routeDataMatchesManager(resource.data);
+      allow delete: if isAdmin();
+    }
+
+    match /adminReports/{reportId} {
+      allow read: if isAdmin();
+      allow create: if isAdmin() || routeDataMatchesManager(request.resource.data);
+      allow update, delete: if isAdmin();
+    }
+
+    match /notifications/{notificationId} {
+      allow read: if isAdmin() || resource.data.userId == request.auth.uid;
+      allow create: if isSignedIn()
+        && request.resource.data.userId is string
+        && request.resource.data.isRead == false;
+      allow update: if isAdmin()
+        || (resource.data.userId == request.auth.uid
+          && affectedOnly(['isRead']));
+      allow delete: if isAdmin();
+    }
+
+    match /proximityAlerts/{alertId} {
+      allow read: if isAdmin()
+        || resource.data.passengerId == request.auth.uid
+        || resource.data.driverId == request.auth.uid;
+      allow create, update: if isSignedIn();
+      allow delete: if isAdmin();
+    }
+
+    match /trips/{tripId} {
+      allow read: if isAdmin()
+        || routeDataMatchesManager(resource.data)
+        || resource.data.passengerId == request.auth.uid
+        || resource.data.driverId == request.auth.uid;
+      allow create, update, delete: if isAdmin();
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

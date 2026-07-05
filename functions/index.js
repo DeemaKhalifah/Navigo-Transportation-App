@@ -1,16 +1,13 @@
 const functions = require('firebase-functions');
+const { defineSecret } = require('firebase-functions/params');
 const admin = require('firebase-admin');
 
 admin.initializeApp();
 const db = admin.firestore();
-const FALLBACK_GOOGLE_MAPS_API_KEY = 'AIzaSyBJL6teACIpsbYRXHpeynNht5qbL0-BTjw';
+const googleMapsApiKeySecret = defineSecret('GOOGLE_MAPS_API_KEY');
 
 function googleMapsApiKey() {
-  return (
-    process.env.GOOGLE_MAPS_API_KEY ||
-    (functions.config().google && functions.config().google.maps_api_key) ||
-    FALLBACK_GOOGLE_MAPS_API_KEY
-  );
+  return (process.env.GOOGLE_MAPS_API_KEY || '').toString().trim();
 }
 
 function setCors(res) {
@@ -61,7 +58,9 @@ function formatDistance(meters) {
   return `${(meters / 1000).toFixed(1)} km`;
 }
 
-exports.fetchRoutePolyline = functions.https.onRequest(async (req, res) => {
+exports.fetchRoutePolyline = functions
+  .runWith({ secrets: [googleMapsApiKeySecret] })
+  .https.onRequest(async (req, res) => {
   setCors(res);
   if (req.method === 'OPTIONS') {
     res.status(204).send('');
@@ -90,6 +89,16 @@ exports.fetchRoutePolyline = functions.https.onRequest(async (req, res) => {
   }
 
   const key = googleMapsApiKey();
+  if (!key) {
+    res.status(500).json({
+      success: false,
+      error: 'Google Maps API key is not configured.',
+      details:
+        'Set it with: firebase functions:secrets:set GOOGLE_MAPS_API_KEY',
+    });
+    return;
+  }
+
   const url = new URL('https://maps.googleapis.com/maps/api/directions/json');
   url.searchParams.set('origin', `${startLatitude},${startLongitude}`);
   url.searchParams.set('destination', `${endLatitude},${endLongitude}`);
@@ -105,7 +114,7 @@ exports.fetchRoutePolyline = functions.https.onRequest(async (req, res) => {
     lat: endLatitude,
     lng: endLongitude,
   });
-  console.log('[fetchRoutePolyline] API request URL', url.toString());
+  console.log('[fetchRoutePolyline] provider', 'google_directions');
 
   try {
     const response = await fetch(url);
@@ -129,7 +138,6 @@ exports.fetchRoutePolyline = functions.https.onRequest(async (req, res) => {
         success: false,
         error: 'Could not generate route polyline',
         details: data.error_message || data.status || `HTTP ${response.status}`,
-        googleResponse: data,
       });
       return;
     }
@@ -148,7 +156,6 @@ exports.fetchRoutePolyline = functions.https.onRequest(async (req, res) => {
         success: false,
         error: 'Could not generate route polyline',
         details: 'Missing routes[0].overview_polyline.points',
-        googleResponse: data,
       });
       return;
     }
@@ -889,55 +896,6 @@ exports.createTripRecordOnTripRequestAccepted = functions.firestore
     return null;
   });
 
-function normalizeRole(role) {
-  const value = (role || '').toString().trim().toLowerCase();
-  if (
-    value === 'route_manager' ||
-    value === 'route_manger' ||
-    value === 'route manager' ||
-    value === 'routemanager' ||
-    value === 'manager'
-  ) {
-    return 'route_manager';
-  }
-  return value;
-}
-
-async function assertRouteManager(context) {
-  // Route-manager permission check:
-  // - Caller must be authenticated (Firebase Auth)
-  // - Caller role must be `route_manager` as stored in Firestore `users/{uid}.role`
-  // - No admin/special-casing; only this role is allowed for driver management
-  if (!context.auth || !context.auth.uid) {
-    throw new functions.https.HttpsError(
-      'unauthenticated',
-      'Authentication is required.',
-    );
-  }
-
-  const callerUid = context.auth.uid;
-  const callerSnap = await db.collection('users').doc(callerUid).get();
-  if (!callerSnap.exists) {
-    // If the user profile doesn't exist, we can't verify role.
-    throw new functions.https.HttpsError(
-      'permission-denied',
-      'User profile not found or not authorized.',
-    );
-  }
-
-  const callerData = callerSnap.data() || {};
-  const role = normalizeRole(callerData.role);
-
-  if (role !== 'route_manager') {
-    throw new functions.https.HttpsError(
-      'permission-denied',
-      'Only route managers can perform this action.',
-    );
-  }
-
-  return { callerUid, callerUser: callerData };
-}
-
 function assertNonEmptyString(value, fieldName) {
   const v = (value || '').toString().trim();
   if (!v) {
@@ -957,7 +915,7 @@ async function assertAdmin(context) {
   if (!context.auth || !context.auth.uid) {
     throw new functions.https.HttpsError(
       'unauthenticated',
-      'You must be signed in to create a route manager.',
+      'You must be signed in to perform this action.',
     );
   }
 
@@ -974,7 +932,7 @@ async function assertAdmin(context) {
   if (normalizeAdminRole(callerData.role) !== 'admin') {
     throw new functions.https.HttpsError(
       'permission-denied',
-      'Only admins can create route managers.',
+      'Only admins can perform this action.',
     );
   }
 
@@ -1201,23 +1159,31 @@ exports.createRouteManager = functions.https.onCall(async (data, context) => {
  * Callable: Approve a driver account.
  *
  * - Requires authenticated caller
- * - Requires caller role `route_manager`
+ * - Requires caller role `admin`
  * - Validates input and ensures driver + user records exist
  * - Updates `drivers/{driverId}` + `users/{driverId}` with approval state + metadata
  * - Creates a document in `notifications` (push is sent by the existing trigger)
  */
 exports.approveDriverAccount = functions.https.onCall(async (data, context) => {
-  const { callerUid } = await assertRouteManager(context);
+  const { callerUid } = await assertAdmin(context);
 
   const driverId = assertNonEmptyString(data && data.driverId, 'driverId');
 
   const driverRef = db.collection('drivers').doc(driverId);
-  const userRef = db.collection('users').doc(driverId);
-
-  const [driverSnap, userSnap] = await Promise.all([driverRef.get(), userRef.get()]);
+  const driverSnap = await driverRef.get();
   if (!driverSnap.exists) {
     throw new functions.https.HttpsError('not-found', 'Driver record not found.');
   }
+
+  const driverData = driverSnap.data() || {};
+  const userId = (
+    (data && data.userId) ||
+    driverData.userId ||
+    driverData.uid ||
+    driverId
+  ).toString().trim();
+  const userRef = db.collection('users').doc(userId);
+  const userSnap = await userRef.get();
   if (!userSnap.exists) {
     throw new functions.https.HttpsError('not-found', 'User record not found.');
   }
@@ -1260,7 +1226,7 @@ exports.approveDriverAccount = functions.https.onCall(async (data, context) => {
   await batch.commit();
 
   await createNotificationDoc({
-    userId: driverId,
+    userId,
     title: 'Navigo',
     type: 'driver_approved',
     message: 'Your driver account has been approved. You can now start accepting trips.',
@@ -1270,33 +1236,41 @@ exports.approveDriverAccount = functions.https.onCall(async (data, context) => {
     },
   });
 
-  return { ok: true, driverId };
+  return { ok: true, driverId, userId };
 });
 
 /**
  * Callable: Reject a driver account.
  *
  * - Requires authenticated caller
- * - Requires caller role `route_manager`
+ * - Requires caller role `admin`
  * - Validates input and ensures driver + user records exist
  * - Updates `drivers/{driverId}` + `users/{driverId}` with rejection state + metadata
  * - Supports optional `reason`
  * - Creates a document in `notifications` (push is sent by the existing trigger)
  */
 exports.rejectDriverAccount = functions.https.onCall(async (data, context) => {
-  const { callerUid } = await assertRouteManager(context);
+  const { callerUid } = await assertAdmin(context);
 
   const driverId = assertNonEmptyString(data && data.driverId, 'driverId');
   const reason =
     data && data.reason != null ? data.reason.toString().trim() : '';
 
   const driverRef = db.collection('drivers').doc(driverId);
-  const userRef = db.collection('users').doc(driverId);
-
-  const [driverSnap, userSnap] = await Promise.all([driverRef.get(), userRef.get()]);
+  const driverSnap = await driverRef.get();
   if (!driverSnap.exists) {
     throw new functions.https.HttpsError('not-found', 'Driver record not found.');
   }
+
+  const driverData = driverSnap.data() || {};
+  const userId = (
+    (data && data.userId) ||
+    driverData.userId ||
+    driverData.uid ||
+    driverId
+  ).toString().trim();
+  const userRef = db.collection('users').doc(userId);
+  const userSnap = await userRef.get();
   if (!userSnap.exists) {
     throw new functions.https.HttpsError('not-found', 'User record not found.');
   }
@@ -1338,7 +1312,7 @@ exports.rejectDriverAccount = functions.https.onCall(async (data, context) => {
   await batch.commit();
 
   await createNotificationDoc({
-    userId: driverId,
+    userId,
     title: 'Navigo',
     type: 'driver_rejected',
     message: reason
@@ -1351,6 +1325,6 @@ exports.rejectDriverAccount = functions.https.onCall(async (data, context) => {
     },
   });
 
-  return { ok: true, driverId };
+  return { ok: true, driverId, userId };
 });
 
