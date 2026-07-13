@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -54,6 +55,7 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> {
   String? _selectedLocation;
   bool _isLocating = false;
   bool _isLoadingLines = false;
+  bool _isShowingDriversNow = false;
 
   final PassengerTripRepository _tripRepository = PassengerTripRepository();
   final TripDriverRequestService _tripRequestService =
@@ -81,8 +83,13 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> {
   LatLng? _passengerTrackingPosition;
   String? _trackingEtaText;
   bool _manualPickupSelected = false;
+  bool _hasCenteredLiveDriver = false;
+  DateTime? _lastPassengerLocationPublishAt;
+  LatLng? _lastStreamUiLocation;
   String? _activeRouteRenderKey;
   List<LatLng> _decodedRoutePoints = const [];
+  static const Duration _locationTimeout = Duration(seconds: 10);
+  static const Duration _normalActionTimeout = Duration(seconds: 20);
 
   @override
   void initState() {
@@ -182,7 +189,7 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> {
     final end = endLatLng ?? routeInfo?.endLocation;
 
     if (start == null || end == null) {
-      AppMessage.showError(context, 'Could not geocode route points');
+      AppMessage.showError(context, context.texts.t('couldNotGeocodeRoute'));
       return;
     }
 
@@ -201,7 +208,7 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> {
       decodedPoints: routePoints,
     );
     if (routePoints.length < 2) {
-      AppMessage.showError(context, 'Could not load route polyline');
+      AppMessage.showError(context, context.texts.t('couldNotLoadRoute'));
       return;
     }
     _decodedRoutePoints = routePoints;
@@ -329,6 +336,7 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> {
 
     setState(() {
       _isLiveTracking = true;
+      _hasCenteredLiveDriver = false;
       _trackedDriverPosition = null;
       _trackingEtaText = null;
     });
@@ -385,11 +393,14 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> {
         );
       });
 
-      _mapController?.animateCamera(
-        CameraUpdate.newCameraPosition(
-          CameraPosition(target: driverPos, zoom: 14.5),
-        ),
-      );
+      if (!_hasCenteredLiveDriver) {
+        _hasCenteredLiveDriver = true;
+        _mapController?.animateCamera(
+          CameraUpdate.newCameraPosition(
+            CameraPosition(target: driverPos, zoom: 14.5),
+          ),
+        );
+      }
     });
   }
 
@@ -409,7 +420,7 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> {
     final serviceEnabled = await Geolocator.isLocationServiceEnabled();
     if (!serviceEnabled) {
       if (showMessages && mounted) {
-        AppMessage.showError(context, 'Please enable location services');
+        AppMessage.showError(context, context.texts.t('enableLocationServices'));
       }
       return false;
     }
@@ -421,7 +432,7 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> {
 
     if (permission == LocationPermission.denied) {
       if (showMessages && mounted) {
-        AppMessage.showError(context, 'Location permission denied');
+        AppMessage.showError(context, context.texts.t('locationPermissionDenied'));
       }
       return false;
     }
@@ -430,7 +441,7 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> {
       if (showMessages && mounted) {
         AppMessage.showError(
           context,
-          'Enable location permission from settings',
+          context.texts.t('enableLocationPermissionSettings'),
         );
         await Geolocator.openAppSettings();
       }
@@ -449,8 +460,8 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> {
     _passengerLocationSub =
         Geolocator.getPositionStream(
           locationSettings: const LocationSettings(
-            accuracy: LocationAccuracy.high,
-            distanceFilter: 10,
+            accuracy: LocationAccuracy.medium,
+            distanceFilter: 25,
           ),
         ).listen(
           (position) async {
@@ -458,17 +469,32 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> {
 
             if (!mounted) return;
             if (!_manualPickupSelected) {
+              final now = DateTime.now();
+              final shouldPublish =
+                  _lastPassengerLocationPublishAt == null ||
+                  now.difference(_lastPassengerLocationPublishAt!) >
+                      const Duration(seconds: 15);
               try {
-                await _tripRepository.syncPassengerLiveLocation(location);
+                if (shouldPublish) {
+                  _lastPassengerLocationPublishAt = now;
+                  await _tripRepository.syncPassengerLiveLocation(location);
+                }
               } catch (e) {
                 debugPrint("Passenger live location publish error: $e");
               }
 
               if (!mounted) return;
               final changed =
-                  _passengerTrackingPosition?.latitude != location.latitude ||
-                  _passengerTrackingPosition?.longitude != location.longitude;
+                  _lastStreamUiLocation == null ||
+                  Geolocator.distanceBetween(
+                        _lastStreamUiLocation!.latitude,
+                        _lastStreamUiLocation!.longitude,
+                        location.latitude,
+                        location.longitude,
+                      ) >=
+                      25;
               if (changed) {
+                _lastStreamUiLocation = location;
                 setState(() {
                   _passengerTrackingPosition = location;
                   _initialPosition = location;
@@ -519,6 +545,7 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> {
 
   // ── Existing methods ─────────────────────────────────────────────────────
   Future<void> _loadUserData() async {
+    final sw = Stopwatch()..start();
     try {
       final user = FirebaseAuth.instance.currentUser;
 
@@ -531,7 +558,8 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> {
       final doc = await FirebaseFirestore.instance
           .collection('users')
           .doc(user.uid)
-          .get();
+          .get()
+          .timeout(_normalActionTimeout);
 
       if (!mounted) return;
 
@@ -548,6 +576,11 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> {
       debugPrint("User load error: $e");
       if (!mounted) return;
       setState(() => _userName = "Guest");
+    } finally {
+      sw.stop();
+      if (kDebugMode) {
+        debugPrint('[PERF] passenger home load: ${sw.elapsedMilliseconds} ms');
+      }
     }
   }
 
@@ -579,7 +612,7 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> {
     } catch (e) {
       debugPrint("Routes load error: $e");
       if (!mounted) return;
-      AppMessage.showError(context, 'Failed to load routes: $e');
+      AppMessage.showError(context, context.texts.t('failedToLoadRoutes'));
     } finally {
       if (mounted) {
         setState(() => _isLoadingLines = false);
@@ -647,54 +680,100 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> {
 
     if (!mounted) return;
     setState(() => _isLocating = true);
+    final sw = Stopwatch()..start();
 
     try {
       final allowed = await _ensureLocationPermission(showMessages: true);
       if (!allowed) return;
 
-      final position = await Geolocator.getCurrentPosition(
-        desiredAccuracy: LocationAccuracy.high,
+      final lastKnown = await Geolocator.getLastKnownPosition().timeout(
+        const Duration(seconds: 2),
+        onTimeout: () => null,
       );
+      if (lastKnown != null && mounted) {
+        _applyPassengerLocation(
+          LatLng(lastKnown.latitude, lastKnown.longitude),
+          areaName: context.texts.t('loadingAreaName'),
+          animateCamera: false,
+        );
+      }
+
+      final position = await Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.medium,
+      ).timeout(_locationTimeout);
 
       final newPosition = LatLng(position.latitude, position.longitude);
 
       // Reverse-geocode to area name
-      final areaName = await GeocodingService.reverseGeocodeLabel(newPosition);
+      final areaName = await GeocodingService.reverseGeocodeLabel(
+        newPosition,
+      ).timeout(const Duration(seconds: 5), onTimeout: () => '');
 
       if (!mounted) return;
-      setState(() {
-        _manualPickupSelected = false;
-        _initialPosition = newPosition;
-        _passengerTrackingPosition = newPosition;
-        _selectedLocation = areaName;
-
-        _markers.removeWhere((m) => m.markerId.value == "current_location");
-        _markers.add(
-          Marker(
-            markerId: const MarkerId("current_location"),
-            position: newPosition,
-            infoWindow: InfoWindow(title: context.texts.t('myLocation')),
-          ),
-        );
-      });
-
-      _mapController?.animateCamera(
-        CameraUpdate.newCameraPosition(
-          CameraPosition(target: newPosition, zoom: 15.5),
-        ),
+      _manualPickupSelected = false;
+      _applyPassengerLocation(
+        newPosition,
+        areaName: areaName.isEmpty ? context.texts.t('myLocation') : areaName,
+        animateCamera: true,
       );
 
-      await _tripRepository.savePassengerLocation(newPosition);
-      await _tripRepository.syncPassengerLiveLocation(newPosition);
+      unawaited(
+        Future.wait([
+          _tripRepository.savePassengerLocation(newPosition),
+          _tripRepository.syncPassengerLiveLocation(newPosition),
+        ]).catchError((e) {
+          debugPrint("Passenger location save error: $e");
+          return <void>[];
+        }),
+      );
       unawaited(_startPassengerLocationPublishing());
+    } on TimeoutException {
+      if (!mounted) return;
+      AppMessage.showError(context, context.texts.t('locationTimedOutRetry'));
     } catch (e) {
       debugPrint("Location error: $e");
       if (!mounted) return;
-      AppMessage.showError(context, 'Error getting location');
+      AppMessage.showError(context, context.texts.t('errorGettingLocation'));
     } finally {
+      sw.stop();
+      if (kDebugMode) {
+        debugPrint(
+          '[PERF] passenger location load: ${sw.elapsedMilliseconds} ms',
+        );
+      }
       if (mounted) {
         setState(() => _isLocating = false);
       }
+    }
+  }
+
+  void _applyPassengerLocation(
+    LatLng location, {
+    required String areaName,
+    required bool animateCamera,
+  }) {
+    if (!mounted) return;
+    setState(() {
+      _initialPosition = location;
+      _passengerTrackingPosition = location;
+      _selectedLocation = areaName;
+
+      _markers.removeWhere((m) => m.markerId.value == "current_location");
+      _markers.add(
+        Marker(
+          markerId: const MarkerId("current_location"),
+          position: location,
+          infoWindow: InfoWindow(title: context.texts.t('myLocation')),
+        ),
+      );
+    });
+
+    if (animateCamera) {
+      _mapController?.animateCamera(
+        CameraUpdate.newCameraPosition(
+          CameraPosition(target: location, zoom: 15.5),
+        ),
+      );
     }
   }
 
@@ -706,7 +785,7 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> {
       _initialPosition = location;
       _passengerTrackingPosition = location;
       // Show loading text while geocoding
-      _selectedLocation = 'Loading area name...';
+      _selectedLocation = context.texts.t('loadingAreaName');
 
       _markers.removeWhere((m) => m.markerId.value == "current_location");
       _markers.add(
@@ -719,14 +798,20 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> {
     });
 
     // Reverse-geocode asynchronously
-    GeocodingService.reverseGeocodeLabel(location).then((areaName) {
+    GeocodingService.reverseGeocodeLabel(location)
+        .timeout(const Duration(seconds: 5), onTimeout: () => '')
+        .then((areaName) {
       if (!mounted) return;
-      setState(() => _selectedLocation = areaName);
+      if (areaName.isNotEmpty) {
+        setState(() => _selectedLocation = areaName);
+      }
       if (saveToFirestore) {
         _tripRepository
             .syncPassengerDocumentLocation(
               location,
-              pickupLocationDescription: areaName,
+              pickupLocationDescription: areaName.isEmpty
+                  ? (_selectedLocation ?? '')
+                  : areaName,
             )
             .catchError((e) {
               debugPrint("Manual passenger pickup label save error: $e");
@@ -808,11 +893,16 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> {
   }
 
   Future<void> _showDriversNow() async {
+    if (_isShowingDriversNow) return;
     final hasLine = _selectedLine != null && _selectedLine!.trim().isNotEmpty;
+    setState(() => _isShowingDriversNow = true);
+    final sw = Stopwatch()..start();
 
-    final filteredDrivers = hasLine
-        ? await _tripRepository.getDriversForLine(_selectedLine!)
-        : await _tripRepository.getAllDrivers();
+    try {
+      final filteredDrivers = await (hasLine
+              ? _tripRepository.getDriversForLine(_selectedLine!)
+              : _tripRepository.getAllDrivers())
+          .timeout(_normalActionTimeout);
 
     if (!mounted) return;
 
@@ -820,7 +910,7 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> {
       setState(() {
         _markers.removeWhere((m) => m.markerId.value != "current_location");
       });
-      AppMessage.showInfo(context, 'No active trips are available right now.');
+      AppMessage.showInfo(context, context.texts.t('noActiveTripsNow'));
       return;
     }
 
@@ -855,6 +945,22 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> {
         ),
       ),
     );
+    } on TimeoutException {
+      if (!mounted) return;
+      AppMessage.showError(context, context.texts.t('requestTimedOutRetry'));
+    } catch (e) {
+      debugPrint('Show drivers now error: $e');
+      if (!mounted) return;
+      AppMessage.showError(context, context.texts.t('failedToLoadRoutes'));
+    } finally {
+      sw.stop();
+      if (kDebugMode) {
+        debugPrint(
+          '[PERF] passenger show drivers now: ${sw.elapsedMilliseconds} ms',
+        );
+      }
+      if (mounted) setState(() => _isShowingDriversNow = false);
+    }
   }
 
   void _showDriverTripSheet(Map<String, dynamic> driver) {
@@ -1045,10 +1151,22 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> {
                               '$driverAcceptDeclineText',
                             );
                           } catch (e) {
+                            if (kDebugMode) {
+                              debugPrint('Trip request create error: $e');
+                            }
                             if (!mounted) return;
+                            final message = e
+                                .toString()
+                                .replaceFirst('Exception: ', '')
+                                .trim();
                             AppMessage.showError(
                               rootContext,
-                              e.toString().replaceFirst('Exception: ', ''),
+                              message == 'requestTimedOutRetry' ||
+                                      message == 'trustedOperationFailed'
+                                  ? rootContext.texts.t(message)
+                                  : rootContext.texts.t(
+                                      'trustedOperationFailed',
+                                    ),
                             );
                           }
                         },
@@ -1564,13 +1682,24 @@ class _PassengerHomeScreenState extends State<PassengerHomeScreen> {
                             child: SizedBox(
                               height: Responsive.buttonHeight(context),
                               child: ElevatedButton(
-                                onPressed: _showDriversNow,
+                                onPressed: _isShowingDriversNow
+                                    ? null
+                                    : _showDriversNow,
                                 style:
                                     NavigoDecorations.kPrimaryButtonLargeStyle,
-                                child: Text(
-                                  context.texts.t('now'),
-                                  style: NavigoTextStyles.button,
-                                ),
+                                child: _isShowingDriversNow
+                                    ? const SizedBox(
+                                        width: 20,
+                                        height: 20,
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                          color: NavigoColors.textLight,
+                                        ),
+                                      )
+                                    : Text(
+                                        context.texts.t('now'),
+                                        style: NavigoTextStyles.button,
+                                      ),
                               ),
                             ),
                           ),

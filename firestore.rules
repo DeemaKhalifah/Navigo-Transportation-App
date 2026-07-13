@@ -25,7 +25,7 @@ service cloud.firestore {
     }
 
     function isRouteManager() {
-      return currentRole() in ['route_manager', 'route_manger', 'routeManager'];
+      return currentRole() in ['route_manager', 'route_manger', 'routeManager', 'manager'];
     }
 
     function isDriver() {
@@ -109,10 +109,8 @@ service cloud.firestore {
           data.uid == request.auth.uid);
     }
 
-    function routeWriteFields() {
+    function routeEnrichmentFields() {
       return [
-        'scheduleSlots',
-        'driverQueueIds',
         'updatedAt',
         'polyline',
         'routePolyline',
@@ -203,14 +201,12 @@ service cloud.firestore {
       allow update: if isAdmin()
         || routeMatchesManager(routeId)
         || routeDataMatchesManager(resource.data)
-        || (isSignedIn() && affectedOnly(routeWriteFields()));
+        || (isSignedIn() && affectedOnly(routeEnrichmentFields()));
 
       match /scheduleSlots/{slotId} {
         allow read: if isSignedIn();
         allow create, update, delete: if isAdmin()
-          || routeMatchesManager(routeId)
-          || isDriver()
-          || isPassenger();
+          || routeMatchesManager(routeId);
       }
     }
 
@@ -234,18 +230,9 @@ service cloud.firestore {
         || routeDataMatchesManager(resource.data)
         || resource.data.passengerId == request.auth.uid
         || resource.data.driverId == request.auth.uid;
-      allow create: if isPassenger()
-        && request.resource.data.passengerId == request.auth.uid
-        && request.resource.data.status == 'pending';
+      allow create: if isAdmin();
       allow update: if isAdmin()
-        || routeDataMatchesManager(resource.data)
-        || (isDriver()
-          && resource.data.driverId == request.auth.uid
-          && resource.data.status == 'pending'
-          && request.resource.data.status in ['accepted', 'declined'])
-        || (isPassenger()
-          && resource.data.passengerId == request.auth.uid
-          && affectedOnly(['status', 'updatedAt']));
+        || routeDataMatchesManager(resource.data);
       allow delete: if isAdmin();
     }
 
@@ -294,6 +281,7 @@ service cloud.firestore {
       allow read: if isAdmin() || resource.data.userId == request.auth.uid;
       allow create: if isSignedIn()
         && request.resource.data.userId is string
+        && request.resource.data.userId == request.auth.uid
         && request.resource.data.isRead == false;
       allow update: if isAdmin()
         || (resource.data.userId == request.auth.uid

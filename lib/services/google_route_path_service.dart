@@ -21,6 +21,11 @@ class GoogleRoutePathService {
   static final Map<String, Future<RoutePathInfo>> _inflight = {};
 
   static const String _apiKey = String.fromEnvironment('GOOGLE_MAPS_API_KEY');
+  static const Duration _routeTimeout = Duration(seconds: 15);
+
+  static void _log(String message) {
+    if (kDebugMode) debugPrint(message);
+  }
 
   static String _coordsKey(LatLng start, LatLng end) =>
       '${start.latitude.toStringAsFixed(6)},${start.longitude.toStringAsFixed(6)}->${end.latitude.toStringAsFixed(6)},${end.longitude.toStringAsFixed(6)}';
@@ -53,7 +58,7 @@ class GoogleRoutePathService {
     );
     _inflight[cacheKey] = future;
     try {
-      final resolved = await future;
+      final resolved = await future.timeout(_routeTimeout);
       _memoryCache[cacheKey] = resolved;
       return resolved;
     } finally {
@@ -68,7 +73,9 @@ class GoogleRoutePathService {
     required String cacheKey,
   }) async {
     if (routeId.isNotEmpty) {
-      final doc = await _db.collection('route').doc(routeId).get();
+      final doc = await _db.collection('route').doc(routeId).get().timeout(
+        _routeTimeout,
+      );
       final data = doc.data();
       if (doc.exists && data != null) {
         final encoded = (data['polyline'] ?? data['routePolyline'] ?? '')
@@ -76,10 +83,10 @@ class GoogleRoutePathService {
             .trim();
         if (encoded.isNotEmpty) {
           final decodedPath = decodePolyline(encoded);
-          debugPrint(
+          _log(
             '[Directions] raw Firestore polyline field length=${encoded.length}',
           );
-          debugPrint(
+          _log(
             '[Directions] decoded polyline points count=${decodedPath.length}',
           );
           final start =
@@ -93,7 +100,7 @@ class GoogleRoutePathService {
               'Route $routeId is missing start/end coordinates and could not infer them from polyline.',
             );
           }
-          debugPrint(
+          _log(
             '[Directions] using Firebase polyline routeId=$routeId',
           );
           _debugRouteCoordinates(
@@ -134,7 +141,7 @@ class GoogleRoutePathService {
           );
         }
 
-        debugPrint(
+        _log(
           '[Directions] API call using Firestore coordinates routeId=$routeId',
         );
         final info = await fetchRoutePathByCoordinates(
@@ -147,7 +154,7 @@ class GoogleRoutePathService {
       }
     }
 
-    debugPrint('[Directions] API call for routeId=$routeId');
+    _log('[Directions] API call for routeId=$routeId');
     final info = await fetchRoutePath(
       startPoint: startPoint,
       endPoint: endPoint,
@@ -196,7 +203,7 @@ class GoogleRoutePathService {
     );
     _inflight[key] = future;
     try {
-      final resolved = await future;
+      final resolved = await future.timeout(_routeTimeout);
       _memoryCache[key] = resolved;
       return resolved;
     } finally {
@@ -217,9 +224,8 @@ class GoogleRoutePathService {
         'flutter build apk --release --dart-define=GOOGLE_MAPS_API_KEY=YOUR_KEY.',
       );
     }
-    debugPrint(
-      '[Directions] API call for coordinates ${_coordsKey(start, end)}',
-    );
+    final sw = Stopwatch()..start();
+    _log('[Directions] API call for coordinates');
     _debugRouteCoordinates(
       source: 'request',
       origin: start,
@@ -227,24 +233,29 @@ class GoogleRoutePathService {
       decodedPath: const [],
     );
 
-    final fromRoutesApi = await _fetchFromRoutesApi(start, end);
-    if (fromRoutesApi != null) return fromRoutesApi;
+    try {
+      final fromRoutesApi = await _fetchFromRoutesApi(start, end);
+      if (fromRoutesApi != null) return fromRoutesApi;
 
-    final fromDirectionsApi = await _fetchFromDirectionsApi(start, end);
-    if (fromDirectionsApi != null) return fromDirectionsApi;
+      final fromDirectionsApi = await _fetchFromDirectionsApi(start, end);
+      if (fromDirectionsApi != null) return fromDirectionsApi;
 
-    // Distance Matrix does not return an actual path polyline.
-    // If the UI requires an actual path, we must not fall back to a straight line.
-    if (requirePolyline) {
-      throw Exception(
-        'Could not fetch route polyline. Enable Google Routes API or Directions API for this API key.',
-      );
+      // Distance Matrix does not return an actual path polyline.
+      // If the UI requires an actual path, we must not fall back to a straight line.
+      if (requirePolyline) {
+        throw Exception(
+          'Could not fetch route polyline. Enable Google Routes API or Directions API for this API key.',
+        );
+      }
+
+      final fromDistanceMatrix = await _fetchFromDistanceMatrix(start, end);
+      if (fromDistanceMatrix != null) return fromDistanceMatrix;
+
+      throw Exception('Could not calculate route ETA.');
+    } finally {
+      sw.stop();
+      _log('[PERF] route/polyline request: ${sw.elapsedMilliseconds} ms');
     }
-
-    final fromDistanceMatrix = await _fetchFromDistanceMatrix(start, end);
-    if (fromDistanceMatrix != null) return fromDistanceMatrix;
-
-    throw Exception('Could not calculate route ETA.');
   }
 
   Future<RoutePathInfo> syncRoutePathForRoute({
@@ -257,7 +268,11 @@ class GoogleRoutePathService {
       throw Exception('Route ID is missing.');
     }
 
-    final routeSnap = await _db.collection('route').doc(safeRouteId).get();
+    final routeSnap = await _db
+        .collection('route')
+        .doc(safeRouteId)
+        .get()
+        .timeout(_routeTimeout);
     final routeData = routeSnap.data() ?? {};
 
     final start = _parseLatLng(routeData['startLocation']);
@@ -304,7 +319,7 @@ class GoogleRoutePathService {
         'scheduleSlots': enrichedSlots,
       });
     });
-    debugPrint(
+    _log(
       '[Directions] Firestore saved polyline value length=${info.encodedPolyline.length}',
     );
   }
@@ -330,22 +345,21 @@ class GoogleRoutePathService {
       'travelMode': 'DRIVE',
       'routingPreference': 'TRAFFIC_AWARE',
     };
-    debugPrint('[Directions][google_routes] request URL=$uri');
-    debugPrint(
-      '[Directions][google_routes] request body=${jsonEncode(requestBody)}',
-    );
+    _log('[Directions][google_routes] request');
 
     try {
-      final response = await _client.post(
-        uri,
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Goog-Api-Key': _apiKey,
-          'X-Goog-FieldMask':
-              'routes.duration,routes.distanceMeters,routes.polyline.encodedPolyline',
-        },
-        body: jsonEncode(requestBody),
-      );
+      final response = await _client
+          .post(
+            uri,
+            headers: {
+              'Content-Type': 'application/json',
+              'X-Goog-Api-Key': _apiKey,
+              'X-Goog-FieldMask':
+                  'routes.duration,routes.distanceMeters,routes.polyline.encodedPolyline',
+            },
+            body: jsonEncode(requestBody),
+          )
+          .timeout(_routeTimeout);
 
       if (response.statusCode < 200 || response.statusCode >= 300) {
         return null;
@@ -361,8 +375,8 @@ class GoogleRoutePathService {
       final encoded = polyline is Map
           ? (polyline['encodedPolyline'] ?? '').toString()
           : '';
-      debugPrint(
-        '[Directions][google_routes] raw API response polyline field=$encoded',
+      _log(
+        '[Directions][google_routes] raw API response polyline length=${encoded.length}',
       );
       final distance = (route['distanceMeters'] as num?)?.toInt() ?? 0;
       final seconds = _parseDurationSeconds(route['duration']);
@@ -375,7 +389,8 @@ class GoogleRoutePathService {
         seconds: seconds,
         provider: 'google_routes',
       );
-    } catch (_) {
+    } catch (e) {
+      _log('[Directions][google_routes] failed: $e');
       return null;
     }
   }
@@ -391,10 +406,10 @@ class GoogleRoutePathService {
       'departure_time': 'now',
       'key': _apiKey,
     });
-    debugPrint('[Directions][google_directions] request URL=$uri');
+    _log('[Directions][google_directions] request');
 
     try {
-      final response = await _client.get(uri);
+      final response = await _client.get(uri).timeout(_routeTimeout);
       if (response.statusCode < 200 || response.statusCode >= 300) {
         return null;
       }
@@ -422,8 +437,8 @@ class GoogleRoutePathService {
       final encoded = overview is Map
           ? (overview['points'] ?? '').toString()
           : '';
-      debugPrint(
-        '[Directions][google_directions] raw API response polyline field=$encoded',
+      _log(
+        '[Directions][google_directions] raw API response polyline length=${encoded.length}',
       );
 
       return _buildInfo(
@@ -434,7 +449,8 @@ class GoogleRoutePathService {
         seconds: seconds,
         provider: 'google_directions',
       );
-    } catch (_) {
+    } catch (e) {
+      _log('[Directions][google_directions] failed: $e');
       return null;
     }
   }
@@ -453,7 +469,7 @@ class GoogleRoutePathService {
         });
 
     try {
-      final response = await _client.get(uri);
+      final response = await _client.get(uri).timeout(_routeTimeout);
       if (response.statusCode < 200 || response.statusCode >= 300) {
         return null;
       }
@@ -486,7 +502,8 @@ class GoogleRoutePathService {
         seconds: seconds,
         provider: 'google_distance_matrix',
       );
-    } catch (_) {
+    } catch (e) {
+      _log('[Directions][distance_matrix] failed: $e');
       return null;
     }
   }
@@ -504,7 +521,7 @@ class GoogleRoutePathService {
     final path = encodedPolyline.isEmpty
         ? const <LatLng>[]
         : _decodePolyline(encodedPolyline);
-    debugPrint(
+    _log(
       '[Directions][$provider] decoded polyline points count=${path.length}',
     );
     _debugRouteCoordinates(
@@ -567,16 +584,16 @@ class GoogleRoutePathService {
     required LatLng destination,
     required List<LatLng> decodedPath,
   }) {
-    debugPrint('[Directions][$source] route origin=${_fmt(origin)}');
-    debugPrint('[Directions][$source] route destination=${_fmt(destination)}');
+    _log('[Directions][$source] route origin=${_fmt(origin)}');
+    _log('[Directions][$source] route destination=${_fmt(destination)}');
     if (decodedPath.isEmpty) {
-      debugPrint('[Directions][$source] decoded polyline is empty');
+      _log('[Directions][$source] decoded polyline is empty');
       return;
     }
-    debugPrint(
+    _log(
       '[Directions][$source] first decoded polyline point=${_fmt(decodedPath.first)}',
     );
-    debugPrint(
+    _log(
       '[Directions][$source] last decoded polyline point=${_fmt(decodedPath.last)}',
     );
   }

@@ -86,7 +86,7 @@ class _PhoneNumberScreenState extends State<PhoneNumberScreen> {
     }
 
     final localPhoneNumber = _phoneDigitsController.text.trim();
-    debugPrint('Send OTP local input: $localPhoneNumber');
+    debugPrint('Send OTP local input length: ${localPhoneNumber.length}');
     debugPrint('Send OTP selected country code: $_phonePrefix');
 
     final validationError = PhoneAuthHelpers.validateLocalPhoneNumber(
@@ -105,11 +105,13 @@ class _PhoneNumberScreenState extends State<PhoneNumberScreen> {
       localPhoneNumber: localPhoneNumber,
     );
 
-    debugPrint('Send OTP phone number prepared: $fullPhoneNumber');
+    debugPrint(
+      'Send OTP phone number prepared: ${PhoneAuthHelpers.maskPhone(fullPhoneNumber)}',
+    );
     debugPrint('Send OTP platform: $defaultTargetPlatform');
 
     if (!_isValidE164PhoneNumber(fullPhoneNumber)) {
-      debugPrint('Send OTP E.164 validation failed: $fullPhoneNumber');
+      debugPrint('Send OTP E.164 validation failed');
       _showOtpError(
         'Phone number must be in E.164 format, for example +970xxxxxxxxx.',
       );
@@ -119,10 +121,12 @@ class _PhoneNumberScreenState extends State<PhoneNumberScreen> {
     PhoneAuthHelpers.logPhoneAuthConfigurationReminder();
 
     final isIos = defaultTargetPlatform == TargetPlatform.iOS;
-    final isFirebaseTestNumber = firebaseTestOtpCodes.containsKey(
+    final isFirebaseTestNumber = firebaseTestPhoneNumbers.contains(
       fullPhoneNumber,
     );
-    debugPrint('Send OTP entered phone number: $fullPhoneNumber');
+    debugPrint(
+      'Send OTP entered phone number: ${PhoneAuthHelpers.maskPhone(fullPhoneNumber)}',
+    );
     debugPrint('Send OTP is Firebase test number: $isFirebaseTestNumber');
 
     if (!mounted) return;
@@ -147,26 +151,6 @@ class _PhoneNumberScreenState extends State<PhoneNumberScreen> {
           _showOtpError(PhoneAuthHelpers.iosSideloadedOtpMessage);
           return;
         }
-
-        debugPrint(
-          'Send OTP verifyPhoneNumber skipped: iOS Firebase test number',
-        );
-        setState(() => _isSending = false);
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (_) => OtpVerificationScreen(
-              phoneNumber: fullPhoneNumber,
-              verificationId: 'ios-demo-test',
-              resendToken: null,
-              fullName: widget.fullName,
-              role: widget.role,
-              driverData: widget.driverData,
-              isDemoTestMode: true,
-            ),
-          ),
-        );
-        return;
       }
 
       debugPrint('Send OTP before verifyPhoneNumber');
@@ -198,9 +182,6 @@ class _PhoneNumberScreenState extends State<PhoneNumberScreen> {
         },
         verificationFailed: (FirebaseAuthException e) {
           debugPrint('Send OTP verificationFailed');
-          debugPrint('OTP ERROR CODE: ${e.code}');
-          debugPrint('OTP ERROR MESSAGE: ${e.message}');
-          debugPrint('OTP ERROR PLUGIN: ${e.plugin}');
           PhoneAuthHelpers.logFirebaseAuthException(
             'verifyPhoneNumber verificationFailed',
             e,
@@ -220,8 +201,9 @@ class _PhoneNumberScreenState extends State<PhoneNumberScreen> {
           debugPrint('Send OTP codeSent');
           if (!mounted) return;
 
-          debugPrint('Send OTP codeSent verificationId: $verificationId');
-          debugPrint('Send OTP codeSent resendToken: $resendToken');
+          debugPrint(
+            'Send OTP codeSent verificationId received: ${verificationId.isNotEmpty}',
+          );
 
           try {
             setState(() => _isSending = false);
@@ -251,7 +233,7 @@ class _PhoneNumberScreenState extends State<PhoneNumberScreen> {
           }
         },
         codeAutoRetrievalTimeout: (String verificationId) {
-          debugPrint('Send OTP timeout verificationId: $verificationId');
+          debugPrint('Send OTP auto retrieval timeout');
           if (!mounted) return;
 
           try {
@@ -408,8 +390,7 @@ class _PhoneNumberScreenState extends State<PhoneNumberScreen> {
                                               hintText: "590000000",
                                               prefixIcon: const Icon(
                                                 Icons.phone_outlined,
-                                                color:
-                                                    NavigoColors.accentGreen,
+                                                color: NavigoColors.accentGreen,
                                               ),
                                               suffixIcon: IconButton(
                                                 icon: const Icon(Icons.clear),

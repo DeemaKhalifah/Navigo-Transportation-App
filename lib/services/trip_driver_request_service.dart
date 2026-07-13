@@ -1,22 +1,34 @@
+import 'dart:async';
+import 'dart:convert';
+
+import 'package:flutter/foundation.dart';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:http/http.dart' as http;
 
-import '../models/driver_status.dart';
-import '../models/schedule_slot.dart';
 import '../models/trip_driver_request.dart';
-import '../models/trip_status.dart';
-import 'route_slot_booking_service.dart';
 
 class TripDriverRequestService {
-  TripDriverRequestService({FirebaseFirestore? firestore, FirebaseAuth? auth})
-    : _db = firestore ?? FirebaseFirestore.instance,
-      _auth = auth ?? FirebaseAuth.instance;
+  TripDriverRequestService({
+    FirebaseFirestore? firestore,
+    FirebaseAuth? auth,
+    http.Client? client,
+  }) : _db = firestore ?? FirebaseFirestore.instance,
+       _auth = auth ?? FirebaseAuth.instance,
+       _client = client ?? http.Client();
 
   final FirebaseFirestore _db;
   final FirebaseAuth _auth;
-  static const String _notificationsCollection = 'notifications';
+  final http.Client _client;
 
   static const String _collection = 'tripDriverRequests';
+  static const String _functionsRegion = String.fromEnvironment(
+    'FIREBASE_FUNCTIONS_REGION',
+    defaultValue: 'us-central1',
+  );
+  static const Duration _functionTimeout = Duration(seconds: 20);
 
   String? get _uid => _auth.currentUser?.uid;
 
@@ -54,142 +66,89 @@ class TripDriverRequestService {
       throw Exception('Select at least one seat.');
     }
 
-    final ref = _db.collection(_collection).doc();
-    await _db.runTransaction((tx) async {
-      await _assertTripStillAvailable(
-        tx,
-        driverId: safeDriver,
-        routeId: safeRoute,
-        slotId: safeSlot,
-        seatsRequested: seatsRequested,
-      );
-
-      final request = TripDriverRequest(
-        requestId: ref.id,
-        passengerId: passengerId,
-        driverId: safeDriver,
-        routeId: safeRoute,
-        slotId: safeSlot,
-        seatsRequested: seatsRequested,
-        lineLabel: lineLabel.trim(),
-        startPoint: startPoint.trim(),
-        endPoint: endPoint.trim(),
-        pickupDescription: pickupDescription.trim(),
-        status: TripDriverRequest.pending,
-        createdAt: DateTime.now(),
-      );
-
-      tx.set(ref, request.toMap());
-    });
-    await _createDriverRequestNotification(
-      driverId: safeDriver,
-      routeId: safeRoute,
-      requestId: ref.id,
-      lineLabel: lineLabel.trim(),
-      seatsRequested: seatsRequested,
+    final response = await _callTrustedRequestFunction(
+      endpoint: 'createTripDriverRequest',
+      body: {
+        'driverId': safeDriver,
+        'routeId': safeRoute,
+        'scheduleId': safeSlot,
+        'seatsRequested': seatsRequested,
+        'lineLabel': lineLabel.trim(),
+        'startPoint': startPoint.trim(),
+        'endPoint': endPoint.trim(),
+        'pickupDescription': pickupDescription.trim(),
+      },
     );
-    return ref.id;
+
+    final requestId = (response['requestId'] ?? '').toString().trim();
+    if (requestId.isEmpty) {
+      throw Exception(
+        'The trusted request operation did not return a request ID.',
+      );
+    }
+    return requestId;
   }
 
-  Future<void> _assertTripStillAvailable(
-    Transaction tx, {
-    required String driverId,
-    required String routeId,
-    required String slotId,
-    required int seatsRequested,
+  Future<Map<String, dynamic>> _callTrustedRequestFunction({
+    required String endpoint,
+    required Map<String, dynamic> body,
   }) async {
-    final routeRef = _db.collection('route').doc(routeId);
-    final driverRef = _db.collection('drivers').doc(driverId);
-
-    final routeSnap = await tx.get(routeRef);
-    final driverSnap = await tx.get(driverRef);
-
-    if (!routeSnap.exists || routeSnap.data() == null) {
-      throw Exception('This trip is no longer available.');
-    }
-    if (!driverSnap.exists || driverSnap.data() == null) {
-      throw Exception('This trip is no longer available.');
+    final projectId = Firebase.app().options.projectId;
+    if (projectId.isEmpty) {
+      throw Exception('Firebase project ID is missing.');
     }
 
-    final driverData = driverSnap.data()!;
-    final isApproved = driverData['isApproved'] == true;
-    final driverStatus = DriverStatus.normalize(
-      driverData['status']?.toString(),
+    final token = await _auth.currentUser?.getIdToken();
+    if (token == null || token.trim().isEmpty) {
+      throw Exception('You must be signed in.');
+    }
+
+    final uri = Uri.https(
+      '$_functionsRegion-$projectId.cloudfunctions.net',
+      '/$endpoint',
     );
-    if (!isApproved || driverStatus != DriverStatus.onTrip) {
-      throw Exception('This trip is no longer available.');
-    }
 
-    final currentRouteId = (driverData['currentRouteId'] ?? '').toString().trim();
-    if (currentRouteId.isNotEmpty && currentRouteId != routeId) {
-      throw Exception('This trip is no longer available.');
-    }
+    final sw = Stopwatch()..start();
+    try {
+      final response = await _client
+          .post(
+            uri,
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': 'Bearer $token',
+            },
+            body: jsonEncode(body),
+          )
+          .timeout(_functionTimeout);
 
-    final currentTripId = (driverData['currentTripId'] ?? '').toString().trim();
-    if (currentTripId.isNotEmpty && currentTripId != slotId) {
-      throw Exception('This trip is no longer available.');
-    }
+      final decoded = _decodeResponse(response.body);
+      if (response.statusCode >= 200 && response.statusCode < 300) {
+        return decoded;
+      }
 
-    if (!_hasDriverLocation(driverData)) {
-      throw Exception('This trip is no longer available.');
-    }
-
-    final routeData = routeSnap.data()!;
-    final rawSlots = routeData['scheduleSlots'];
-    if (rawSlots is! List) {
-      throw Exception('This trip is no longer available.');
-    }
-
-    Map<String, dynamic>? slotMap;
-    for (final rawSlot in rawSlots) {
-      if (rawSlot is! Map) continue;
-      final candidate = Map<String, dynamic>.from(rawSlot);
-      if ((candidate['slotId'] ?? '').toString().trim() == slotId) {
-        slotMap = candidate;
-        break;
+      final message = (decoded['error'] ?? '').toString().trim();
+      throw Exception(
+        message.isEmpty ? 'trustedOperationFailed' : message,
+      );
+    } on TimeoutException {
+      throw Exception('requestTimedOutRetry');
+    } finally {
+      sw.stop();
+      if (kDebugMode) {
+        debugPrint('[PERF] $endpoint: ${sw.elapsedMilliseconds} ms');
       }
     }
-
-    if (slotMap == null) {
-      throw Exception('This trip is no longer available.');
-    }
-
-    final slot = ScheduleSlot.fromMap(slotId, slotMap);
-    final status = TripStatus.normalize(slot.status);
-    final assignedDriver = slot.driverId.trim();
-    if (status != TripStatus.onTrip || assignedDriver != driverId) {
-      throw Exception('This trip is no longer available.');
-    }
-
-    if (slot.arrivalAt.isBefore(DateTime.now())) {
-      throw Exception('This trip is no longer available.');
-    }
-
-    final availableSeats = slot.capacity - slot.passengersIds.length;
-    if (availableSeats < 1) {
-      throw Exception('This trip is no longer available.');
-    }
-    if (seatsRequested > availableSeats) {
-      throw Exception('Not enough seats on this trip (only $availableSeats left).');
-    }
   }
 
-  bool _hasDriverLocation(Map<String, dynamic> driverData) {
-    final lat = (driverData['latitude'] as num?)?.toDouble();
-    final lng = (driverData['longitude'] as num?)?.toDouble();
-    if (lat != null && lng != null) return true;
-
-    final location = driverData['location'];
-    if (location is GeoPoint) return true;
-    if (location is! Map) return false;
-
-    final locLat =
-        (location['lat'] as num?)?.toDouble() ??
-        (location['latitude'] as num?)?.toDouble();
-    final locLng =
-        (location['lng'] as num?)?.toDouble() ??
-        (location['longitude'] as num?)?.toDouble();
-    return locLat != null && locLng != null;
+  Map<String, dynamic> _decodeResponse(String body) {
+    try {
+      final decoded = jsonDecode(body);
+      if (decoded is Map<String, dynamic>) return decoded;
+      if (decoded is Map) return Map<String, dynamic>.from(decoded);
+    } catch (e) {
+      if (kDebugMode) debugPrint('Trusted request response decode error: $e');
+    }
+    return const {};
   }
 
   Stream<List<TripDriverRequest>> watchPendingForDriver(String driverId) {
@@ -251,65 +210,20 @@ class TripDriverRequestService {
       throw Exception('Request ID is missing.');
     }
 
-    final reqRef = _db.collection(_collection).doc(safeReqId);
-
-    await _db.runTransaction((tx) async {
-      final reqSnap = await tx.get(reqRef);
-      if (!reqSnap.exists) {
-        throw Exception('Request not found.');
-      }
-
-      final map = reqSnap.data() ?? {};
-      final driverId = (map['driverId'] ?? '').toString().trim();
-      if (driverId != uid) {
-        throw Exception('Not allowed to update this request.');
-      }
-
-      final status = (map['status'] ?? '').toString();
-      if (status != TripDriverRequest.pending) {
-        throw Exception('This request is no longer pending.');
-      }
-
-      final routeId = (map['routeId'] ?? '').toString().trim();
-      final slotId = (map['scheduleId'] ?? map['slotId'] ?? '')
-          .toString()
-          .trim();
-      final passengerId = (map['passengerId'] ?? '').toString().trim();
-      final seats = (map['seatsRequested'] as num?)?.toInt() ?? 1;
-
-      await RouteSlotBookingService.appendPassengerSeatsWithTransaction(
-        tx,
-        _db,
-        routeId: routeId,
-        slotId: slotId,
-        passengerId: passengerId,
-        seatsToAdd: seats,
-      );
-
-      tx.update(reqRef, {
-        'status': TripDriverRequest.accepted,
-        'respondedAt': FieldValue.serverTimestamp(),
-      });
-    });
+    await _callTrustedRequestFunction(
+      endpoint: 'acceptTripDriverRequest',
+      body: {'requestId': safeReqId},
+    );
   }
 
   Future<void> declineRequest(String requestId) async {
     final uid = _uid;
     if (uid == null) return;
 
-    final ref = _db.collection(_collection).doc(requestId.trim());
-    final snap = await ref.get();
-    if (!snap.exists) return;
-
-    final driverId = (snap.data()?['driverId'] ?? '').toString().trim();
-    if (driverId != uid) {
-      throw Exception('Not allowed to update this request.');
-    }
-
-    await ref.update({
-      'status': TripDriverRequest.declined,
-      'respondedAt': FieldValue.serverTimestamp(),
-    });
+    await _callTrustedRequestFunction(
+      endpoint: 'declineTripDriverRequest',
+      body: {'requestId': requestId.trim()},
+    );
   }
 
   Future<String?> passengerDisplayName(String passengerId) async {
@@ -319,31 +233,5 @@ class TripDriverRequestService {
     final last = (d['lastName'] ?? '').toString().trim();
     final full = '$first $last'.trim();
     return full.isEmpty ? null : full;
-  }
-
-  Future<void> _createDriverRequestNotification({
-    required String driverId,
-    required String routeId,
-    required String requestId,
-    required String lineLabel,
-    required int seatsRequested,
-  }) async {
-    final ref = _db.collection(_notificationsCollection).doc();
-    final lineText = lineLabel.isEmpty ? 'مسارك' : lineLabel;
-    final seatWord = seatsRequested == 1 ? 'مقعد' : 'مقاعد';
-    final message = 'طلب راكب حجز $seatsRequested $seatWord على $lineText.';
-
-    await ref.set({
-      'notificationId': ref.id,
-      'userId': driverId,
-      'title': 'طلب رحلة جديد',
-      'message': message,
-      'body': message,
-      'type': 'driver_request',
-      'routeId': routeId,
-      'requestId': requestId,
-      'isRead': false,
-      'timestamp': FieldValue.serverTimestamp(),
-    });
   }
 }

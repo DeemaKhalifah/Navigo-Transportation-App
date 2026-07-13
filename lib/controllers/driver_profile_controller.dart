@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -37,13 +38,20 @@ class DriverProfileController extends ChangeNotifier {
   DocumentReference<Map<String, dynamic>>? driverDocRef;
 
   StreamSubscription<DocumentSnapshot<Map<String, dynamic>>>? _driverDocSub;
+  bool _isDisposed = false;
+  static const Duration _firestoreTimeout = Duration(seconds: 20);
+
+  void _notifyListeners() {
+    if (_isDisposed) return;
+    notifyListeners();
+  }
 
   Future<void> init() async {
     currentUser = FirebaseAuth.instance.currentUser;
 
     if (currentUser == null) {
       isLoading = false;
-      notifyListeners();
+      _notifyListeners();
       return;
     }
 
@@ -57,19 +65,27 @@ class DriverProfileController extends ChangeNotifier {
         .collection('drivers')
         .doc(currentUser!.uid);
 
-    final directSnap = await driverDocRef!.get();
-    if (!directSnap.exists) {
-      final q = await FirebaseFirestore.instance
-          .collection('drivers')
-          .where('userId', isEqualTo: currentUser!.uid)
-          .limit(1)
-          .get();
-      if (q.docs.isNotEmpty) {
-        driverDocRef = q.docs.first.reference;
+    try {
+      final directSnap = await driverDocRef!.get().timeout(_firestoreTimeout);
+      if (_isDisposed) return;
+      if (!directSnap.exists) {
+        final q = await FirebaseFirestore.instance
+            .collection('drivers')
+            .where('userId', isEqualTo: currentUser!.uid)
+            .limit(1)
+            .get()
+            .timeout(_firestoreTimeout);
+        if (_isDisposed) return;
+        if (q.docs.isNotEmpty) {
+          driverDocRef = q.docs.first.reference;
+        }
       }
+    } catch (e) {
+      if (kDebugMode) debugPrint('Driver profile doc resolve error: $e');
     }
 
     _driverDocSub = driverDocRef!.snapshots().listen((snap) {
+      if (_isDisposed) return;
       if (!snap.exists) return;
 
       final data = snap.data() ?? {};
@@ -81,7 +97,7 @@ class DriverProfileController extends ChangeNotifier {
 
       assignedRouteId = data['routeId']?.toString();
 
-      notifyListeners();
+      _notifyListeners();
     });
 
     await loadUserData();
@@ -114,21 +130,24 @@ class DriverProfileController extends ChangeNotifier {
   Future<void> loadUserData() async {
     if (currentUser == null || userDocRef == null || driverDocRef == null) {
       isLoading = false;
-      notifyListeners();
+      _notifyListeners();
       return;
     }
 
+    final sw = Stopwatch()..start();
     try {
       final savedName = await LocalStorageService.getDriverDisplayName();
+      if (_isDisposed) return;
       if (savedName != null && nameController.text.trim().isEmpty) {
         nameController.text = savedName;
       }
 
-      final userSnapFuture = userDocRef!.get();
-      final driverSnapFuture = driverDocRef!.get();
+      final userSnapFuture = userDocRef!.get().timeout(_firestoreTimeout);
+      final driverSnapFuture = driverDocRef!.get().timeout(_firestoreTimeout);
 
       final userSnap = await userSnapFuture;
       final driverSnap = await driverSnapFuture;
+      if (_isDisposed) return;
       final userData = userSnap.data() ?? {};
       final driverData = driverSnap.data() ?? {};
 
@@ -163,6 +182,7 @@ class DriverProfileController extends ChangeNotifier {
       _resolvedImageUrl = await _profileImageStorageService.getImageUrl(
         imageUrl,
       );
+      if (_isDisposed) return;
 
       if (driverSnap.exists) {
         driverStatus = DriverStatus.normalize(
@@ -173,24 +193,31 @@ class DriverProfileController extends ChangeNotifier {
         assignedRouteId = driverData['routeId']?.toString();
       }
     } catch (e) {
-      debugPrint('Error loading driver profile: $e');
+      if (kDebugMode) debugPrint('Error loading driver profile: $e');
     } finally {
+      sw.stop();
+      if (kDebugMode) {
+        debugPrint('[PERF] driver profile load: ${sw.elapsedMilliseconds} ms');
+      }
+      if (_isDisposed) return;
       isLoading = false;
-      notifyListeners();
+      _notifyListeners();
     }
   }
 
   void toggleEdit() {
+    if (_isDisposed) return;
     isEditing = !isEditing;
-    notifyListeners();
+    _notifyListeners();
   }
 
   Future<void> pickImage(ImageSource source) async {
     final picked = await _picker.pickImage(source: source, imageQuality: 75);
+    if (_isDisposed) return;
 
     if (picked != null) {
       image = File(picked.path);
-      notifyListeners();
+      _notifyListeners();
     }
   }
 
@@ -206,7 +233,7 @@ class DriverProfileController extends ChangeNotifier {
     }
 
     isSaving = true;
-    notifyListeners();
+    _notifyListeners();
 
     try {
       final fullName = nameController.text.trim();
@@ -219,37 +246,45 @@ class DriverProfileController extends ChangeNotifier {
 
       final uploadedImageId = await _uploadProfileImageId();
 
-      await userDocRef!.set({
-        'firstName': firstName,
-        'lastName': lastName,
-        'phone': phoneController.text.trim(),
-        'image': uploadedImageId,
-        'role': 'driver',
-        'updatedAt': FieldValue.serverTimestamp(),
-      }, SetOptions(merge: true));
-
-      await driverDocRef!.set({
-        'firstName': firstName,
-        'lastName': lastName,
-        'phone': phoneController.text.trim(),
-        'image': uploadedImageId,
-        'updatedAt': FieldValue.serverTimestamp(),
-      }, SetOptions(merge: true));
+      await Future.wait([
+        userDocRef!
+            .set({
+              'firstName': firstName,
+              'lastName': lastName,
+              'phone': phoneController.text.trim(),
+              'image': uploadedImageId,
+              'role': 'driver',
+              'updatedAt': FieldValue.serverTimestamp(),
+            }, SetOptions(merge: true))
+            .timeout(_firestoreTimeout),
+        driverDocRef!
+            .set({
+              'firstName': firstName,
+              'lastName': lastName,
+              'phone': phoneController.text.trim(),
+              'image': uploadedImageId,
+              'updatedAt': FieldValue.serverTimestamp(),
+            }, SetOptions(merge: true))
+            .timeout(_firestoreTimeout),
+      ]);
 
       imageUrl = uploadedImageId;
       _resolvedImageUrl = await _profileImageStorageService.getImageUrl(
         imageUrl,
       );
+      if (_isDisposed) return null;
       isEditing = false;
       await LocalStorageService.saveDriverDisplayName(fullName);
 
       return null;
     } catch (e) {
-      debugPrint('Save driver profile error: $e');
+      if (kDebugMode) debugPrint('Save driver profile error: $e');
       return 'Failed to update profile: $e';
     } finally {
-      isSaving = false;
-      notifyListeners();
+      if (!_isDisposed) {
+        isSaving = false;
+        _notifyListeners();
+      }
     }
   }
 
@@ -283,23 +318,28 @@ class DriverProfileController extends ChangeNotifier {
     }
 
     statusBusy = true;
-    notifyListeners();
+    _notifyListeners();
 
     final userRef = FirebaseFirestore.instance
         .collection('users')
         .doc(currentUser!.uid);
 
     try {
-      await driverDocRef!.set({
-        'status': DriverStatus.available,
-        'isOnline': true,
-        'updatedAt': FieldValue.serverTimestamp(),
-      }, SetOptions(merge: true));
-
-      await userRef.set({
-        'isOnline': true,
-        'updatedAt': FieldValue.serverTimestamp(),
-      }, SetOptions(merge: true));
+      await Future.wait([
+        driverDocRef!
+            .set({
+              'status': DriverStatus.available,
+              'isOnline': true,
+              'updatedAt': FieldValue.serverTimestamp(),
+            }, SetOptions(merge: true))
+            .timeout(_firestoreTimeout),
+        userRef
+            .set({
+              'isOnline': true,
+              'updatedAt': FieldValue.serverTimestamp(),
+            }, SetOptions(merge: true))
+            .timeout(_firestoreTimeout),
+      ]);
 
       // Queue stores `drivers/{docId}` ids (not auth uid), because drivers may
       // be saved under an auto-id document with `userId == uid`.
@@ -314,23 +354,34 @@ class DriverProfileController extends ChangeNotifier {
       return null;
     } catch (e) {
       try {
-        await driverDocRef!.set({
-          'status': DriverStatus.offline,
-          'isOnline': false,
-          'updatedAt': FieldValue.serverTimestamp(),
-        }, SetOptions(merge: true));
+        await Future.wait([
+          driverDocRef!
+              .set({
+                'status': DriverStatus.offline,
+                'isOnline': false,
+                'updatedAt': FieldValue.serverTimestamp(),
+              }, SetOptions(merge: true))
+              .timeout(_firestoreTimeout),
+          userRef
+              .set({
+                'isOnline': false,
+                'updatedAt': FieldValue.serverTimestamp(),
+              }, SetOptions(merge: true))
+              .timeout(_firestoreTimeout),
+        ]);
+      } catch (rollbackError) {
+        if (kDebugMode) {
+          debugPrint('Go online rollback error: $rollbackError');
+        }
+      }
 
-        await userRef.set({
-          'isOnline': false,
-          'updatedAt': FieldValue.serverTimestamp(),
-        }, SetOptions(merge: true));
-      } catch (_) {}
-
-      debugPrint('Go online error: $e');
+      if (kDebugMode) debugPrint('Go online error: $e');
       return 'Could not go online: $e';
     } finally {
-      statusBusy = false;
-      notifyListeners();
+      if (!_isDisposed) {
+        statusBusy = false;
+        _notifyListeners();
+      }
     }
   }
 
@@ -341,22 +392,26 @@ class DriverProfileController extends ChangeNotifier {
     final routeId = assignedRouteId?.trim();
 
     statusBusy = true;
-    notifyListeners();
+    _notifyListeners();
 
     try {
-      await driverDocRef!.set({
-        'status': DriverStatus.offline,
-        'isOnline': false,
-        'updatedAt': FieldValue.serverTimestamp(),
-      }, SetOptions(merge: true));
-
-      await FirebaseFirestore.instance
-          .collection('users')
-          .doc(currentUser!.uid)
-          .set({
-            'isOnline': false,
-            'updatedAt': FieldValue.serverTimestamp(),
-          }, SetOptions(merge: true));
+      await Future.wait([
+        driverDocRef!
+            .set({
+              'status': DriverStatus.offline,
+              'isOnline': false,
+              'updatedAt': FieldValue.serverTimestamp(),
+            }, SetOptions(merge: true))
+            .timeout(_firestoreTimeout),
+        FirebaseFirestore.instance
+            .collection('users')
+            .doc(currentUser!.uid)
+            .set({
+              'isOnline': false,
+              'updatedAt': FieldValue.serverTimestamp(),
+            }, SetOptions(merge: true))
+            .timeout(_firestoreTimeout),
+      ]);
 
       if (routeId != null && routeId.isNotEmpty) {
         await _queueRepo.onDriverStatusUpdated(
@@ -370,11 +425,13 @@ class DriverProfileController extends ChangeNotifier {
       await LocalStorageService.saveDriverStatus(DriverStatus.offline);
       return null;
     } catch (e) {
-      debugPrint('Go offline error: $e');
+      if (kDebugMode) debugPrint('Go offline error: $e');
       return 'Could not go offline: $e';
     } finally {
-      statusBusy = false;
-      notifyListeners();
+      if (!_isDisposed) {
+        statusBusy = false;
+        _notifyListeners();
+      }
     }
   }
 
@@ -386,7 +443,7 @@ class DriverProfileController extends ChangeNotifier {
         final ref =
             driverDocRef ??
             FirebaseFirestore.instance.collection('drivers').doc(uid);
-        final driverSnap = await ref.get();
+        final driverSnap = await ref.get().timeout(_firestoreTimeout);
 
         final routeId = driverSnap.data()?['routeId']?.toString();
 
@@ -398,20 +455,27 @@ class DriverProfileController extends ChangeNotifier {
           );
         }
 
-        await ref.set({
-          'status': DriverStatus.offline,
-          'isOnline': false,
-          'updatedAt': FieldValue.serverTimestamp(),
-        }, SetOptions(merge: true));
+        await Future.wait([
+          ref
+              .set({
+                'status': DriverStatus.offline,
+                'isOnline': false,
+                'updatedAt': FieldValue.serverTimestamp(),
+              }, SetOptions(merge: true))
+              .timeout(_firestoreTimeout),
+          FirebaseFirestore.instance
+              .collection('users')
+              .doc(uid)
+              .set({
+                'isOnline': false,
+                'updatedAt': FieldValue.serverTimestamp(),
+              }, SetOptions(merge: true))
+              .timeout(_firestoreTimeout),
+        ]);
 
         await LocalStorageService.saveDriverStatus(DriverStatus.offline);
-
-        await FirebaseFirestore.instance.collection('users').doc(uid).set({
-          'isOnline': false,
-          'updatedAt': FieldValue.serverTimestamp(),
-        }, SetOptions(merge: true));
       } catch (e) {
-        debugPrint('Logout driver cleanup error: $e');
+        if (kDebugMode) debugPrint('Logout driver cleanup error: $e');
       }
     }
 
@@ -430,6 +494,7 @@ class DriverProfileController extends ChangeNotifier {
 
   @override
   void dispose() {
+    _isDisposed = true;
     _driverDocSub?.cancel();
     nameController.dispose();
     phoneController.dispose();

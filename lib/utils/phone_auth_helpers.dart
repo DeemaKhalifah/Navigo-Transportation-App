@@ -1,11 +1,9 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 
-// These numbers must match Firebase Console test phone numbers. Used only for sideloaded iOS demo builds.
-final Map<String, String> firebaseTestOtpCodes = {
-  '+970599999999': '123456',
-  '+970593333333': '123456',
-};
+// These numbers must match Firebase Console test phone numbers. They still go
+// through Firebase Phone Auth and receive a real verificationId.
+const Set<String> firebaseTestPhoneNumbers = {'+970599999999', '+970593333333'};
 
 class PhoneAuthHelpers {
   const PhoneAuthHelpers._();
@@ -17,6 +15,13 @@ class PhoneAuthHelpers {
     '+970': 9,
     '+972': 9,
   };
+
+  static String maskPhone(String phoneNumber) {
+    final phone = phoneNumber.trim();
+    if (phone.length <= 4) return '****';
+    final visible = phone.substring(phone.length - 4);
+    return '***$visible';
+  }
 
   static String buildFullPhoneNumber({
     required String countryCode,
@@ -77,8 +82,6 @@ class PhoneAuthHelpers {
     String fallback = 'Failed to send OTP. Please try again.',
   }) {
     final firebaseMessage = error.message?.trim();
-    final firebaseDetails =
-        '${error.code}: ${firebaseMessage?.isNotEmpty == true ? firebaseMessage : 'No error message'}';
 
     final baseMessage = switch (error.code) {
       'invalid-phone-number' =>
@@ -103,15 +106,11 @@ class PhoneAuthHelpers {
         'The OTP code is incorrect. Please check it and try again.',
       'invalid-verification-id' =>
         'The verification session is invalid. Please request a new code.',
-      'unknown' => firebaseDetails,
+      'unknown' => fallback,
       _ => firebaseMessage?.isNotEmpty == true ? firebaseMessage! : fallback,
     };
 
-    if (baseMessage == firebaseDetails) {
-      return firebaseDetails;
-    }
-
-    return '$baseMessage\nFirebase error: $firebaseDetails';
+    return baseMessage;
   }
 
   static void logFirebaseAuthException(
@@ -121,14 +120,8 @@ class PhoneAuthHelpers {
     debugPrint('$label platform: $defaultTargetPlatform');
     debugPrint('$label plugin: ${error.plugin}');
     debugPrint('$label code: ${error.code}');
-    debugPrint('$label message: ${error.message}');
-    debugPrint('$label stackTrace: ${error.stackTrace}');
-    if (error.email != null) debugPrint('$label email: ${error.email}');
-    if (error.phoneNumber != null) {
-      debugPrint('$label phoneNumber: ${error.phoneNumber}');
-    }
-    if (error.tenantId != null) {
-      debugPrint('$label tenantId: ${error.tenantId}');
+    if (kDebugMode && error.message != null) {
+      debugPrint('$label message: ${error.message}');
     }
   }
 

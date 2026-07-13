@@ -1,3 +1,6 @@
+import 'dart:async';
+
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 
@@ -39,6 +42,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
   bool _isLoading = false;
   bool _isSubmittingWaitingRequest = false;
   List<ScheduleSlot> _schedules = [];
+  static const Duration _normalActionTimeout = Duration(seconds: 20);
 
   final List<String> _vehicles = ['Bus', 'Micro Bus'];
 
@@ -64,8 +68,10 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
     }
     if (!mounted) return;
     setState(() => _selectedLine = line?.isEmpty == true ? null : line);
-    await _loadSchedules();
-    await _prefillPickupFromSavedMap();
+    await Future.wait([
+      _loadSchedules(),
+      _prefillPickupFromSavedMap(),
+    ]);
   }
 
   Future<void> _prefillPickupFromSavedMap() async {
@@ -77,7 +83,9 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
       if (_manualPickupController.text.trim().isEmpty) {
         setState(() => _manualPickupController.text = label);
       }
-    } catch (_) {}
+    } catch (e) {
+      if (kDebugMode) debugPrint('Pickup prefill error: $e');
+    }
   }
 
   Future<void> _pickDate() async {
@@ -130,18 +138,24 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
   Future<void> _loadSchedules() async {
     try {
       setState(() => _isLoading = true);
-      final schedules = await _scheduleService.findAvailableSchedules(
-        selectedLine: _selectedLine,
-        vehicleType: _vehicleType,
-        selectedDate: _selectedDate,
-        selectedTime: _selectedTime,
-      );
+      final schedules = await _scheduleService
+          .findAvailableSchedules(
+            selectedLine: _selectedLine,
+            vehicleType: _vehicleType,
+            selectedDate: _selectedDate,
+            selectedTime: _selectedTime,
+          )
+          .timeout(_normalActionTimeout);
 
       if (!mounted) return;
       setState(() => _schedules = schedules);
-    } catch (e) {
+    } on TimeoutException {
       if (!mounted) return;
-      AppMessage.showError(context, 'Failed to load schedules: $e');
+      AppMessage.showError(context, context.texts.t('requestTimedOutRetry'));
+    } catch (e) {
+      debugPrint('Load schedules error: $e');
+      if (!mounted) return;
+      AppMessage.showError(context, context.texts.t('failedToLoadSchedules'));
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -162,15 +176,17 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
 
     setState(() => _isSubmittingWaitingRequest = true);
     try {
-      final result = await _waitingRequestService.submitRequest(
-        selectedLine: line,
-        selectedDate: _selectedDate!,
-        hour: _selectedTime!.hour,
-        minute: _selectedTime!.minute,
-        vehicleType: _vehicleType,
-        seatsRequested: seatsOverride ?? _seatCount,
-        pickupLocationDescription: _manualPickupController.text,
-      );
+      final result = await _waitingRequestService
+          .submitRequest(
+            selectedLine: line,
+            selectedDate: _selectedDate!,
+            hour: _selectedTime!.hour,
+            minute: _selectedTime!.minute,
+            vehicleType: _vehicleType,
+            seatsRequested: seatsOverride ?? _seatCount,
+            pickupLocationDescription: _manualPickupController.text,
+          )
+          .timeout(_normalActionTimeout);
 
       if (!mounted) return;
       AppMessage.showSuccess(
@@ -180,6 +196,9 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
             : '${context.texts.t('waitingTripRequested')} ${result.waitingSeatCount}/4',
       );
       await _loadSchedules();
+    } on TimeoutException {
+      if (!mounted) return;
+      AppMessage.showError(context, context.texts.t('requestTimedOutRetry'));
     } catch (e) {
       if (!mounted) return;
       AppMessage.showError(context, _waitingListErrorText(e));
@@ -248,7 +267,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                       style: NavigoTextStyles.bodyMedium,
                     ),
                     Text(
-                      '${context.texts.t('price')}: ${_scheduleService.priceTextOf(slot)}',
+                      '${context.texts.t('tripPrice')}: ${_scheduleService.priceTextOf(slot)}',
                       style: NavigoTextStyles.bodyMedium,
                     ),
                     Text(
@@ -337,12 +356,14 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                                     throw Exception(setPickupFirst);
                                   }
 
-                                  await _scheduleService.confirmSchedule(
-                                    slot: slot,
-                                    seatsToBook: selectedSeatCount,
-                                    pickupLocationDescription:
-                                        _manualPickupController.text,
-                                  );
+                                  await _scheduleService
+                                      .confirmSchedule(
+                                        slot: slot,
+                                        seatsToBook: selectedSeatCount,
+                                        pickupLocationDescription:
+                                            _manualPickupController.text,
+                                      )
+                                      .timeout(_normalActionTimeout);
 
                                   final updated = _scheduleService
                                       .applyLocalBooking(
@@ -377,6 +398,12 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                                   AppMessage.showSuccess(
                                     context,
                                     '${context.texts.t('scheduleConfirmed')} $selectedSeatCount ${context.texts.t('seats')}.',
+                                  );
+                                } on TimeoutException {
+                                  if (!mounted) return;
+                                  AppMessage.showError(
+                                    context,
+                                    context.texts.t('requestTimedOutRetry'),
                                   );
                                 } catch (e) {
                                   if (!mounted) return;
@@ -731,7 +758,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                                         style: NavigoTextStyles.bodySmall,
                                       ),
                                       Text(
-                                        '${context.texts.t('price')}: ${_scheduleService.priceTextOf(slot)}',
+                                        '${context.texts.t('tripPrice')}: ${_scheduleService.priceTextOf(slot)}',
                                         style: NavigoTextStyles.bodySmall,
                                       ),
                                     ],

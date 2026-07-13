@@ -3,6 +3,7 @@ import 'dart:math' as math;
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
@@ -70,6 +71,11 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
   List<LatLng> _decodedTripPath = const [];
   String? _locationStreamDriverId;
   bool _liveTrackingStarted = false;
+  bool _hasCenteredDriverLocation = false;
+  DateTime? _lastDriverLocationPublishAt;
+  LatLng? _lastDriverMarkerPosition;
+  static const Duration _locationTimeout = Duration(seconds: 10);
+  static const Duration _normalActionTimeout = Duration(seconds: 20);
 
   // ── Passenger pin data ──────────────────────────────────────────────────────
   List<Map<String, dynamic>> _passengerPins = [];
@@ -108,7 +114,9 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
     _passengersSub?.cancel();
     try {
       _mapController?.dispose();
-    } catch (_) {}
+    } catch (e) {
+      if (kDebugMode) debugPrint('Driver map controller dispose error: $e');
+    }
     super.dispose();
   }
 
@@ -144,12 +152,14 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
   Future<void> _loadRouteLabel(String routeId) async {
     final safeRouteId = routeId.trim();
     if (safeRouteId.isEmpty) return;
+    final sw = Stopwatch()..start();
 
     try {
       final snap = await FirebaseFirestore.instance
           .collection('route')
           .doc(safeRouteId)
-          .get();
+          .get()
+          .timeout(_normalActionTimeout);
       if (!mounted || _isDisposed || !snap.exists) return;
       final data = snap.data() ?? {};
       final routeMap = Map<String, dynamic>.from(data);
@@ -157,7 +167,16 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
       final label = _routeLabelFromRoute(RouteModel.fromMap(routeMap));
       if (label == null) return;
       setState(() => _tripLine = label);
-    } catch (_) {}
+    } catch (e) {
+      if (kDebugMode) debugPrint('Driver route label load error: $e');
+    } finally {
+      sw.stop();
+      if (kDebugMode) {
+        debugPrint(
+          '[PERF] driver route label load: ${sw.elapsedMilliseconds} ms',
+        );
+      }
+    }
   }
 
   Future<void> _loadSavedDriverStatus() async {
@@ -178,18 +197,21 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
 
     _driverDocRef = FirebaseFirestore.instance.collection('drivers').doc(uid);
     try {
-      final direct = await _driverDocRef!.get();
+      final direct = await _driverDocRef!.get().timeout(_normalActionTimeout);
       if (!direct.exists) {
         final q = await FirebaseFirestore.instance
             .collection('drivers')
             .where('userId', isEqualTo: uid)
             .limit(1)
-            .get();
+            .get()
+            .timeout(_normalActionTimeout);
         if (q.docs.isNotEmpty) {
           _driverDocRef = q.docs.first.reference;
         }
       }
-    } catch (_) {}
+    } catch (e) {
+      if (kDebugMode) debugPrint('Driver status doc resolve error: $e');
+    }
 
     _driverDocSub?.cancel();
     _driverDocSub = _driverDocRef?.snapshots().listen((snap) {
@@ -209,10 +231,21 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
   Future<void> _loadDriverName() async {
     final uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid == null) return;
+    final sw = Stopwatch()..start();
     try {
       final db = FirebaseFirestore.instance;
-      final userDoc = await db.collection('users').doc(uid).get();
-      final driverDoc = await db.collection('drivers').doc(uid).get();
+      final userDocFuture = db
+          .collection('users')
+          .doc(uid)
+          .get()
+          .timeout(_normalActionTimeout);
+      final driverDocFuture = db
+          .collection('drivers')
+          .doc(uid)
+          .get()
+          .timeout(_normalActionTimeout);
+      final userDoc = await userDocFuture;
+      final driverDoc = await driverDocFuture;
       DocumentSnapshot<Map<String, dynamic>>? userIdDriverDoc;
 
       if (!driverDoc.exists) {
@@ -220,7 +253,8 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
             .collection('drivers')
             .where('userId', isEqualTo: uid)
             .limit(1)
-            .get();
+            .get()
+            .timeout(_normalActionTimeout);
         if (query.docs.isNotEmpty) {
           userIdDriverDoc = query.docs.first;
         }
@@ -242,7 +276,16 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
         if (!mounted || _isDisposed) return;
         setState(() => _driverName = name);
       }
-    } catch (_) {}
+    } catch (e) {
+      if (kDebugMode) debugPrint('Driver name load error: $e');
+    } finally {
+      sw.stop();
+      if (kDebugMode) {
+        debugPrint(
+          '[PERF] driver profile header load: ${sw.elapsedMilliseconds} ms',
+        );
+      }
+    }
   }
 
   String _displayNameFromMaps(List<Map<String, dynamic>?> maps) {
@@ -458,24 +501,71 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
     );
   }
 
+  Future<bool> _ensureLocationPermission({bool showMessages = false}) async {
+    final serviceEnabled = await Geolocator.isLocationServiceEnabled();
+    if (!serviceEnabled) {
+      if (showMessages && mounted && !_isDisposed) {
+        AppMessage.showError(
+          context,
+          context.texts.t('enableLocationServices'),
+        );
+      }
+      return false;
+    }
+
+    var permission = await Geolocator.checkPermission();
+    if (permission == LocationPermission.denied) {
+      permission = await Geolocator.requestPermission();
+    }
+
+    if (permission == LocationPermission.denied) {
+      if (showMessages && mounted && !_isDisposed) {
+        AppMessage.showError(
+          context,
+          context.texts.t('locationPermissionDenied'),
+        );
+      }
+      return false;
+    }
+
+    if (permission == LocationPermission.deniedForever) {
+      if (showMessages && mounted && !_isDisposed) {
+        AppMessage.showError(
+          context,
+          context.texts.t('enableLocationPermissionSettings'),
+        );
+        await Geolocator.openAppSettings();
+      }
+      return false;
+    }
+
+    return true;
+  }
+
   Future<void> _startGpsPublishing(String driverId) async {
     if (_isLocating || _isDisposed) return;
     if (mounted) setState(() => _isLocating = true);
+    final sw = Stopwatch()..start();
 
     try {
-      var perm = await Geolocator.checkPermission();
-      if (perm == LocationPermission.denied) {
-        perm = await Geolocator.requestPermission();
+      final allowed = await _ensureLocationPermission();
+      if (!allowed) return;
+
+      final lastKnown = await Geolocator.getLastKnownPosition().timeout(
+        const Duration(seconds: 2),
+        onTimeout: () => null,
+      );
+      if (lastKnown != null) {
+        _updateDriverMarker(
+          LatLng(lastKnown.latitude, lastKnown.longitude),
+          animateCamera: false,
+          force: true,
+        );
       }
-      if (perm == LocationPermission.denied ||
-          perm == LocationPermission.deniedForever) {
-        return;
-      }
-      if (!await Geolocator.isLocationServiceEnabled()) return;
 
       final current = await Geolocator.getCurrentPosition(
-        desiredAccuracy: LocationAccuracy.high,
-      );
+        desiredAccuracy: LocationAccuracy.medium,
+      ).timeout(_locationTimeout);
 
       await _liveService.updateDriverLocation(
         driverId: driverId,
@@ -483,31 +573,58 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
         longitude: current.longitude,
       );
 
-      _updateDriverMarker(LatLng(current.latitude, current.longitude));
+      _updateDriverMarker(
+        LatLng(current.latitude, current.longitude),
+        animateCamera: !_hasCenteredDriverLocation,
+        force: true,
+      );
+      _hasCenteredDriverLocation = true;
       await _ensureDriverLocationStream(driverId);
+    } on TimeoutException {
+      if (kDebugMode) debugPrint('GPS publish timed out');
     } catch (e) {
-      debugPrint('GPS publish error: $e');
+      if (kDebugMode) debugPrint('GPS publish error: $e');
     } finally {
+      sw.stop();
+      if (kDebugMode) {
+        debugPrint(
+          '[PERF] driver GPS publish start: ${sw.elapsedMilliseconds} ms',
+        );
+      }
       if (mounted && !_isDisposed) setState(() => _isLocating = false);
     }
   }
 
   Future<void> _getUserLocation() async {
+    if (_isLocating || _isDisposed) return;
+    if (mounted) setState(() => _isLocating = true);
+    final sw = Stopwatch()..start();
+
     try {
-      var perm = await Geolocator.checkPermission();
-      if (perm == LocationPermission.denied) {
-        perm = await Geolocator.requestPermission();
+      final allowed = await _ensureLocationPermission(showMessages: true);
+      if (!allowed) return;
+
+      final lastKnown = await Geolocator.getLastKnownPosition().timeout(
+        const Duration(seconds: 2),
+        onTimeout: () => null,
+      );
+      if (lastKnown != null) {
+        _updateDriverMarker(
+          LatLng(lastKnown.latitude, lastKnown.longitude),
+          animateCamera: false,
+          force: true,
+        );
       }
-      if (perm == LocationPermission.denied ||
-          perm == LocationPermission.deniedForever) {
-        return;
-      }
-      if (!await Geolocator.isLocationServiceEnabled()) return;
 
       final pos = await Geolocator.getCurrentPosition(
-        desiredAccuracy: LocationAccuracy.high,
+        desiredAccuracy: LocationAccuracy.medium,
+      ).timeout(_locationTimeout);
+      _updateDriverMarker(
+        LatLng(pos.latitude, pos.longitude),
+        animateCamera: true,
+        force: true,
       );
-      _updateDriverMarker(LatLng(pos.latitude, pos.longitude));
+      _hasCenteredDriverLocation = true;
 
       final driverId =
           _driverDocRef?.id ?? FirebaseAuth.instance.currentUser?.uid;
@@ -519,8 +636,20 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
         );
         await _ensureDriverLocationStream(driverId);
       }
+    } on TimeoutException {
+      if (kDebugMode) debugPrint('Driver location request timed out');
+      if (!mounted || _isDisposed) return;
+      AppMessage.showError(context, context.texts.t('locationTimedOutRetry'));
     } catch (e) {
-      debugPrint('Location error: $e');
+      if (kDebugMode) debugPrint('Location error: $e');
+      if (!mounted || _isDisposed) return;
+      AppMessage.showError(context, context.texts.t('errorGettingLocation'));
+    } finally {
+      sw.stop();
+      if (kDebugMode) {
+        debugPrint('[PERF] driver location load: ${sw.elapsedMilliseconds} ms');
+      }
+      if (mounted && !_isDisposed) setState(() => _isLocating = false);
     }
   }
 
@@ -537,22 +666,51 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
     _locationSub =
         Geolocator.getPositionStream(
           locationSettings: const LocationSettings(
-            accuracy: LocationAccuracy.high,
-            distanceFilter: 10,
+            accuracy: LocationAccuracy.medium,
+            distanceFilter: 25,
           ),
         ).listen((pos) async {
           if (_isDisposed) return;
-          await _liveService.updateDriverLocation(
-            driverId: safeDriverId,
-            latitude: pos.latitude,
-            longitude: pos.longitude,
+          final now = DateTime.now();
+          final shouldPublish =
+              _lastDriverLocationPublishAt == null ||
+              now.difference(_lastDriverLocationPublishAt!) >
+                  const Duration(seconds: 15);
+          if (shouldPublish) {
+            _lastDriverLocationPublishAt = now;
+            await _liveService.updateDriverLocation(
+              driverId: safeDriverId,
+              latitude: pos.latitude,
+              longitude: pos.longitude,
+            );
+          }
+          _updateDriverMarker(
+            LatLng(pos.latitude, pos.longitude),
+            animateCamera: false,
+            force: false,
           );
-          _updateDriverMarker(LatLng(pos.latitude, pos.longitude));
         });
   }
 
-  void _updateDriverMarker(LatLng pos) {
+  void _updateDriverMarker(
+    LatLng pos, {
+    required bool animateCamera,
+    bool force = false,
+  }) {
     if (_isDisposed || !mounted) return;
+    final previous = _lastDriverMarkerPosition;
+    if (!force &&
+        previous != null &&
+        Geolocator.distanceBetween(
+              previous.latitude,
+              previous.longitude,
+              pos.latitude,
+              pos.longitude,
+            ) <
+            15) {
+      return;
+    }
+    _lastDriverMarkerPosition = pos;
     setState(() {
       _currentPosition = pos;
       _markers.removeWhere((m) => m.markerId.value == 'driver_location');
@@ -567,7 +725,9 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
         ),
       );
     });
-    _safeAnimateCamera(pos);
+    if (animateCamera) {
+      _safeAnimateCamera(pos);
+    }
   }
 
   void _rebuildPassengerMarkers() {
@@ -610,7 +770,9 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
           CameraPosition(target: target, zoom: 14.5),
         ),
       );
-    } catch (_) {}
+    } catch (e) {
+      if (kDebugMode) debugPrint('Driver map camera animate error: $e');
+    }
   }
 
   double? _toDouble(dynamic value) {
@@ -639,6 +801,7 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
     required LatLng? routeDestination,
     required List<LatLng> decodedPoints,
   }) {
+    if (!kDebugMode) return;
     debugPrint('[$source] start marker coordinates=${_fmt(startMarker)}');
     debugPrint('[$source] end marker coordinates=${_fmt(endMarker)}');
     debugPrint('[$source] route origin coordinates=${_fmt(routeOrigin)}');

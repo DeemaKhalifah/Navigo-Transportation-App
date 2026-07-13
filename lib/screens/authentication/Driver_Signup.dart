@@ -125,11 +125,6 @@ class _DriverSignupScreenState extends State<DriverSignupScreen> {
     super.dispose();
   }
 
-  String get _fullPhoneNumber => PhoneAuthHelpers.buildFullPhoneNumber(
-    countryCode: _phonePrefix,
-    localPhoneNumber: _phoneDigitsController.text,
-  );
-
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
 
@@ -167,9 +162,13 @@ class _DriverSignupScreenState extends State<DriverSignupScreen> {
       localPhoneNumber: localPhoneNumber,
     );
 
-    print('FULL PHONE NUMBER = $fullPhoneNumber');
+    debugPrint(
+      'Driver signup full phone number: ${PhoneAuthHelpers.maskPhone(fullPhoneNumber)}',
+    );
     debugPrint('Driver signup selected country code: $_phonePrefix');
-    debugPrint('Driver signup local phone number: $localPhoneNumber');
+    debugPrint(
+      'Driver signup local phone number length: ${localPhoneNumber.length}',
+    );
     debugPrint('Driver signup platform: $defaultTargetPlatform');
     PhoneAuthHelpers.logPhoneAuthConfigurationReminder();
 
@@ -192,7 +191,7 @@ class _DriverSignupScreenState extends State<DriverSignupScreen> {
       }
 
       final isIos = defaultTargetPlatform == TargetPlatform.iOS;
-      final isFirebaseTestNumber = firebaseTestOtpCodes.containsKey(
+      final isFirebaseTestNumber = firebaseTestPhoneNumbers.contains(
         fullPhoneNumber,
       );
       debugPrint(
@@ -212,33 +211,6 @@ class _DriverSignupScreenState extends State<DriverSignupScreen> {
           );
           return;
         }
-
-        debugPrint(
-          'Driver signup verifyPhoneNumber skipped: iOS Firebase test number',
-        );
-        if (!mounted) return;
-        setState(() => _isLoading = false);
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (_) => OtpVerificationScreen(
-              phoneNumber: fullPhoneNumber,
-              verificationId: 'ios-demo-test',
-              fullName: name,
-              role: 'driver',
-              driverData: {
-                'routeId': _selectedRouteId,
-                'plateNumber': _carNumberController.text.trim(),
-                'vehicleType': selectedVehicle['vehicleType'],
-                'capacity': selectedVehicle['capacity'],
-                'vehicleClass': selectedVehicle['vehicleClass'],
-                'licenseNumber': _licenseController.text.trim(),
-              },
-              isDemoTestMode: true,
-            ),
-          ),
-        );
-        return;
       }
 
       await FirebaseAuth.instance.verifyPhoneNumber(
@@ -270,9 +242,6 @@ class _DriverSignupScreenState extends State<DriverSignupScreen> {
           );
         },
         verificationFailed: (FirebaseAuthException e) {
-          debugPrint('OTP ERROR CODE: ${e.code}');
-          debugPrint('OTP ERROR MESSAGE: ${e.message}');
-          debugPrint('OTP ERROR PLUGIN: ${e.plugin}');
           PhoneAuthHelpers.logFirebaseAuthException(
             'Driver signup verificationFailed',
             e,
@@ -287,8 +256,7 @@ class _DriverSignupScreenState extends State<DriverSignupScreen> {
           );
         },
         codeSent: (String verificationId, int? resendToken) {
-          debugPrint('Driver signup codeSent verificationId: $verificationId');
-          debugPrint('Driver signup codeSent resendToken: $resendToken');
+          debugPrint('Driver signup codeSent');
           if (!mounted) return;
 
           setState(() => _isLoading = false);
@@ -323,10 +291,7 @@ class _DriverSignupScreenState extends State<DriverSignupScreen> {
           );
         },
         codeAutoRetrievalTimeout: (String verificationId) {
-          debugPrint(
-            'Driver signup codeAutoRetrievalTimeout verificationId: '
-            '$verificationId',
-          );
+          debugPrint('Driver signup codeAutoRetrievalTimeout');
           if (!mounted) return;
           setState(() => _isLoading = false);
         },

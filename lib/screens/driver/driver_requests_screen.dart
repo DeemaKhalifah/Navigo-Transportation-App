@@ -167,9 +167,12 @@ class _DriverRequestsScreenState extends State<DriverRequestsScreen> {
       );
     } catch (e) {
       if (!mounted) return;
+      final message = e.toString().replaceFirst('Exception: ', '').trim();
       AppMessage.showError(
         context,
-        e.toString().replaceFirst('Exception: ', ''),
+        message == 'requestTimedOutRetry' || message == 'trustedOperationFailed'
+            ? context.texts.t(message)
+            : message,
       );
     } finally {
       if (mounted) {

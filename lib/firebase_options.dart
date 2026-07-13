@@ -65,7 +65,7 @@ class DefaultFirebaseOptions {
     messagingSenderId: '1085605678072',
     projectId: 'navigo-c89a0',
     storageBucket: 'navigo-c89a0.firebasestorage.app',
-    iosBundleId: 'com.example.navigo',
+    iosBundleId: 'com.birzeit.navigo',
   );
 
   static const FirebaseOptions macos = FirebaseOptions(

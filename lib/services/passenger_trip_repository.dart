@@ -1,5 +1,8 @@
+import 'dart:async';
+
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/foundation.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 
 import '../models/route.dart';
@@ -20,6 +23,7 @@ class PassengerTripRepository {
   static const String _usersCollection = 'users';
   static const String _vehiclesCollection = 'vehicles';
   static const String _passengersCollection = 'passengers';
+  static const Duration _firestoreTimeout = Duration(seconds: 20);
 
   String? get currentUserId => _auth.currentUser?.uid;
 
@@ -27,18 +31,28 @@ class PassengerTripRepository {
       '${route.startPoint} <-----> ${route.endPoint}';
 
   Future<List<RouteModel>> fetchRoutes() async {
+    final sw = Stopwatch()..start();
     final routes = <RouteModel>[];
 
-    final snap = await _db.collection(_routeCollection).get();
-    for (final doc in snap.docs) {
-      final model = _routeFromDoc(doc.id, doc.data());
-      if (model != null) {
-        routes.add(model);
+    try {
+      final snap = await _db.collection(_routeCollection).get().timeout(
+        _firestoreTimeout,
+      );
+      for (final doc in snap.docs) {
+        final model = _routeFromDoc(doc.id, doc.data());
+        if (model != null) {
+          routes.add(model);
+        }
+      }
+
+      routes.sort((a, b) => buildLineLabel(a).compareTo(buildLineLabel(b)));
+      return routes;
+    } finally {
+      sw.stop();
+      if (kDebugMode) {
+        debugPrint('[PERF] passenger route query: ${sw.elapsedMilliseconds} ms');
       }
     }
-
-    routes.sort((a, b) => buildLineLabel(a).compareTo(buildLineLabel(b)));
-    return routes;
   }
 
   RouteModel? _routeFromDoc(String docId, Map<String, dynamic> data) {
@@ -129,83 +143,98 @@ class PassengerTripRepository {
   Future<List<Map<String, dynamic>>> _getDriversByRouteMap(
     Map<String, RouteModel> routesById,
   ) async {
-    final driversSnap = await _db
-        .collection(_driversCollection)
-        .where('isApproved', isEqualTo: true)
-        .get();
-
+    final sw = Stopwatch()..start();
     final drivers = <Map<String, dynamic>>[];
 
-    for (final driverDoc in driversSnap.docs) {
-      final driverData = driverDoc.data();
-      final routeId = (driverData['routeId'] ?? '').toString().trim();
-      final route = routesById[routeId];
+    try {
+      final driversSnap = await _db
+          .collection(_driversCollection)
+          .where('isApproved', isEqualTo: true)
+          .get()
+          .timeout(_firestoreTimeout);
 
-      if (route == null) continue;
-      final driverStatus = DriverStatus.normalize(
-        driverData['status']?.toString(),
-      );
-      if (driverStatus != DriverStatus.onTrip) continue;
+      for (final driverDoc in driversSnap.docs) {
+        final driverData = driverDoc.data();
+        final routeId = (driverData['routeId'] ?? '').toString().trim();
+        final route = routesById[routeId];
 
-      final userId = (driverData['userId'] ?? driverDoc.id).toString();
-      final userSnap = await _db.collection(_usersCollection).doc(userId).get();
+        if (route == null) continue;
+        final driverStatus = DriverStatus.normalize(
+          driverData['status']?.toString(),
+        );
+        if (driverStatus != DriverStatus.onTrip) continue;
 
-      final vehicleId = (driverData['vehicleId'] ?? '').toString().trim();
-      final vehicleSnap = vehicleId.isEmpty
-          ? null
-          : await _db.collection(_vehiclesCollection).doc(vehicleId).get();
+        final location = _latLngFromDriverData(driverData);
+        if (location == null) continue;
 
-      final location = await _resolveDriverLocation(driverDoc.id);
-      if (location == null) continue;
+        final offerSlot = selectActiveTripSlotForDriver(route, driverDoc.id);
+        if (offerSlot == null) continue;
 
-      final offerSlot = selectActiveTripSlotForDriver(route, driverDoc.id);
-      if (offerSlot == null) continue;
+        final userId = (driverData['userId'] ?? driverDoc.id).toString();
+        final vehicleId = (driverData['vehicleId'] ?? '').toString().trim();
+        final userSnapFuture = _db
+            .collection(_usersCollection)
+            .doc(userId)
+            .get()
+            .timeout(_firestoreTimeout);
+        final vehicleSnapFuture = vehicleId.isEmpty
+            ? Future<DocumentSnapshot<Map<String, dynamic>>?>.value(null)
+            : _db
+                  .collection(_vehiclesCollection)
+                  .doc(vehicleId)
+                  .get()
+                  .timeout(_firestoreTimeout);
 
-      final availableSeats =
-          offerSlot.capacity - offerSlot.passengersIds.length;
+        final userSnap = await userSnapFuture;
+        final vehicleSnap = await vehicleSnapFuture;
 
-      final userMap = userSnap.data() ?? <String, dynamic>{};
-      final vehicleMap = (vehicleSnap != null && vehicleSnap.exists)
-          ? vehicleSnap.data() ?? {}
-          : {};
+        final availableSeats =
+            offerSlot.capacity - offerSlot.passengersIds.length;
 
-      final driverName =
-          '${userMap['firstName'] ?? ''} ${userMap['lastName'] ?? ''}'.trim();
+        final userMap = userSnap.data() ?? <String, dynamic>{};
+        final vehicleMap = (vehicleSnap != null && vehicleSnap.exists)
+            ? vehicleSnap.data() ?? {}
+            : {};
 
-      drivers.add({
-        'id': driverDoc.id,
-        'routeId': route.routeId,
-        'slotId': offerSlot.slotId,
-        'scheduleId': offerSlot.slotId,
-        'name': driverName.isEmpty
-            ? 'Driver ${driverDoc.id.substring(0, 6)}'
-            : driverName,
-        'busNumber': vehicleMap['plateNumber']?.toString() ?? 'N/A',
-        'line': buildLineLabel(route),
-        'from': route.startPoint,
-        'to': route.endPoint,
-        'availableSeats': availableSeats,
-        'price': '${route.price.toStringAsFixed(0)} NIS',
-        'eta': offerSlot.etaText ?? route.etaText ?? 'Live',
-        'etaMinutes': offerSlot.etaMinutes ?? route.etaMinutes,
-        'phone': userMap['phone']?.toString() ?? 'N/A',
-        'vehicleType': vehicleMap['type']?.toString() ?? 'Bus',
-        'lat': location.latitude,
-        'lng': location.longitude,
-      });
+        final driverName =
+            '${userMap['firstName'] ?? ''} ${userMap['lastName'] ?? ''}'
+                .trim();
+
+        drivers.add({
+          'id': driverDoc.id,
+          'routeId': route.routeId,
+          'slotId': offerSlot.slotId,
+          'scheduleId': offerSlot.slotId,
+          'name': driverName.isEmpty
+              ? 'Driver ${driverDoc.id.substring(0, 6)}'
+              : driverName,
+          'busNumber': vehicleMap['plateNumber']?.toString() ?? 'N/A',
+          'line': buildLineLabel(route),
+          'from': route.startPoint,
+          'to': route.endPoint,
+          'availableSeats': availableSeats,
+          'price': '${route.price.toStringAsFixed(0)} NIS',
+          'eta': offerSlot.etaText ?? route.etaText ?? 'Live',
+          'etaMinutes': offerSlot.etaMinutes ?? route.etaMinutes,
+          'phone': userMap['phone']?.toString() ?? 'N/A',
+          'vehicleType': vehicleMap['type']?.toString() ?? 'Bus',
+          'lat': location.latitude,
+          'lng': location.longitude,
+        });
+      }
+    } finally {
+      sw.stop();
+      if (kDebugMode) {
+        debugPrint(
+          '[PERF] passenger active driver query: ${sw.elapsedMilliseconds} ms',
+        );
+      }
     }
 
     return drivers;
   }
 
-  Future<LatLng?> _resolveDriverLocation(String driverId) async {
-    final driverSnap = await _db
-        .collection(_driversCollection)
-        .doc(driverId)
-        .get();
-    final data = driverSnap.data();
-    if (data == null) return null;
-
+  static LatLng? _latLngFromDriverData(Map<String, dynamic> data) {
     final lat = (data['latitude'] as num?)?.toDouble();
     final lng = (data['longitude'] as num?)?.toDouble();
 
@@ -223,7 +252,8 @@ class PassengerTripRepository {
     final passengerSnap = await _db
         .collection(_passengersCollection)
         .doc(uid)
-        .get();
+        .get()
+        .timeout(_firestoreTimeout);
 
     final data = passengerSnap.data();
     if (data == null) return null;
@@ -276,7 +306,8 @@ class PassengerTripRepository {
     await _db
         .collection(_passengersCollection)
         .doc(uid)
-        .set(passengerPayload, SetOptions(merge: true));
+        .set(passengerPayload, SetOptions(merge: true))
+        .timeout(_firestoreTimeout);
   }
 
   Future<void> syncPassengerLiveLocation(LatLng location) async {

@@ -37,11 +37,20 @@ if (localPropertiesFile.exists()) {
     localPropertiesFile.inputStream().use { localProperties.load(it) }
 }
 
-val googleMapsApiKey: String =
+val googleMapsApiKey: String = (
     mapsProperties.getProperty("GOOGLE_MAPS_API_KEY")
         ?: localProperties.getProperty("GOOGLE_MAPS_API_KEY")
         ?: System.getenv("GOOGLE_MAPS_API_KEY")
         ?: ""
+).trim()
+
+if (googleMapsApiKey.isBlank()) {
+    throw GradleException(
+        "Missing GOOGLE_MAPS_API_KEY for Google Maps. Set it in " +
+            "android/maps.properties, android/local.properties, or the " +
+            "GOOGLE_MAPS_API_KEY environment variable. Do not commit API keys."
+    )
+}
 
 android {
     namespace = "com.birzeit.navigo"

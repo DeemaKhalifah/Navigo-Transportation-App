@@ -55,7 +55,6 @@ Future<void> main() async {
 
   final languageController = LanguageController();
   await languageController.loadSavedLanguage();
-
   try {
     if (Firebase.apps.isEmpty) {
       await Firebase.initializeApp(

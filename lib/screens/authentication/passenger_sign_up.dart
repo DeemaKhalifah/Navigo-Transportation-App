@@ -68,13 +68,15 @@ class _PassengerSignupScreenState extends State<PassengerSignupScreen> {
       return;
     }
 
-    debugPrint('Passenger signup phoneNumber: $formattedPhone');
+    debugPrint(
+      'Passenger signup phoneNumber: ${PhoneAuthHelpers.maskPhone(formattedPhone)}',
+    );
     debugPrint('Passenger signup platform: $defaultTargetPlatform');
     PhoneAuthHelpers.logPhoneAuthConfigurationReminder();
 
     try {
       final isIos = defaultTargetPlatform == TargetPlatform.iOS;
-      final isFirebaseTestNumber = firebaseTestOtpCodes.containsKey(
+      final isFirebaseTestNumber = firebaseTestPhoneNumbers.contains(
         formattedPhone,
       );
       debugPrint(
@@ -94,25 +96,6 @@ class _PassengerSignupScreenState extends State<PassengerSignupScreen> {
           );
           return;
         }
-
-        debugPrint(
-          'Passenger signup verifyPhoneNumber skipped: iOS Firebase test number',
-        );
-        if (!mounted) return;
-        setState(() => _isLoading = false);
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (_) => OtpVerificationScreen(
-              phoneNumber: formattedPhone,
-              verificationId: 'ios-demo-test',
-              fullName: name,
-              role: 'passenger',
-              isDemoTestMode: true,
-            ),
-          ),
-        );
-        return;
       }
 
       await FirebaseAuth.instance.verifyPhoneNumber(
@@ -136,9 +119,6 @@ class _PassengerSignupScreenState extends State<PassengerSignupScreen> {
           );
         },
         verificationFailed: (FirebaseAuthException e) {
-          debugPrint('OTP ERROR CODE: ${e.code}');
-          debugPrint('OTP ERROR MESSAGE: ${e.message}');
-          debugPrint('OTP ERROR PLUGIN: ${e.plugin}');
           PhoneAuthHelpers.logFirebaseAuthException(
             'Passenger signup verificationFailed',
             e,
@@ -151,10 +131,7 @@ class _PassengerSignupScreenState extends State<PassengerSignupScreen> {
           );
         },
         codeSent: (String verificationId, int? resendToken) {
-          debugPrint(
-            'Passenger signup codeSent verificationId: $verificationId',
-          );
-          debugPrint('Passenger signup codeSent resendToken: $resendToken');
+          debugPrint('Passenger signup codeSent');
           if (!mounted) return;
           setState(() => _isLoading = false);
 
@@ -180,10 +157,7 @@ class _PassengerSignupScreenState extends State<PassengerSignupScreen> {
           );
         },
         codeAutoRetrievalTimeout: (String verificationId) {
-          debugPrint(
-            'Passenger signup codeAutoRetrievalTimeout verificationId: '
-            '$verificationId',
-          );
+          debugPrint('Passenger signup codeAutoRetrievalTimeout');
           if (!mounted) return;
           setState(() => _isLoading = false);
         },
